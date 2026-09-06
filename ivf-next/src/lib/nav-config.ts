@@ -211,6 +211,7 @@ export const SIDE_NAV_SECTIONS: SideNavSection[] = [
       { label: 'Witness System', route: '/witness', icon: 'witness' },
       { label: 'Lab Inventory', route: '/inventory', icon: 'inventory' },
       { label: 'Reports & Analytics', route: '/reports', icon: 'reports' },
+      { label: 'Communication', route: '/communication', icon: 'communication' },
       { label: 'Audit Trails', route: '/audit', icon: 'audit' },
       { label: 'Settings', route: '/masters', icon: 'settings' },
       { label: 'Users & Roles', route: '/masters/user', icon: 'users' },

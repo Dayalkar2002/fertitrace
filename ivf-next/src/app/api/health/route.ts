@@ -4,7 +4,7 @@ import { isDbConfigured, getPool } from '@/lib/db/pool';
 export async function GET() {
   const health: Record<string, unknown> = {
     success: true,
-    message: 'smART IVF API (Next.js integrated) is running.',
+    message: 'FERTITRACE API (Next.js integrated) is running.',
     database: 'not_configured',
     routes: [
       'auth',
