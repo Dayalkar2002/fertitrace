@@ -8,6 +8,7 @@ export interface SendMessagePayload {
   channel: 'WhatsApp' | 'SMS';
   messageType: string;
   messageText: string;
+  templateId?: string;
   language?: string;
   sentBy: string;
 }
@@ -31,10 +32,10 @@ const inMemoryHistory: CommunicationLogItem[] = [
     messageType: 'Appointment Reminder',
     channel: 'WhatsApp',
     recipient: '+91 98765 43210',
-    sentBy: 'Embryologist',
+    sentBy: 'IVCRFT',
     status: 'Delivered',
     messageText:
-      'Dear Neha Sharma,\nYour appointment is scheduled on 01 Sep 2026 at 10:30 AM.\nPlease contact the IVF centre for any clarification.\nThank you.',
+      'Dear Neha Sharma, Your appointment has been booked with Dr. Sanjay Kumar Pagare for Consultation & Scan at IVF Craft Clinic at Andheri on 10 Sep 2026 at 11:00 AM. Team IVF Craft.',
   },
   {
     id: 'MSG-102',
@@ -42,10 +43,10 @@ const inMemoryHistory: CommunicationLogItem[] = [
     messageType: 'Procedure Reminder',
     channel: 'SMS',
     recipient: '+91 98765 43210',
-    sentBy: 'Embryologist',
+    sentBy: 'IVCRFT',
     status: 'Delivered',
     messageText:
-      'Dear Neha Sharma,\nPlease arrive fasting for your Oocyte Pick-Up procedure tomorrow at 08:30 AM.\nRegards, FERTITRACE Lab.',
+      'Dear Neha Sharma, Your OPU / ICSI Procedure is scheduled for tomorrow at 08:30 AM at IVF Craft Clinic at Andheri. Please adhere to fasting instructions. Team IVF Craft.',
   },
   {
     id: 'MSG-103',
@@ -53,57 +54,51 @@ const inMemoryHistory: CommunicationLogItem[] = [
     messageType: 'Payment Reminder',
     channel: 'SMS',
     recipient: '+91 98765 43210',
-    sentBy: 'Reception',
-    status: 'Failed',
+    sentBy: 'IVCRFT',
+    status: 'Delivered',
     messageText:
-      'Dear Neha Sharma,\nThis is a gentle reminder regarding the pending invoice for Cycle IVF-03.\nKindly clear dues at desk.',
+      'Dear Neha Sharma, This is a gentle reminder regarding the pending invoice for Cycle IVF-03. Kindly clear dues at desk. Team IVF Craft.',
   },
 ];
 
 export async function sendMessage(payload: SendMessagePayload): Promise<CommunicationLogItem> {
-  const provider = process.env.SMS_PROVIDER || 'demo';
-  const apiKey = process.env.SMS_API_KEY;
-  let status: 'Delivered' | 'Failed' | 'Pending' = 'Delivered';
+  const provider = process.env.SMS_PROVIDER || 'stpl';
+  const senderId = process.env.SMS_SENDER_ID || 'IVCRFT';
+  const entityId = process.env.DLT_PE_ID || '1701161718998728035';
+  const gatewayUrl = process.env.SMS_GATEWAY_URL?.trim();
+  const apiKey = process.env.SMS_API_KEY?.trim();
+  const dltTemplateId = payload.templateId?.trim() || process.env.STPL_TEMPLATE_ID?.trim();
 
-  // 1. External Gateway Integration Logic
-  if (provider !== 'demo' && apiKey) {
+  let status: 'Delivered' | 'Failed' | 'Pending' = 'Delivered';
+  let dispatchError: string | null = null;
+
+  // 1. External Gateway Integration Logic (STPL / DLT Gateway)
+  if (gatewayUrl && apiKey) {
     try {
-      if (provider === 'fast2sms') {
-        // Fast2SMS API example
-        const res = await fetch('https://www.fast2sms.com/dev/bulkV2', {
-          method: 'POST',
-          headers: {
-            authorization: apiKey,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            route: 'q',
-            message: payload.messageText,
-            language: 'english',
-            flash: 0,
-            numbers: payload.recipient.replace(/[^0-9]/g, ''),
-          }),
-        });
-        const data = await res.json();
-        if (!data.return) status = 'Failed';
-      } else if (provider === 'msg91') {
-        // MSG91 API example
-        const res = await fetch('https://api.msg91.com/api/v5/flow/', {
-          method: 'POST',
-          headers: {
-            authkey: apiKey,
-            'content-type': 'application/json',
-          },
-          body: JSON.stringify({
-            mobiles: payload.recipient.replace(/[^0-9]/g, ''),
-            message: payload.messageText,
-          }),
-        });
-        if (!res.ok) status = 'Failed';
+      const rawDigits = payload.recipient.replace(/\D/g, '').slice(-10);
+      const res = await fetch(gatewayUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          entity_id: entityId,
+          sender: senderId,
+          template_id: dltTemplateId || '',
+          mobile: rawDigits,
+          message: payload.messageText,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.status === 'failed' || data.error) {
+        status = 'Failed';
+        dispatchError = data.message || data.error || 'Gateway dispatch failed.';
       }
     } catch (gatewayErr) {
-      console.error('External gateway dispatch failed:', gatewayErr);
+      console.error('STPL Gateway dispatch error:', gatewayErr);
       status = 'Failed';
+      dispatchError = gatewayErr instanceof Error ? gatewayErr.message : 'Gateway error';
     }
   }
 
@@ -125,15 +120,14 @@ export async function sendMessage(payload: SendMessagePayload): Promise<Communic
     messageType: payload.messageType,
     channel: payload.channel,
     recipient: payload.recipient,
-    sentBy: payload.sentBy || 'Dr. Admin',
+    sentBy: senderId,
     status,
     messageText: payload.messageText,
   };
 
-  // 3. Database Persistence if configured
+  // 3. Database Audit / Tracking if configured
   if (isDbConfigured()) {
     try {
-      // Optional call to legacy spManualSMS if available
       await executeDRL('spManualSMS', [
         { name: '@PatID', value: Number(payload.patientId) || 0 },
         { name: '@SatID', value: 1 },
@@ -145,6 +139,11 @@ export async function sendMessage(payload: SendMessagePayload): Promise<Communic
   }
 
   inMemoryHistory.unshift(record);
+
+  if (dispatchError) {
+    throw new Error(dispatchError);
+  }
+
   return record;
 }
 

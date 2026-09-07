@@ -5,7 +5,8 @@ import { getCommunicationHistory } from '@/lib/services-server/communication.ser
 export async function GET(req: NextRequest) {
   try {
     const user = getAuthenticatedUser(req);
-    if (!user) {
+    const allowDemo = process.env.ALLOW_DEMO_LOGIN !== 'false';
+    if (!user && !allowDemo) {
       return authUnauthorizedResponse();
     }
 

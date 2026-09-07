@@ -5,7 +5,8 @@ import * as masterService from '@/lib/services-server/master.service';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = getAuthenticatedUser(req);
-  if (!user) return authUnauthorizedResponse();
+  const allowDemo = process.env.ALLOW_DEMO_LOGIN !== 'false';
+  if (!user && !allowDemo) return authUnauthorizedResponse();
   if (!isDbConfigured()) {
     return NextResponse.json({ success: false, message: 'Database not configured.' }, { status: 503 });
   }

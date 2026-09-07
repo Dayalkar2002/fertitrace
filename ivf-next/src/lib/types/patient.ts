@@ -7,6 +7,9 @@ export interface Patient {
   gender: string;
   aadhar: string;
   satelliteId: number;
+  mobile?: string;
+  phone?: string;
+  email?: string;
   category?: string;
   isOocyteDonor?: boolean;
   lockedRecipients?: LockedRecipient[];

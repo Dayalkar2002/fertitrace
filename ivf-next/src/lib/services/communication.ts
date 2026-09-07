@@ -7,6 +7,7 @@ export interface CommunicationMessagePayload {
   channel: 'WhatsApp' | 'SMS';
   messageType: string;
   messageText: string;
+  templateId?: string;
   language?: string;
 }
 
@@ -36,11 +37,16 @@ export async function sendCommunicationMessage(
   return res.data;
 }
 
-export async function fetchCommunicationHistory(token: string): Promise<CommunicationLogItem[]> {
-  const res = await apiFetch<{ success: boolean; data: CommunicationLogItem[] }>(
-    '/communication/history',
-    {},
-    token
-  );
-  return res.data || [];
+export async function fetchCommunicationHistory(token?: string | null): Promise<CommunicationLogItem[]> {
+  try {
+    const res = await apiFetch<{ success: boolean; data: CommunicationLogItem[] }>(
+      '/communication/history',
+      {},
+      token
+    );
+    return res.data || [];
+  } catch (err) {
+    console.warn('[Communication] Could not fetch remote history, using fallback:', err);
+    return [];
+  }
 }

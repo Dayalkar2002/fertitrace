@@ -14,12 +14,15 @@ export interface PatientListItem {
   aadhar: string;
   satelliteId: number | null;
   category: string;
+  mobile?: string;
+  phone?: string;
   raw?: Record<string, unknown>;
 }
 
 export interface PatientDetailItem extends PatientListItem {
   email: string;
   mobile: string;
+  phone: string;
   address: string;
   city: string;
 }
@@ -27,6 +30,26 @@ export interface PatientDetailItem extends PatientListItem {
 function mapPatientListRow(row: Record<string, unknown>): PatientListItem {
   const name = [row.Name ?? row.PatName, row.PatCategory].filter(Boolean).join(' ').trim();
   const age = row.PatAge ?? row.patage ?? row.Age ?? null;
+  const mobile = String(
+    row.patmobileno ??
+    row.PatMobileNo ??
+    row.PatMobile ??
+    row.MobileNo ??
+    row.mobile ??
+    row.PatPhoneNo ??
+    row.patphoneno ??
+    row.PhoneNo ??
+    ''
+  ).trim();
+  const phone = String(
+    row.PatPhoneNo ??
+    row.patphoneno ??
+    row.PhoneNo ??
+    row.patmobileno ??
+    row.PatMobileNo ??
+    ''
+  ).trim();
+
   return {
     id: Number(row.ID ?? row.PatID),
     uhid: String(row.PatRefNo ?? row.RefNo ?? row.PatID ?? '').trim(),
@@ -37,12 +60,34 @@ function mapPatientListRow(row: Record<string, unknown>): PatientListItem {
     aadhar: String(row.PatAdhar ?? row.PatAadh ?? ''),
     satelliteId: row.SatID ?? row.SatId ? Number(row.SatID ?? row.SatId) : null,
     category: String(row.PatCategory ?? ''),
+    mobile,
+    phone,
     raw: row,
   };
 }
 
 function mapPatientDetailRow(row: Record<string, unknown>): PatientDetailItem {
   const age = row.PatAge ?? row.patage ?? row.Age ?? null;
+  const mobile = String(
+    row.patmobileno ??
+    row.PatMobileNo ??
+    row.PatMobile ??
+    row.MobileNo ??
+    row.mobile ??
+    row.PatPhoneNo ??
+    row.patphoneno ??
+    row.PhoneNo ??
+    ''
+  ).trim();
+  const phone = String(
+    row.PatPhoneNo ??
+    row.patphoneno ??
+    row.PhoneNo ??
+    row.patmobileno ??
+    row.PatMobileNo ??
+    ''
+  ).trim();
+
   return {
     id: Number(row.PatID ?? row.ID),
     uhid: String(row.PatRefNo ?? row.RefNo ?? row.PatID ?? '').trim(),
@@ -53,7 +98,8 @@ function mapPatientDetailRow(row: Record<string, unknown>): PatientDetailItem {
     aadhar: String(row.PatAdhar ?? ''),
     satelliteId: row.SatID ?? row.SatId ? Number(row.SatID ?? row.SatId) : null,
     email: String(row.PatEmail ?? ''),
-    mobile: String(row.PatMobileNo ?? ''),
+    mobile,
+    phone,
     address: String(row.PatAddress ?? ''),
     city: String(row.PatCity ?? ''),
     category: String(row.PatCategory ?? ''),

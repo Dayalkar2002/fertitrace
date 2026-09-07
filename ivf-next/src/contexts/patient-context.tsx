@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { fetchSatellites, searchPatients } from '@/lib/services/patients';
+import { apiFetch } from '@/lib/api';
 import type { Patient, Satellite } from '@/lib/types/patient';
 
 import { useAppDispatch } from '@/store/hooks';
@@ -97,14 +98,47 @@ export function PatientProvider({ children }: { children: ReactNode }) {
 
   const selectPatient = useCallback(
     (patient: Patient) => {
-      const fullPatient = {
+      const fullPatient: Patient = {
         ...patient,
         satelliteId: patient.satelliteId || selectedSatellite?.id || 0,
       };
       setSelectedPatient(fullPatient);
       dispatch(setReduxPatient(fullPatient));
+
+      if (patient.id) {
+        apiFetch<{ success: boolean; data: Record<string, unknown> }>(
+          `/masters/patient/${patient.id}`,
+          {},
+          token
+        )
+          .then((res) => {
+            if (res && res.data) {
+              const d = res.data;
+              let calcAge = fullPatient.age;
+              if ((!calcAge || calcAge === 0) && d.dob) {
+                const birthYear = new Date(String(d.dob)).getFullYear();
+                if (birthYear > 1900) {
+                  calcAge = new Date().getFullYear() - birthYear;
+                }
+              }
+              const enriched: Patient = {
+                ...fullPatient,
+                uhid: String(d.refNo || fullPatient.uhid || `PT-00${patient.id}`),
+                partner: String(d.husbandName || fullPatient.partner || ''),
+                mobile: String(d.mobile || d.phone || fullPatient.mobile || ''),
+                phone: String(d.phone || d.mobile || fullPatient.phone || ''),
+                age: Number(calcAge || d.age || fullPatient.age || 0),
+                aadhar: String(d.aadhar || fullPatient.aadhar || ''),
+                category: String(d.category || fullPatient.category || ''),
+              };
+              setSelectedPatient(enriched);
+              dispatch(setReduxPatient(enriched));
+            }
+          })
+          .catch(() => {});
+      }
     },
-    [selectedSatellite, dispatch]
+    [selectedSatellite, token, dispatch]
   );
 
   const clearPatient = useCallback(() => {
