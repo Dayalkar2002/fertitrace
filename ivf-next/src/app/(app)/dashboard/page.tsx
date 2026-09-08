@@ -14,12 +14,62 @@ import {
   setDashboardLoading,
   setDashboardError,
 } from '@/store/slices/dashboardSlice';
+import { fetchQuickAccess, QuickAccessItem } from '@/lib/services/quick-access';
+import { QuickAccessManagerModal } from '@/components/quick-access-manager-modal';
 
 export default function DashboardPage() {
   const { token, user } = useAuth();
   const { selectedPatient } = usePatient();
   const dispatch = useAppDispatch();
   const { summary, patientCount, loading } = useAppSelector((state) => state.dashboard);
+  const [quickAccessModules, setQuickAccessModules] = useState<QuickAccessItem[]>([]);
+  const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
+
+  // Load user-customized or default Quick Access modules from DB
+  const loadQuickAccess = useCallback(async () => {
+    try {
+      const res = await fetchQuickAccess(token || undefined, {
+        userId: user?.id,
+        loginName: user?.userName || 'admin',
+      });
+      if (res.items && res.items.length > 0) {
+        setQuickAccessModules(res.items);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch quick access modules, using default layout:', e);
+    }
+  }, [token, user?.id, user?.userName]);
+
+  useEffect(() => {
+    void loadQuickAccess();
+  }, [loadQuickAccess]);
+
+  const themeClasses: Record<string, string> = {
+    purple: 'bg-purple-100 text-[#6345A6]',
+    blue: 'bg-blue-100 text-blue-600',
+    teal: 'bg-teal-100 text-teal-600',
+    emerald: 'bg-emerald-100 text-emerald-600',
+    pink: 'bg-pink-100 text-pink-600',
+    sky: 'bg-sky-100 text-sky-600',
+    amber: 'bg-amber-100 text-amber-700',
+    rose: 'bg-rose-100 text-rose-600',
+    indigo: 'bg-indigo-100 text-indigo-600',
+  };
+
+  // Fallback if not yet loaded from DB
+  const displayModules =
+    quickAccessModules.length > 0
+      ? quickAccessModules
+      : [
+          { moduleKey: 'patient_management', title: 'Patient Management', description: 'Demographics & Directory', icon: 'patient', route: '/masters/patient', colorTheme: 'purple', orderIndex: 1, isPinned: true, isActive: true },
+          { moduleKey: 'barcode_printing', title: 'Barcode Label Printing', description: 'Dish, Tube & Straw Labels', icon: 'label', route: '/label-printing', colorTheme: 'indigo', orderIndex: 2, isPinned: true, isActive: true },
+          { moduleKey: 'cycle_management', title: 'Cycle Entry', description: 'Witnessing Setup', icon: 'cycle', route: '/cycle/entry', colorTheme: 'blue', orderIndex: 3, isPinned: true, isActive: true },
+          { moduleKey: 'sperm_management', title: 'Sperm Processing', description: 'Semen Analysis & Prep', icon: 'sperm', route: '/sperm', colorTheme: 'teal', orderIndex: 4, isPinned: true, isActive: true },
+          { moduleKey: 'oocyte_management', title: 'Oocyte & Embryo', description: 'OPU & Culturing', icon: 'embryo', route: '/oocyte-embryo', colorTheme: 'pink', orderIndex: 5, isPinned: true, isActive: true },
+          { moduleKey: 'cryopreservation', title: 'Cryopreservation', description: 'Straws & Tanks', icon: 'cryo', route: '/sperm?mode=Cryopreservation', colorTheme: 'sky', orderIndex: 6, isPinned: true, isActive: true },
+          { moduleKey: 'witness_system', title: 'Witness Verification', description: 'RFID & Mismatch Shield', icon: 'witness', route: '/witness', colorTheme: 'emerald', orderIndex: 7, isPinned: true, isActive: true },
+          { moduleKey: 'reports_analytics', title: 'Audit Log & Reports', description: 'Compliance Records', icon: 'reports', route: '/reports', colorTheme: 'amber', orderIndex: 8, isPinned: true, isActive: true },
+        ];
   const [currentTime, setCurrentTime] = useState<string>('');
   const [currentDate, setCurrentDate] = useState<string>('');
 
@@ -207,39 +257,55 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between">
             <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <span>⚡ Quick Access Modules</span>
+              <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-bold text-[#6345A6]">
+                {displayModules.length} Active
+              </span>
             </h2>
-            <span className="text-xs text-slate-400 font-medium">Click to navigate</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsCustomizeOpen(true)}
+                className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-purple-50 hover:text-[#6345A6] hover:border-purple-200 transition shadow-2xs"
+              >
+                <span>⚙</span>
+                <span>Customize</span>
+              </button>
+              <span className="hidden sm:inline text-xs text-slate-400 font-medium">Click to navigate</span>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4">
-            {[
-              { label: 'Patient Master', desc: 'Demographics & Directory', icon: 'patient', href: '/masters/patient', bg: 'bg-purple-100 text-[#6345A6]' },
-              { label: 'Cycle Entry', desc: 'Witnessing Setup', icon: 'cycle', href: '/cycle/entry', bg: 'bg-blue-100 text-blue-600' },
-              { label: 'IUI Module', desc: 'Sperm Preparation', icon: 'sperm', href: '/iui', bg: 'bg-teal-100 text-teal-600' },
-              { label: 'IVF & Oocyte', desc: 'OPU & Fertilization', icon: 'oocyte', href: '/ivf', bg: 'bg-pink-100 text-pink-600' },
-              { label: 'ICSI & Microinjections', desc: 'Needle & Insemination', icon: 'embryo', href: '/icsi', bg: 'bg-purple-100 text-purple-600' },
-              { label: 'Cryopreservation', desc: 'Straws & Tanks', icon: 'cryo', href: '/cryo/embryos', bg: 'bg-sky-100 text-sky-600' },
-              { label: 'RFID Witness', desc: 'Barcodes & Mismatch Shield', icon: 'witness', href: '/witness', bg: 'bg-emerald-100 text-emerald-600' },
-              { label: 'Audit Log & Reports', desc: 'Compliance Records', icon: 'reports', href: '/reports', bg: 'bg-indigo-100 text-indigo-600' },
-            ].map((module) => (
-              <Link
-                key={module.label}
-                href={module.href}
-                className="group flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs transition-all duration-200 hover:-translate-y-1 hover:border-purple-300 hover:shadow-md"
-              >
-                <div className={`mb-3 flex h-11 w-11 items-center justify-center rounded-xl ${module.bg} shadow-2xs group-hover:scale-110 transition-transform`}>
-                  <NavIcon name={module.icon} className="h-5 w-5" />
-                </div>
-                <div>
-                  <span className="text-xs font-bold text-slate-900 group-hover:text-[#6345A6] transition-colors block">
-                    {module.label}
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-medium block mt-0.5">
-                    {module.desc}
-                  </span>
-                </div>
-              </Link>
-            ))}
+            {displayModules.map((module) => {
+              const bgTheme = themeClasses[module.colorTheme || 'purple'] || 'bg-purple-100 text-[#6345A6]';
+              return (
+                <Link
+                  key={module.moduleKey}
+                  href={module.route}
+                  className="group relative flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs transition-all duration-200 hover:-translate-y-1 hover:border-purple-300 hover:shadow-md"
+                >
+                  {module.isPinned && (
+                    <span className="absolute top-2.5 right-2.5 text-amber-500 text-xs" title="Pinned favorite">
+                      ★
+                    </span>
+                  )}
+                  <div className={`mb-3 flex h-11 w-11 items-center justify-center rounded-xl ${bgTheme} shadow-2xs group-hover:scale-110 transition-transform`}>
+                    <NavIcon name={module.icon} className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-slate-900 group-hover:text-[#6345A6] transition-colors block">
+                        {module.title}
+                      </span>
+                    </div>
+                    {module.description && (
+                      <span className="text-[10px] text-slate-400 font-medium block mt-0.5 line-clamp-1">
+                        {module.description}
+                      </span>
+                    )}
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         </div>
 
@@ -421,6 +487,17 @@ export default function DashboardPage() {
         </div>
       </footer>
 
+      {/* Quick Access Customization Modal */}
+      <QuickAccessManagerModal
+        isOpen={isCustomizeOpen}
+        onClose={() => setIsCustomizeOpen(false)}
+        userId={user?.id}
+        loginName={user?.userName || 'admin'}
+        token={token || undefined}
+        onUpdated={(updated) => {
+          setQuickAccessModules(updated);
+        }}
+      />
     </div>
   );
 }

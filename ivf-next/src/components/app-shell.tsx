@@ -18,6 +18,8 @@ import {
   setShowLogoutModal,
 } from '@/store/slices/uiSlice';
 
+import { LeftMenuItem, DEFAULT_LEFT_MENUS } from '@/lib/nav-config';
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -26,6 +28,30 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const { selectedPatient } = usePatient();
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [leftMenus, setLeftMenus] = useState<LeftMenuItem[]>(DEFAULT_LEFT_MENUS);
+  const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({
+    patient_management: true,
+    sperm_management: true,
+  });
+
+  useEffect(() => {
+    async function loadMenus() {
+      try {
+        const res = await fetch('/api/menus');
+        const json = await res.json();
+        if (json.success && json.leftMenu && json.leftMenu.length > 0) {
+          setLeftMenus(json.leftMenu);
+        }
+      } catch {
+        // use default fallback
+      }
+    }
+    void loadMenus();
+  }, []);
+
+  const toggleExpand = (nodeName: string) => {
+    setExpandedNodes((prev) => ({ ...prev, [nodeName]: !prev[nodeName] }));
+  };
 
   useEffect(() => {
     if (searchParams.get('selectPatient') === '1') {
@@ -33,9 +59,50 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
   }, [searchParams, dispatch]);
 
-  function isActive(route: string): boolean {
-    const base = route.split('?')[0];
-    return pathname === base || pathname.startsWith(`${base}/`);
+  function isRouteActive(route: string): boolean {
+    const [routePath, routeQuery] = route.split('?');
+    if (routeQuery) {
+      // Must match path and query parameters
+      if (pathname !== routePath) return false;
+      const targetParams = new URLSearchParams(routeQuery);
+      let matches = true;
+      targetParams.forEach((val, key) => {
+        if (searchParams.get(key) !== val) {
+          matches = false;
+        }
+      });
+      return matches;
+    }
+
+    // If target route has no query, but current URL has specific query for another sub-module (e.g. mode=IUI),
+    // don't mark default route as active if current query points elsewhere
+    if (pathname === routePath) {
+      // If we are on /sperm with mode=IUI, /sperm alone should not be considered active if other sub-routes match
+      return true;
+    }
+
+    return pathname.startsWith(`${routePath}/`);
+  }
+
+  function isSubItemActive(subRoute: string): boolean {
+    const [routePath, routeQuery] = subRoute.split('?');
+    if (pathname !== routePath) return false;
+    if (routeQuery) {
+      const targetParams = new URLSearchParams(routeQuery);
+      for (const [key, val] of targetParams.entries()) {
+        if (searchParams.get(key) !== val) return false;
+      }
+      return true;
+    }
+    // Sub-item has no query (e.g. /sperm - default mode). It is only active if no conflicting search param is present
+    return !searchParams.get('mode') && !searchParams.get('tab') && !searchParams.get('action');
+  }
+
+  function isParentActive(item: LeftMenuItem): boolean {
+    const [base] = item.route.split('?');
+    if (pathname === base || pathname.startsWith(`${base}/`)) return true;
+    if (item.subModules?.some((s) => isSubItemActive(s.route))) return true;
+    return false;
   }
 
   return (
@@ -71,41 +138,102 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
 
             {/* Sidebar Navigation Items */}
-            <nav className="sidebar-scroll flex-1 overflow-y-auto px-3 py-2">
-              {SIDE_NAV_SECTIONS.map((section) => (
-                <div key={section.title} className="space-y-1">
-                  {section.items.map((item) => {
-                    if (item.label === 'Logout') {
-                      return (
-                        <button
-                          key={item.label}
-                          type="button"
-                          onClick={() => dispatch(setShowLogoutModal(true))}
-                          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 hover:bg-white/10 hover:text-white transition-all"
-                        >
-                          <NavIcon name={item.icon} className="h-4 w-4 shrink-0 opacity-90" />
-                          <span className="truncate">{item.label}</span>
-                        </button>
-                      );
-                    }
-                    const active = isActive(item.route);
-                    return (
+            <nav className="sidebar-scroll flex-1 overflow-y-auto px-3 py-2 space-y-1">
+              {leftMenus.map((item) => {
+                if (item.nodeName === 'logout') {
+                  return (
+                    <button
+                      key={item.nodeName}
+                      data-node={item.nodeName}
+                      type="button"
+                      onClick={() => dispatch(setShowLogoutModal(true))}
+                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 hover:bg-white/10 hover:text-white transition-all"
+                    >
+                      <NavIcon name={item.icon || 'logout'} className="h-4 w-4 shrink-0 opacity-90" />
+                      <span className="truncate">{item.label}</span>
+                    </button>
+                  );
+                }
+
+                const hasSubs = Boolean(item.subModules && item.subModules.length > 0);
+                const isItemActive = hasSubs ? isParentActive(item) : isRouteActive(item.route);
+                const isExpanded = expandedNodes[item.nodeName] ?? false;
+
+                return (
+                  <div key={item.nodeName} className="space-y-0.5">
+                    <div
+                      data-node={item.nodeName}
+                      className={`flex items-center justify-between rounded-lg transition-all ${
+                        isItemActive && !hasSubs
+                          ? 'bg-[#6b46c1] text-white shadow-md font-semibold'
+                          : isItemActive && hasSubs
+                          ? 'bg-white/10 text-white font-semibold'
+                          : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
                       <Link
-                        key={item.label}
                         href={item.route}
-                        className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
-                          active
-                            ? 'bg-[#6b46c1] text-white shadow-md font-semibold'
-                            : 'text-slate-300 hover:bg-white/10 hover:text-white'
-                        }`}
+                        className="flex flex-1 items-center gap-3 px-3 py-2.5 text-sm font-medium"
                       >
-                        <NavIcon name={item.icon} className="h-4 w-4 shrink-0 opacity-90" />
+                        <NavIcon name={item.icon || 'dashboard'} className="h-4 w-4 shrink-0 opacity-90" />
                         <span className="truncate">{item.label}</span>
+                        {item.badgeText && (
+                          <span className="ml-auto rounded-full bg-indigo-500/30 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-300">
+                            {item.badgeText}
+                          </span>
+                        )}
                       </Link>
-                    );
-                  })}
-                </div>
-              ))}
+                      {hasSubs && (
+                        <button
+                          type="button"
+                          onClick={() => toggleExpand(item.nodeName)}
+                          className="px-2 py-2.5 text-slate-400 hover:text-white transition"
+                          title="Toggle sub-modules"
+                        >
+                          <svg
+                            className={`h-3.5 w-3.5 transition-transform duration-200 ${
+                              isExpanded ? 'rotate-180' : ''
+                            }`}
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Sub-modules */}
+                    {hasSubs && isExpanded && (
+                      <div className="ml-4 pl-3 border-l border-white/15 space-y-0.5 pt-0.5 pb-1">
+                        {item.subModules!.map((sub) => {
+                          const subActive = isSubItemActive(sub.route);
+                          return (
+                            <Link
+                              key={sub.nodeName}
+                              data-node={sub.nodeName}
+                              href={sub.route}
+                              className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-all ${
+                                subActive
+                                  ? 'bg-[#6b46c1] text-white font-semibold shadow-xs'
+                                  : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                              }`}
+                            >
+                              <span
+                                className={`h-1.5 w-1.5 rounded-full ${
+                                  subActive ? 'bg-white' : 'bg-slate-400 opacity-60'
+                                }`}
+                              />
+                              <span className="truncate">{sub.label}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </nav>
 
             {/* Sidebar Footer */}

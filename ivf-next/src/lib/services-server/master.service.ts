@@ -73,6 +73,42 @@ export async function savePatMaritalStatus(patId: number, maritalStatus: string)
   );
 }
 
+export async function getPatSmartFields(patId: number) {
+  if (!patId) return { nationality: 'Indian', passport: '', husbandPassport: '' };
+  try {
+    const result = await executeText<Record<string, unknown>>(
+      "SELECT ISNULL(PatNationality, 'Indian') AS PatNationality, ISNULL(PatPassport, '') AS PatPassport, ISNULL(HusbandPassport, '') AS HusbandPassport FROM PatientMaster WHERE PatID = @PatID",
+      [{ name: '@PatID', value: Number(patId) }]
+    );
+    const row = result.recordset?.[0];
+    return {
+      nationality: String(row?.PatNationality ?? 'Indian').trim() || 'Indian',
+      passport: String(row?.PatPassport ?? '').trim(),
+      husbandPassport: String(row?.HusbandPassport ?? '').trim(),
+    };
+  } catch {
+    return { nationality: 'Indian', passport: '', husbandPassport: '' };
+  }
+}
+
+export async function savePatSmartFields(patId: number, { nationality, passport, husbandPassport }: { nationality?: string; passport?: string; husbandPassport?: string }) {
+  if (!patId) return;
+  try {
+    await executeText(
+      'UPDATE PatientMaster SET PatNationality = @PatNationality, PatPassport = @PatPassport, HusbandPassport = @HusbandPassport WHERE PatID = @PatID',
+      [
+        { name: '@PatNationality', value: nationality || 'Indian' },
+        { name: '@PatPassport', value: passport || '' },
+        { name: '@HusbandPassport', value: husbandPassport || '' },
+        { name: '@PatID', value: Number(patId) },
+      ]
+    );
+  } catch (e) {
+    console.error('savePatSmartFields error:', e);
+  }
+}
+
+
 export async function getPatientLookups() {
   const [satellites, doctors, diagnosis, refBy] = await Promise.all([
     executeDRL<Record<string, unknown>>(SATELLITE_EXT_SP, buildParams('@SatID,@QueryIndex', [0, 1])),
@@ -214,7 +250,13 @@ export async function getPatientById(patId: number) {
 
   const detail = mapPatientDetail(rows[0]);
   detail.maritalStatus = await getPatMaritalStatus(detail.id);
-  return detail;
+  const smart = await getPatSmartFields(detail.id);
+  return {
+    ...detail,
+    nationality: smart.nationality,
+    passport: smart.passport,
+    husbandPassport: smart.husbandPassport,
+  };
 }
 
 export async function savePatient(payload: Record<string, unknown>, action = 'insert') {
@@ -239,8 +281,15 @@ export async function savePatient(payload: Record<string, unknown>, action = 'in
       ? Number(normalized['patId']) || 0
       : Number(result.returnValue) || Number(normalized['patId']) || 0;
 
-  if (savedPatId > 0 && maritalStatus) {
-    await savePatMaritalStatus(savedPatId, maritalStatus);
+  if (savedPatId > 0) {
+    if (maritalStatus) {
+      await savePatMaritalStatus(savedPatId, maritalStatus);
+    }
+    await savePatSmartFields(savedPatId, {
+      nationality: String(payload.nationality || 'Indian'),
+      passport: String(payload.passport || ''),
+      husbandPassport: String(payload.husbandPassport || ''),
+    });
   }
 
   return listPatients({ satId: normalized['satId'] });

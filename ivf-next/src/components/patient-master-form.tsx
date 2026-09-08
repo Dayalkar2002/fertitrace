@@ -42,6 +42,11 @@ const emptyForm = (): PatientMasterDetail & { patId: number } => ({
   husbandPhone: '',
   photo: '',
   maritalStatus: 'Married',
+  nationality: 'Indian',
+  passport: '',
+  husbandPassport: '',
+  artClinicReg: '',
+  pcpndtClinicReg: '',
 });
 
 function toInputDate(value: string | null | undefined): string {
@@ -155,6 +160,11 @@ export function PatientMasterForm() {
       husbandPhone: detail.husbandPhone ?? '',
       photo: detail.photo,
       maritalStatus: detail.maritalStatus || 'Married',
+      nationality: detail.nationality || 'Indian',
+      passport: detail.passport || '',
+      husbandPassport: detail.husbandPassport || '',
+      artClinicReg: detail.artClinicReg || '',
+      pcpndtClinicReg: detail.pcpndtClinicReg || '',
     });
   }
 
@@ -244,10 +254,10 @@ export function PatientMasterForm() {
           </div>
           <div>
             <h1 className="text-2xl font-black tracking-tight text-slate-900">
-              Patient Master Directory
+              Patient Management
             </h1>
             <p className="text-xs font-medium text-slate-500 mt-0.5">
-              Register, manage, and track patient demographic records
+              Register, manage, and track patient demographic and clinical records
             </p>
           </div>
         </div>
@@ -332,6 +342,19 @@ export function PatientMasterForm() {
                 </select>
               </label>
 
+              <label className="block text-xs font-semibold text-slate-700">
+                Nationality
+                <select
+                  value={form.nationality || 'Indian'}
+                  onChange={(e) => updateField('nationality', e.target.value)}
+                  className="mt-1 h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-800 outline-none transition focus:border-[#6345A6] focus:ring-2 focus:ring-[#6345A6]/15"
+                >
+                  <option value="Indian">Indian</option>
+                  <option value="NRI">NRI</option>
+                  <option value="Foreign National">Foreign National</option>
+                </select>
+              </label>
+
               <Field label="Registration Date" type="date" value={form.dateOfCreation ?? ''} onChange={(v) => updateField('dateOfCreation', v)} />
               <Field label="Birth Date" type="date" value={form.dob ?? ''} onChange={(v) => updateField('dob', v)} />
               <Field label="Age" type="number" value={String(form.age)} onChange={(v) => updateField('age', Number(v))} />
@@ -364,6 +387,7 @@ export function PatientMasterForm() {
               <Field label="Email" value={form.email} onChange={(v) => updateField('email', v)} placeholder="patient@example.com" />
               <Field label="Patient PAN" value={form.panCard} onChange={(v) => updateField('panCard', v)} placeholder="ABCDE1234F" />
               <Field label="Patient Aadhar" value={form.aadhar} onChange={(v) => updateField('aadhar', v)} placeholder="1234 5678 9012" />
+              <Field label="Patient Passport" value={form.passport || ''} onChange={(v) => updateField('passport', v)} placeholder="Passport No." />
             </div>
           </SectionCard>
 
@@ -378,6 +402,8 @@ export function PatientMasterForm() {
               <SelectField label="Consulting Doctor" value={form.docId} options={doctors} onChange={(v) => updateField('docId', v)} />
               <SelectField label="Diagnosis" value={form.diagId} options={diagnosis} onChange={(v) => updateField('diagId', v)} />
               <SelectField label="Referred By" value={form.refId} options={refBy} onChange={(v) => updateField('refId', v)} />
+              <Field label="ART Clinic Reg No" value={form.artClinicReg || ''} onChange={(v) => updateField('artClinicReg', v)} placeholder="ART-CLINIC-XXXX" />
+              <Field label="PCPNDT Clinic Reg No" value={form.pcpndtClinicReg || ''} onChange={(v) => updateField('pcpndtClinicReg', v)} placeholder="PCPNDT-XXXX" />
             </div>
           </SectionCard>
 
@@ -397,6 +423,7 @@ export function PatientMasterForm() {
                 <>
                   <Field label="Husband PAN" value={form.husbandPan} onChange={(v) => updateField('husbandPan', v)} />
                   <Field label="Husband Aadhar" value={form.husbandAadhar} onChange={(v) => updateField('husbandAadhar', v)} />
+                  <Field label="Husband Passport" value={form.husbandPassport || ''} onChange={(v) => updateField('husbandPassport', v)} placeholder="Passport No." />
                   <Field label="Husband Email" value={form.husbandEmail} onChange={(v) => updateField('husbandEmail', v)} />
                 </>
               )}
@@ -588,6 +615,7 @@ export function PatientMasterForm() {
                   <DetailItem label="Full Name" value={selectedDetail.name} />
                   <DetailItem label="Ref No" value={selectedDetail.refNo} />
                   <DetailItem label="Category" value={selectedDetail.category} />
+                  <DetailItem label="Nationality" value={selectedDetail.nationality || 'Indian'} />
                   <DetailItem label="Marital Status" value={selectedDetail.maritalStatus || 'Married'} />
                   <DetailItem label="Registered Date" value={formatDate(selectedDetail.dateOfCreation)} />
                   <DetailItem label="Birth Date" value={formatDate(selectedDetail.dob)} />
@@ -598,6 +626,7 @@ export function PatientMasterForm() {
                   <DetailItem label="Email" value={selectedDetail.email} />
                   <DetailItem label="Patient PAN" value={selectedDetail.panCard} />
                   <DetailItem label="Patient Aadhar" value={selectedDetail.aadhar} />
+                  <DetailItem label="Patient Passport" value={selectedDetail.passport} />
                   <DetailItem label="Satellite" value={lookupName(satellites, selectedDetail.satId)} />
                   <DetailItem label="Doctor" value={lookupName(doctors, selectedDetail.docId)} />
                   <DetailItem label="Diagnosis" value={lookupName(diagnosis, selectedDetail.diagId)} />
@@ -609,6 +638,7 @@ export function PatientMasterForm() {
                     <>
                       <DetailItem label="Husband PAN" value={selectedDetail.husbandPan} />
                       <DetailItem label="Husband Aadhar" value={selectedDetail.husbandAadhar} />
+                      <DetailItem label="Husband Passport" value={selectedDetail.husbandPassport} />
                       <DetailItem label="Husband Email" value={selectedDetail.husbandEmail} />
                     </>
                   )}

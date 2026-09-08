@@ -42,6 +42,11 @@ export interface PatientMasterDetail {
   husbandPhone?: string;
   photo: string;
   maritalStatus?: string;
+  nationality?: string;
+  passport?: string;
+  husbandPassport?: string;
+  artClinicReg?: string;
+  pcpndtClinicReg?: string;
 }
 
 export interface PatientLookups {
