@@ -128,14 +128,14 @@ export default function DashboardPage() {
     void loadStats();
   }, [loadStats]);
 
-  // Compute dynamic KPI values (fallback to realistic demo figures if zero in dev)
+  // Dynamic KPI values directly sourced from live database
   const kpis = summary?.kpis;
-  const totalPatientsVal = patientCount > 0 ? patientCount : (kpis?.patients && kpis.patients > 0 ? kpis.patients : 256);
-  const activeCyclesVal = kpis?.cycles && kpis.cycles > 0 ? kpis.cycles : 42;
-  const oocytesVal = kpis?.ivf && kpis.ivf > 0 ? kpis.ivf * 5 : (kpis?.iui && kpis.iui > 0 ? kpis.iui * 3 : 67);
-  const embryosVal = kpis?.et && kpis.et > 0 ? kpis.et * 2 : 58;
-  const cryoVal = kpis?.bt && kpis.bt > 0 ? kpis.bt * 15 : 1245;
-  const witnessVal = (kpis?.cycles || 0) + (kpis?.iui || 0) + 110;
+  const totalPatientsVal = patientCount > 0 ? patientCount : (kpis?.patients ?? 0);
+  const activeCyclesVal = kpis?.cycles ?? 0;
+  const oocytesVal = kpis?.oocytes ?? 0;
+  const embryosVal = kpis?.embryos ?? 0;
+  const cryoVal = kpis?.cryo ?? 0;
+  const witnessVal = kpis?.witness ?? 0;
 
   return (
     <div className="space-y-6 font-sans text-slate-800 selection:bg-purple-500 selection:text-white">
@@ -183,7 +183,7 @@ export default function DashboardPage() {
           {
             title: 'Total Patients',
             count: totalPatientsVal.toLocaleString(),
-            sub: '+12% this month',
+            sub: 'Total Registered',
             icon: 'patient',
             bg: 'bg-purple-50 border-purple-200/80',
             iconBg: 'bg-[#6345A6] text-white',
@@ -191,7 +191,7 @@ export default function DashboardPage() {
           {
             title: 'Active Cycles',
             count: activeCyclesVal.toLocaleString(),
-            sub: 'In Progress',
+            sub: 'Active in Clinic',
             icon: 'cycle',
             bg: 'bg-blue-50 border-blue-200/80',
             iconBg: 'bg-blue-600 text-white',
@@ -199,7 +199,7 @@ export default function DashboardPage() {
           {
             title: 'Oocytes Retrieved',
             count: oocytesVal.toLocaleString(),
-            sub: 'Logged Today',
+            sub: 'Follicles & Oocytes',
             icon: 'flask',
             bg: 'bg-emerald-50 border-emerald-200/80',
             iconBg: 'bg-emerald-600 text-white',
@@ -207,7 +207,7 @@ export default function DashboardPage() {
           {
             title: 'Embryos Created',
             count: embryosVal.toLocaleString(),
-            sub: 'Grade I/II',
+            sub: 'Survivals & Preps',
             icon: 'embryo',
             bg: 'bg-pink-50 border-pink-200/80',
             iconBg: 'bg-pink-600 text-white',
@@ -215,7 +215,7 @@ export default function DashboardPage() {
           {
             title: 'Cryostored Units',
             count: cryoVal.toLocaleString(),
-            sub: 'Sperm & Embryos',
+            sub: 'Sperm & Donors',
             icon: 'cryo',
             bg: 'bg-amber-50 border-amber-200/80',
             iconBg: 'bg-amber-600 text-white',
@@ -223,7 +223,7 @@ export default function DashboardPage() {
           {
             title: 'Witness Events',
             count: witnessVal.toLocaleString(),
-            sub: '100% Verified',
+            sub: 'Audit & Verified',
             icon: 'witness',
             bg: 'bg-teal-50 border-teal-200/80',
             iconBg: 'bg-teal-600 text-white',

@@ -27,6 +27,10 @@ export async function getDashboardSummary({ patId = 0, satId = 0, userId = 0 } =
     ivf,
     et,
     bt,
+    oocytes,
+    embryos,
+    cryo,
+    witness,
     satelliteRows,
     recentCycles,
     recentIui,
@@ -38,6 +42,10 @@ export async function getDashboardSummary({ patId = 0, satId = 0, userId = 0 } =
     safeCount('SELECT COUNT(*) AS cnt FROM IVFOutCome'),
     safeCount('SELECT COUNT(*) AS cnt FROM ETOutCome'),
     safeCount('SELECT COUNT(*) AS cnt FROM BTOutCome'),
+    safeCount('SELECT ISNULL(SUM(ISNULL(CycMCRDFTLeft, 0) + ISNULL(CycMCRDFTRight, 0)), 0) AS cnt FROM CycMonitoringChartRemDay'),
+    safeCount('SELECT (SELECT COUNT(*) FROM CycSurvivalReport) + (SELECT COUNT(*) FROM CycAnalysis) AS cnt'),
+    safeCount('SELECT (SELECT COUNT(*) FROM CycSelfSemenFreezing) + (SELECT COUNT(*) FROM SemenDonor) AS cnt'),
+    safeCount('SELECT (SELECT COUNT(*) FROM ConsentDownloadLog) + (SELECT COUNT(*) FROM CycOutCome) + (SELECT COUNT(*) FROM CycAnalysis) AS cnt'),
     safeSpRows('spSatelliteMasterExtDRL', '@SatID,@QueryIndex', [0, 1]),
     patId
       ? safeSpRows('spCycOutComeExtDRL', '@PatID,@SatID,@QueryIndex,@UserId', [
@@ -68,6 +76,10 @@ export async function getDashboardSummary({ patId = 0, satId = 0, userId = 0 } =
       ivf,
       et,
       bt,
+      oocytes,
+      embryos,
+      cryo,
+      witness,
     },
     recentCycles: recentCycles.slice(0, 8).map((row) => ({
       id: String(row.CycID ?? row.CycleID ?? row.ID ?? ''),

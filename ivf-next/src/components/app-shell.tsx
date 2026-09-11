@@ -31,7 +31,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [leftMenus, setLeftMenus] = useState<LeftMenuItem[]>(DEFAULT_LEFT_MENUS);
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({
     patient_management: true,
-    sperm_management: true,
   });
 
   useEffect(() => {

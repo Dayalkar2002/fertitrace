@@ -3,101 +3,145 @@
 import React, { useState, useEffect } from 'react';
 import { usePatient } from '@/contexts/patient-context';
 import { useAuth } from '@/contexts/auth-context';
+import { SemenSelfForm } from '@/components/cryo/semen-self-form';
+import { SemenDonorForm } from '@/components/cryo/semen-donor-form';
 
-export type WorkflowMode = 'Semen Analysis' | 'IUI' | 'IVF / ICSI' | 'Cryopreservation';
+export type SpermSource = 'Husband / Partner' | 'Donor';
+export type SampleState = 'Fresh' | 'Frozen' | 'Thawed / Prepared';
+export type IntendedUse = 'Semen Analysis' | 'IUI' | 'IVF / ICSI' | 'Cryopreservation';
+export type SemenAnalysisType = 'HSA' | 'SQA';
+export type IuiIndication = 
+  | 'HUSBAND SINGLE IUI' 
+  | 'HUSBAND DOUBLE IUI' 
+  | 'HUSBAND THAW SINGLE' 
+  | 'HUSBAND THAW DOUBLE' 
+  | 'DONOR SINGLE IUI' 
+  | 'DONOR DOUBLE IUI' 
+  | 'TIC / FM';
 
 export function SpermWitnessingClient() {
   const { selectedPatient } = usePatient();
   const { user } = useAuth();
 
-  // Workflow Mode Selection
-  const [workflowMode, setWorkflowMode] = useState<WorkflowMode>('IVF / ICSI');
+  // Workflow View State: 'registration' (Default initial view) | 'workflow' (Downstream view after Accept & Continue)
+  const [currentView, setCurrentView] = useState<'registration' | 'workflow'>('registration');
 
-  // Check URL params for initial mode
+  // 1. Top Bar Demographics
+  const patientId = selectedPatient?.uhid || (selectedPatient?.id ? `P-2026-00${selectedPatient.id}` : 'P-2026-00125');
+  const patientName = selectedPatient?.name || 'Mrs. Anjali Sharma';
+  const partnerName = selectedPatient?.partner || 'Mr. Rohit Sharma';
+  const ageSex = selectedPatient?.age ? `${selectedPatient.age} Y / F` : '31 Y / F';
+  const lmpDate = '02-Aug-2026';
+  const cycleDay = '16';
+  const displayDate = '18-Aug-2026';
+  const operator = user?.userName || 'Sachin@gmail.com';
+
+  // 2. Core Registration State (Box 1)
+  const [spermSource, setSpermSource] = useState<SpermSource>('Husband / Partner');
+  const [sampleState, setSampleState] = useState<SampleState>('Fresh');
+  const [intendedUse, setIntendedUse] = useState<IntendedUse>('IUI');
+
+  // Sub-types & Indications
+  const [semenAnalysisType, setSemenAnalysisType] = useState<SemenAnalysisType>('HSA');
+  const [iuiIndication, setIuiIndication] = useState<IuiIndication>('HUSBAND SINGLE IUI');
+
+  // Radio Dependency Logic:
+  // When 'Donor' is selected -> Donor sample in ART is strictly Frozen (Quarantined)
+  const handleSpermSourceChange = (source: SpermSource) => {
+    setSpermSource(source);
+    if (source === 'Donor') {
+      setSampleState('Frozen');
+    } else {
+      // Return to fresh by default if previously on frozen because of donor
+      setSampleState('Fresh');
+    }
+  };
+
+  // URL Query Sync
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const modeParam = params.get('mode');
-      if (modeParam === 'Cryopreservation') setWorkflowMode('Cryopreservation');
-      else if (modeParam === 'IUI') setWorkflowMode('IUI');
-      else if (modeParam === 'Semen Analysis') setWorkflowMode('Semen Analysis');
+      if (modeParam === 'Cryopreservation') setIntendedUse('Cryopreservation');
+      else if (modeParam === 'IUI') setIntendedUse('IUI');
+      else if (modeParam === 'Semen Analysis') setIntendedUse('Semen Analysis');
+      else if (modeParam === 'IVF / ICSI') setIntendedUse('IVF / ICSI');
     }
   }, []);
 
-  // Patient & Cycle Header Information
-  const patientId = selectedPatient?.uhid || (selectedPatient?.id ? `P-2026-00${selectedPatient.id}` : 'P-2026-00125');
-  const patientName = selectedPatient?.name || 'Mrs. Anjali Sharma';
-  const partnerName = selectedPatient?.partner || 'Mr. Rohit Sharma';
-  const cycleId = selectedPatient?.id ? `C-2026-00${selectedPatient.id}` : 'C-2026-00158';
-  const ageSex = selectedPatient?.age ? `${selectedPatient.age} Y / F` : '31 Y / F';
-  const procedure = workflowMode === 'IUI' ? 'IUI' : workflowMode === 'Cryopreservation' ? 'Sperm Cryopreservation' : 'IVF / ICSI';
-  const operator = user?.userName || 'Dr. Satish Sharma (EMB-01)';
+  const cycleVisitId = intendedUse === 'IUI' 
+    ? 'IUI-2026-0034' 
+    : intendedUse === 'Semen Analysis' 
+    ? (semenAnalysisType === 'HSA' ? 'HSA-2026-0089' : 'SQA-2026-0045')
+    : intendedUse === 'Cryopreservation' 
+    ? 'CRYO-2026-0042' 
+    : 'IVF-2026-00158';
 
-  // 1. Source & Sample Details State
-  const [source, setSource] = useState<'Husband / Partner' | 'Donor'>('Husband / Partner');
-  const [sampleState, setSampleState] = useState<'Fresh' | 'Frozen' | 'Thawed / Prepared'>('Fresh');
+  const procedureLabel = intendedUse === 'IUI' 
+    ? `IUI (${iuiIndication})` 
+    : intendedUse === 'Semen Analysis' 
+    ? (semenAnalysisType === 'HSA' ? 'Semen Analysis (HSA)' : 'Semen Qualitative Analysis (SQA)') 
+    : intendedUse === 'Cryopreservation' 
+    ? 'Sperm Cryopreservation' 
+    : 'IVF / ICSI';
+
+  // Collection fields
   const [collectionDateTime, setCollectionDateTime] = useState('2026-08-18T09:42');
   const [collectionMethod, setCollectionMethod] = useState('Masturbation');
   const [abstinenceDays, setAbstinenceDays] = useState(3);
-  const [donorId, setDonorId] = useState('');
+  const [collectedBy, setCollectedBy] = useState('EMB-01 - Dr. Satish');
+  const [receivedBy, setReceivedBy] = useState('EMB-01 - Dr. Satish');
+  const [notes, setNotes] = useState('');
+
+  // Identifiers & Witness Scanning
   const [sampleId, setSampleId] = useState('SEM-26-00018472');
-  const [rfidBarcode, setRfidBarcode] = useState('RF-88921-X');
+  const [rfidBarcode, setRfidBarcode] = useState('');
   const [isValidated, setIsValidated] = useState(true);
 
-  // Frozen Storage Details
-  const [strawVialId, setStrawVialId] = useState('FROZ-26-000554');
-  const [tankCanister, setTankCanister] = useState('Tank 1 - Canister 2');
-  const [storageLocation, setStorageLocation] = useState('LN2 Room - 1');
-  const [storedOn, setStoredOn] = useState('2026-08-05');
-  const [sampleNotes, setSampleNotes] = useState('');
+  // Source details
+  const [partnerId, setPartnerId] = useState('HUSB-26-00017');
+  const [partnerDobAge, setPartnerDobAge] = useState('34 Y');
+  const [partnerPhone, setPartnerPhone] = useState('9876543210');
+  const [frozenStrawId, setFrozenStrawId] = useState('FROZ-26-000554');
+  const [storageLocation, setStorageLocation] = useState('Tank 1 - Canister 2');
+  const [donorType, setDonorType] = useState('Select');
+  const [consentVerified, setConsentVerified] = useState(true);
 
-  // 2. Validation Checklist
-  const [checks, setChecks] = useState({
-    patientCoupleMatch: true,
-    cycleMatch: true,
-    sourceValid: true,
-    sampleStateValid: true,
-    intendedUseValid: true,
-    sampleAvailability: true,
-    processSequenceValid: true,
-    operatorAuthorized: true,
-  });
+  // Traceability Sample IDs
+  const [prepSampleId, setPrepSampleId] = useState('PREP-26-000918');
+  const [finalSyringeId, setFinalSyringeId] = useState('IUI-SYR-000918');
 
-  // 4. Sperm Preparation & Assignment State
-  const [prepId, setPrepId] = useState('PREP-26-000918');
-  const [prepMethod, setPrepMethod] = useState('Density Gradient');
-  const [prepDateTime, setPrepDateTime] = useState('2026-08-18T10:18');
-  const [prepBy, setPrepBy] = useState('EMB-02 - Dr. Amit Verma');
-  const [concentration, setConcentration] = useState(85);
-  const [motility, setMotility] = useState(65);
-  const [progMotility, setProgMotility] = useState(55);
-  const [volume, setVolume] = useState(2.5);
-  const [finalVolume, setFinalVolume] = useState(0.5);
-  const [vitality, setVitality] = useState(75);
-  const [morphology, setMorphology] = useState(5);
-  const [prepNotes, setPrepNotes] = useState('Good post-wash recovery with high progressive motility.');
+  // Semen Analysis Parameters (Box 5: Before Processing / Pre-Freezing)
+  const [volume, setVolume] = useState('2.8');
+  const [appearance, setAppearance] = useState('Grey White');
+  const [liquefaction, setLiquefaction] = useState('30');
+  const [ph, setPh] = useState('7.5');
+  const [concentration, setConcentration] = useState('48');
+  const [totalCount, setTotalCount] = useState('134');
+  const [progMotility, setProgMotility] = useState('62');
+  const [totalMotility, setTotalMotility] = useState('72');
+  const [morphology, setMorphology] = useState('5');
+  const [vitality, setVitality] = useState('80');
+  const [wbc, setWbc] = useState('0-1');
+  const [agglutination, setAgglutination] = useState('None');
+  const [analysisRemarks, setAnalysisRemarks] = useState('');
+  const [analysisResult, setAnalysisResult] = useState('NORMOZOOSPERMIA');
+  const [analysisSaved, setAnalysisSaved] = useState(true);
 
-  // 5. Dish Linkage State
-  const [dishId, setDishId] = useState('ICSI-DISH-26-000421');
-  const [linkProcedure, setLinkProcedure] = useState<'ICSI' | 'Conventional IVF'>('ICSI');
-  const [linkConfirmed, setLinkConfirmed] = useState(true);
+  // Post-Processing & Survival Motility Parameters (SQA & IUI Wash / Thaw)
+  const [postVolume, setPostVolume] = useState('0.5');
+  const [postCount, setPostCount] = useState('38');
+  const [postProgMotility, setPostProgMotility] = useState('75');
+  const [postTotalMotility, setPostTotalMotility] = useState('85');
+  const [survival24Hr, setSurvival24Hr] = useState('45');
+  const [survival12Hr, setSurvival12Hr] = useState('60');
+  const [prepMethod, setPrepMethod] = useState('Density Gradient (80% / 40%)');
+  const [prepMedia, setPrepMedia] = useState('Sperm Preparation Media (HEPES)');
+  const [linearity, setLinearity] = useState('Rapid Linear');
 
-  // 6. Authorization State
-  const [isAuthorized, setIsAuthorized] = useState(true);
-
-  // Cryopreservation 3-Step Wizard State
-  const [cryoStep, setCryoStep] = useState<1 | 2 | 3>(1);
-  const [cryoDate, setCryoDate] = useState('2026-05-22T11:20');
-  const [cryoMethod, setCryoMethod] = useState('Slow Freezing');
-  const [cryoprotectant, setCryoprotectant] = useState('Glycerol');
-  const [cryoprotectantConc, setCryoprotectantConc] = useState(7);
-  const [equilibrationTime, setEquilibrationTime] = useState(10);
-  const [strawType, setStrawType] = useState('0.25 ml French Straw');
-  const [sealingType, setSealingType] = useState('Powder');
-  const [strawCount, setStrawCount] = useState(6);
-  const [startingStrawNo, setStartingStrawNo] = useState('SP25-000789-S01');
-  const [witnessRequired, setWitnessRequired] = useState(true);
-  const [witnessName, setWitnessName] = useState('Dr. Neha Kapoor (Witness EMB-03)');
+  // Pre-IUI Authorization (Box 6)
+  const [authBy, setAuthBy] = useState('DR-01 - Dr. Satish');
+  const [authTime, setAuthTime] = useState('2026-08-18T10:30');
 
   // Toast notification
   const [toast, setToast] = useState<string | null>(null);
@@ -107,19 +151,29 @@ export function SpermWitnessingClient() {
   }
 
   function handleGenerateSampleId() {
-    const randomNum = Math.floor(100000 + Math.random() * 900000);
-    const newId = `SEM-26-00${randomNum.toString().slice(0, 5)}`;
+    const randomNum = Math.floor(10000000 + Math.random() * 90000000);
+    const newId = `SEM-26-${randomNum.toString().slice(0, 8)}`;
     setSampleId(newId);
-    showToast(`New Sample ID generated: ${newId}`);
+    showToast(`New Original Sample ID generated: ${newId}`);
+  }
+
+  function handleBarcodeScan() {
+    if (!rfidBarcode.trim()) {
+      setRfidBarcode('RF-88921-X');
+      setIsValidated(true);
+      showToast('Scanned RFID tag RF-88921-X verified and matched to patient!');
+    } else {
+      setIsValidated(true);
+      showToast(`Scanned tag ${rfidBarcode} verified successfully!`);
+    }
   }
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-5 font-sans text-slate-800 pb-16">
-      
+    <div className="mx-auto w-full space-y-4 font-sans text-slate-800 pb-12">
       {/* Toast Notification */}
       {toast && (
-        <div className="fixed top-20 right-6 z-50 flex items-center gap-3 rounded-2xl border border-emerald-200 bg-white p-4 shadow-xl ring-1 ring-emerald-500/20 animate-in fade-in slide-in-from-top-4">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+        <div className="fixed top-20 right-6 z-50 flex items-center gap-3 rounded-2xl border border-emerald-300 bg-white p-4 shadow-2xl ring-1 ring-emerald-500/20 animate-in fade-in slide-in-from-top-4">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
             <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <polyline points="20 6 9 17 4 12" />
             </svg>
@@ -128,1055 +182,1479 @@ export function SpermWitnessingClient() {
         </div>
       )}
 
-      {/* TOP PATIENT / CYCLE DEMOGRAPHIC BANNER */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-pink-100 text-pink-600 font-black text-sm">
-              PT
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-slate-800">{patientName}</span>
-                <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
-                  {patientId}
-                </span>
-                <span className="rounded-md bg-pink-50 px-2 py-0.5 text-[11px] font-bold text-pink-600 border border-pink-200/60">
-                  Partner: {partnerName}
-                </span>
-              </div>
-              <div className="text-[11px] text-slate-500 mt-0.5">
-                Age / Sex: <strong className="text-slate-700">{ageSex}</strong> • Blood Group: <strong className="text-slate-700">B+</strong> • Primary Phone: <strong className="text-slate-700">9892590046</strong>
-              </div>
-            </div>
+      {/* TOP PATIENT / CYCLE HEADER BAR (Matches Screenshot 2 top bar) */}
+      <div className="rounded-xl border border-slate-200 bg-white px-5 py-3 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-y-3 text-xs">
+          <div>
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Female Patient ID</span>
+            <span className="font-bold text-blue-600 font-mono text-sm">{patientId}</span>
           </div>
 
-          <div className="flex items-center gap-6 text-xs">
-            <div>
-              <span className="block text-[10px] uppercase font-bold text-slate-400">Cycle / Visit ID</span>
-              <span className="font-bold text-slate-700">{cycleId}</span>
-            </div>
-            <div>
-              <span className="block text-[10px] uppercase font-bold text-slate-400">Procedure</span>
-              <span className="font-bold text-pink-600">{procedure}</span>
-            </div>
-            <div>
-              <span className="block text-[10px] uppercase font-bold text-slate-400">Cycle Day</span>
-              <span className="font-bold text-slate-700">Day 16</span>
-            </div>
-            <div>
-              <span className="block text-[10px] uppercase font-bold text-slate-400">Active Operator</span>
-              <span className="font-bold text-slate-700">{operator}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* WORKFLOW / INTENDED USE TABS */}
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500 mr-2">
-              WORKFLOW / INTENDED USE:
-            </span>
-            {(['Semen Analysis', 'IUI', 'IVF / ICSI', 'Cryopreservation'] as WorkflowMode[]).map((mode) => {
-              const active = workflowMode === mode;
-              return (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => {
-                    setWorkflowMode(mode);
-                    showToast(`Switched workflow mode to ${mode}`);
-                  }}
-                  className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
-                    active
-                      ? 'bg-[#181d38] text-white shadow-md shadow-slate-900/10 scale-[1.02]'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <span>{mode}</span>
-                  {active && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />}
-                </button>
-              );
-            })}
+          <div>
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Patient Name</span>
+            <span className="font-bold text-slate-800 text-sm">{patientName}</span>
           </div>
 
-          <div className="flex items-center gap-2 text-xs font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200/80 px-3 py-1 rounded-xl">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
-            Electronic Witnessing Active
+          <div>
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Age / Sex</span>
+            <span className="font-semibold text-slate-700">{ageSex}</span>
+          </div>
+
+          <div>
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Cycle / Visit ID</span>
+            <span className="font-bold text-blue-600 font-mono">{cycleVisitId}</span>
+          </div>
+
+          <div>
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Procedure</span>
+            <span className="font-bold text-blue-700">{procedureLabel}</span>
+          </div>
+
+          <div>
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">LMP</span>
+            <span className="font-semibold text-slate-700">{lmpDate}</span>
+          </div>
+
+          <div>
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Cycle Day</span>
+            <span className="font-bold text-slate-800">{cycleDay}</span>
+          </div>
+
+          <div>
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Date</span>
+            <span className="font-semibold text-slate-700">{displayDate}</span>
+          </div>
+
+          <div>
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Operator</span>
+            <span className="font-semibold text-slate-700">{operator}</span>
           </div>
         </div>
       </div>
 
-      {/* CONDITIONAL RENDERING BASED ON WORKFLOW MODE */}
-      {workflowMode === 'Cryopreservation' ? (
-        /* CRYOPRESERVATION 3-STEP WIZARD (MOCKUPS 2 & 3) */
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-            <div>
-              <h2 className="text-base font-black text-slate-800 tracking-tight">
-                Cryopreservation (Sperm)
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Vitrification and liquid nitrogen storage protocol with multi-point straw verification
-              </p>
-            </div>
-
-            {/* Stepper Tabs */}
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setCryoStep(1)}
-                className={`rounded-xl px-4 py-1.5 text-xs font-bold transition ${
-                  cryoStep === 1
-                    ? 'bg-purple-600 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                1. Cryo Entry {cryoStep > 1 && '✓'}
-              </button>
-              <span className="text-slate-300">→</span>
-              <button
-                type="button"
-                onClick={() => setCryoStep(2)}
-                className={`rounded-xl px-4 py-1.5 text-xs font-bold transition ${
-                  cryoStep === 2
-                    ? 'bg-purple-600 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                2. Vials / Straws {cryoStep > 2 && '✓'}
-              </button>
-              <span className="text-slate-300">→</span>
-              <button
-                type="button"
-                onClick={() => setCryoStep(3)}
-                className={`rounded-xl px-4 py-1.5 text-xs font-bold transition ${
-                  cryoStep === 3
-                    ? 'bg-purple-600 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                3. Review & Confirm
-              </button>
-            </div>
-          </div>
-
-          {/* STEP 1: CRYO ENTRY */}
-          {cryoStep === 1 && (
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-              <div className="lg:col-span-2 space-y-4">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Cryopreservation Details
-                </h3>
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Freezing Date & Time *</label>
-                    <input
-                      type="datetime-local"
-                      value={cryoDate}
-                      onChange={(e) => setCryoDate(e.target.value)}
-                      className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-medium outline-none focus:border-purple-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Freezing By *</label>
-                    <input
-                      type="text"
-                      defaultValue="Dr. Amit Verma"
-                      className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-medium outline-none focus:border-purple-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Method *</label>
-                    <select
-                      value={cryoMethod}
-                      onChange={(e) => setCryoMethod(e.target.value)}
-                      className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-medium outline-none focus:border-purple-500"
-                    >
-                      <option value="Slow Freezing">Slow Freezing</option>
-                      <option value="Rapid Freezing">Rapid Freezing</option>
-                      <option value="Vitrification">Vitrification</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 pt-2">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Semen Volume (ml) *</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      defaultValue="2.50"
-                      className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-medium outline-none focus:border-purple-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Concentration (M/ml) *</label>
-                    <input
-                      type="number"
-                      defaultValue="48.0"
-                      className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-medium outline-none focus:border-purple-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Total Motility (%) *</label>
-                    <input
-                      type="number"
-                      defaultValue="60"
-                      className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-medium outline-none focus:border-purple-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Prog. Motility (%) *</label>
-                    <input
-                      type="number"
-                      defaultValue="45"
-                      className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-medium outline-none focus:border-purple-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 pt-2">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Morphology (%) *</label>
-                    <input
-                      type="number"
-                      defaultValue="5"
-                      className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-medium outline-none focus:border-purple-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Vitality (%)</label>
-                    <input
-                      type="number"
-                      defaultValue="70"
-                      className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-medium outline-none focus:border-purple-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Leukocytes (M/ml)</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      defaultValue="0.6"
-                      className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-medium outline-none focus:border-purple-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">pH</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      defaultValue="7.8"
-                      className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-medium outline-none focus:border-purple-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 pt-2">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Cryoprotectant Used *</label>
-                    <input
-                      type="text"
-                      value={cryoprotectant}
-                      onChange={(e) => setCryoprotectant(e.target.value)}
-                      className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-medium outline-none focus:border-purple-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Concentration (%) *</label>
-                    <input
-                      type="number"
-                      value={cryoprotectantConc}
-                      onChange={(e) => setCryoprotectantConc(Number(e.target.value))}
-                      className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-medium outline-none focus:border-purple-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Equilibration Time (min)</label>
-                    <input
-                      type="number"
-                      value={equilibrationTime}
-                      onChange={(e) => setEquilibrationTime(Number(e.target.value))}
-                      className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-medium outline-none focus:border-purple-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="pt-3 flex items-center justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setCryoStep(2)}
-                    className="rounded-xl bg-purple-600 hover:bg-purple-700 px-6 py-2.5 text-xs font-bold uppercase text-white shadow-md shadow-purple-600/20 transition"
-                  >
-                    Save & Next: Vials / Straws →
-                  </button>
-                </div>
-              </div>
-
-              {/* Sidebar Cryo Info */}
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-4 text-xs">
-                <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">
-                  Sample Summary
-                </h4>
-                <div className="space-y-2 text-slate-600">
-                  <div className="flex justify-between border-b border-slate-200/60 pb-1">
-                    <span>Sample ID:</span>
-                    <strong className="text-slate-800 font-mono">{sampleId}</strong>
-                  </div>
-                  <div className="flex justify-between border-b border-slate-200/60 pb-1">
-                    <span>Sample Type:</span>
-                    <strong className="text-slate-800">Ejaculate</strong>
-                  </div>
-                  <div className="flex justify-between border-b border-slate-200/60 pb-1">
-                    <span>Volume:</span>
-                    <strong className="text-slate-800">2.50 ml</strong>
-                  </div>
-                  <div className="flex justify-between border-b border-slate-200/60 pb-1">
-                    <span>Concentration:</span>
-                    <strong className="text-slate-800">48.0 M/ml</strong>
-                  </div>
-                  <div className="flex justify-between border-b border-slate-200/60 pb-1">
-                    <span>Total Motility:</span>
-                    <strong className="text-slate-800">60%</strong>
-                  </div>
-                  <div className="flex justify-between border-b border-slate-200/60 pb-1">
-                    <span>Prog. Motility:</span>
-                    <strong className="text-slate-800">45%</strong>
-                  </div>
-                </div>
-
-                <div className="rounded-xl bg-purple-50 border border-purple-200/80 p-3 space-y-1">
-                  <div className="text-[11px] font-bold text-purple-900">Vitrification Protocols</div>
-                  <p className="text-[11px] text-purple-700 leading-relaxed">
-                    Ensure glycerol dilution is performed drop-wise over 10 minutes at room temperature.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 2: VIALS / STRAWS */}
-          {cryoStep === 2 && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                <div className="rounded-xl border border-purple-100 bg-purple-50/60 p-3">
-                  <span className="text-[10px] font-bold uppercase text-purple-600">Total Vials</span>
-                  <div className="text-xl font-black text-purple-950 mt-1">0</div>
-                </div>
-                <div className="rounded-xl border border-purple-100 bg-purple-50/60 p-3">
-                  <span className="text-[10px] font-bold uppercase text-purple-600">Total Straws</span>
-                  <div className="text-xl font-black text-purple-950 mt-1">{strawCount}</div>
-                </div>
-                <div className="rounded-xl border border-purple-100 bg-purple-50/60 p-3">
-                  <span className="text-[10px] font-bold uppercase text-purple-600">Total Volume</span>
-                  <div className="text-xl font-black text-purple-950 mt-1">{(strawCount * 0.25).toFixed(2)} ml</div>
-                </div>
-                <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
-                  <span className="text-[10px] font-bold uppercase text-emerald-600">Freezer Status</span>
-                  <div className="text-xl font-black text-emerald-900 mt-1">In Freezer ({strawCount})</div>
-                </div>
-              </div>
-
-              {/* Straw Creation Form */}
-              <div className="rounded-2xl border border-slate-200 p-4 space-y-4">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Vial / Straw Parameters & Storage Location
-                </h4>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-4 text-xs">
-                  <div>
-                    <label className="block text-slate-600 font-medium mb-1">Straw Type</label>
-                    <select
-                      value={strawType}
-                      onChange={(e) => setStrawType(e.target.value)}
-                      className="h-9 w-full rounded-xl border border-slate-200 px-3 font-medium outline-none focus:border-purple-500"
-                    >
-                      <option value="0.25 ml French Straw">0.25 ml French Straw</option>
-                      <option value="0.5 ml French Straw">0.5 ml French Straw</option>
-                      <option value="Cryovial 1.8 ml">Cryovial 1.8 ml</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-slate-600 font-medium mb-1">Number of Straws</label>
-                    <input
-                      type="number"
-                      value={strawCount}
-                      onChange={(e) => setStrawCount(Number(e.target.value))}
-                      className="h-9 w-full rounded-xl border border-slate-200 px-3 font-medium outline-none focus:border-purple-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-600 font-medium mb-1">Starting Straw No</label>
-                    <input
-                      type="text"
-                      value={startingStrawNo}
-                      onChange={(e) => setStartingStrawNo(e.target.value)}
-                      className="h-9 w-full rounded-xl border border-slate-200 px-3 font-mono font-bold outline-none focus:border-purple-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-600 font-medium mb-1">Storage Location (Tank / Rack)</label>
-                    <select className="h-9 w-full rounded-xl border border-slate-200 px-3 font-medium outline-none focus:border-purple-500">
-                      <option>Tank A &gt; Rack 3 &gt; Level 2</option>
-                      <option>Tank B &gt; Canister 1 &gt; Goblet A</option>
-                      <option>Tank C &gt; Canister 4 &gt; Goblet B</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Straws Table */}
-              <div className="overflow-x-auto rounded-xl border border-slate-200">
-                <table className="min-w-full divide-y divide-slate-200 text-xs">
-                  <thead className="bg-slate-50 text-slate-600">
-                    <tr>
-                      <th className="px-3.5 py-2.5 text-left font-bold uppercase">#</th>
-                      <th className="px-3.5 py-2.5 text-left font-bold uppercase">Straw No.</th>
-                      <th className="px-3.5 py-2.5 text-left font-bold uppercase">Volume (ml)</th>
-                      <th className="px-3.5 py-2.5 text-left font-bold uppercase">Location</th>
-                      <th className="px-3.5 py-2.5 text-left font-bold uppercase">Status</th>
-                      <th className="px-3.5 py-2.5 text-left font-bold uppercase">Filled By</th>
-                      <th className="px-3.5 py-2.5 text-left font-bold uppercase">Filled On</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 bg-white">
-                    {Array.from({ length: strawCount }).map((_, idx) => {
-                      const strawNumber = `SP25-000789-S0${idx + 1}`;
-                      return (
-                        <tr key={idx} className="hover:bg-purple-50/40 transition">
-                          <td className="px-3.5 py-2.5 font-bold text-slate-500">{idx + 1}</td>
-                          <td className="px-3.5 py-2.5 font-mono font-bold text-purple-700">{strawNumber}</td>
-                          <td className="px-3.5 py-2.5 font-medium text-slate-700">0.25</td>
-                          <td className="px-3.5 py-2.5 text-slate-700">Tank A &gt; Rack 3 &gt; Level 2</td>
-                          <td className="px-3.5 py-2.5">
-                            <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
-                              In Freezer
-                            </span>
-                          </td>
-                          <td className="px-3.5 py-2.5 text-slate-600">Dr. Amit Verma</td>
-                          <td className="px-3.5 py-2.5 text-slate-500">22/05/2026 11:45 AM</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="flex items-center justify-between pt-2">
-                <button
-                  type="button"
-                  onClick={() => setCryoStep(1)}
-                  className="rounded-xl border border-slate-300 px-5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
-                >
-                  ← Back to Cryo Entry
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCryoStep(3)}
-                  className="rounded-xl bg-purple-600 hover:bg-purple-700 px-6 py-2.5 text-xs font-bold uppercase text-white shadow-md shadow-purple-600/20 transition"
-                >
-                  Review &amp; Confirm Witnessing →
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 3: REVIEW & CONFIRM */}
-          {cryoStep === 3 && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                <div className="lg:col-span-2 space-y-4">
-                  <div className="rounded-2xl border border-slate-200 p-4 space-y-3 text-xs">
-                    <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">
-                      Cryopreservation &amp; Storage Summary
-                    </h4>
-                    <div className="grid grid-cols-2 gap-3 text-slate-600">
-                      <div>
-                        Patient: <strong className="text-slate-800">{patientName} ({patientId})</strong>
-                      </div>
-                      <div>
-                        Sample ID: <strong className="font-mono text-purple-700">{sampleId}</strong>
-                      </div>
-                      <div>
-                        Straw Range: <strong className="font-mono text-slate-800">SP25-000789-S01 to S06</strong>
-                      </div>
-                      <div>
-                        Straws Created: <strong className="text-slate-800">{strawCount} straws (1.50 ml)</strong>
-                      </div>
-                      <div>
-                        Freezing Method: <strong className="text-slate-800">{cryoMethod}</strong>
-                      </div>
-                      <div>
-                        Tank Coordinates: <strong className="text-slate-800">Tank A &gt; Rack 3 &gt; Level 2</strong>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Dual Witness Verification */}
-                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-xs font-bold text-emerald-900">
-                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-white font-black text-xs">
-                          ✓
-                        </span>
-                        Dual-Witness Verification (Mandatory Cryo Sign-Off)
-                      </div>
-                      <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-semibold text-emerald-800">
-                        <input
-                          type="checkbox"
-                          checked={witnessRequired}
-                          onChange={(e) => setWitnessRequired(e.target.checked)}
-                          className="h-4 w-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
-                        />
-                        Witness Verified
-                      </label>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
-                      <div>
-                        <label className="block font-medium text-emerald-800 mb-1">Witnessing Embryologist</label>
-                        <select
-                          value={witnessName}
-                          onChange={(e) => setWitnessName(e.target.value)}
-                          className="h-9 w-full rounded-xl border border-emerald-300 bg-white px-3 font-medium text-slate-800"
-                        >
-                          <option>Dr. Neha Kapoor (Witness EMB-03)</option>
-                          <option>Dr. Satish Sharma (EMB-01)</option>
-                          <option>Dr. Amit Verma (EMB-02)</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block font-medium text-emerald-800 mb-1">Witness Status</label>
-                        <div className="h-9 flex items-center rounded-xl bg-white border border-emerald-300 px-3 font-bold text-emerald-700">
-                          Completed &amp; Signed Digitally
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setCryoStep(2)}
-                      className="rounded-xl border border-slate-300 px-5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
-                    >
-                      ← Back to Vials
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        showToast('Cryopreservation record successfully saved and committed to LN2 inventory!');
-                        setTimeout(() => setWorkflowMode('IVF / ICSI'), 1500);
-                      }}
-                      className="rounded-xl bg-emerald-600 hover:bg-emerald-700 px-8 py-2.5 text-xs font-bold uppercase text-white shadow-md shadow-emerald-600/20 transition"
-                    >
-                      Confirm &amp; Commit to Inventory
-                    </button>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-4 text-xs">
-                  <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">
-                    Labels &amp; Barcode Printing
-                  </h4>
-                  <p className="text-slate-500 leading-relaxed">
-                    6 cryo-resistant cryogenic labels are ready for thermal transfer print.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => showToast('Dispatched 6 straw labels to Citizen CL-S621 Cryo Printer')}
-                    className="w-full rounded-xl border border-slate-300 bg-white py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 transition"
-                  >
-                    Print 6 Straw Labels
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      ) : (
-        /* MAIN SPERM WITNESSING VIEW (SEMEN ANALYSIS, IUI, IVF/ICSI) */
-        <div className="space-y-5">
-          {/* ROW 1: SOURCE & SAMPLE DETAILS + VALIDATION SUMMARY */}
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-            
-            {/* 1. SOURCE & SAMPLE DETAILS (COL 8) */}
-            <div className="lg:col-span-8 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                  1. Source &amp; Sample Details
-                </h3>
-                <span className="rounded-md bg-pink-50 px-2 py-0.5 text-[11px] font-bold text-pink-600 border border-pink-200/60">
-                  Mode: {workflowMode}
+      {/* INITIAL VIEW: SPERM SAMPLE REGISTRATION & VALIDATION SUMMARY (ONLY BOX 1 & BOX 2) */}
+      {currentView === 'registration' ? (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+            {/* 1. SPERM SAMPLE REGISTRATION (COL 8) */}
+            <div className="lg:col-span-8 rounded-xl border border-slate-300/80 bg-white shadow-xs overflow-hidden">
+              {/* Header */}
+              <div className="bg-[#0b4a8b] px-4 py-2 text-white flex items-center justify-between">
+                <h2 className="text-xs font-bold uppercase tracking-wider">
+                  1. SPERM SAMPLE REGISTRATION
+                </h2>
+                <span className="text-[11px] bg-white/20 px-2 py-0.5 rounded font-medium">
+                  Mode: {intendedUse}
                 </span>
               </div>
 
-              {/* Source & Sample State Radio Groups */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1.5">Source</label>
-                  <div className="flex items-center gap-5 pt-0.5">
-                    <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-medium text-slate-700">
-                      <input
-                        type="radio"
-                        name="sampleSource"
-                        value="Husband / Partner"
-                        checked={source === 'Husband / Partner'}
-                        onChange={() => setSource('Husband / Partner')}
-                        className="h-4 w-4 text-pink-600 border-slate-300 focus:ring-pink-500"
-                      />
-                      Husband / Partner
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-medium text-slate-700">
-                      <input
-                        type="radio"
-                        name="sampleSource"
-                        value="Donor"
-                        checked={source === 'Donor'}
-                        onChange={() => setSource('Donor')}
-                        className="h-4 w-4 text-pink-600 border-slate-300 focus:ring-pink-500"
-                      />
-                      Donor
-                    </label>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1.5">Sample State</label>
-                  <div className="flex items-center gap-4 pt-0.5">
-                    {(['Fresh', 'Frozen', 'Thawed / Prepared'] as const).map((state) => (
-                      <label key={state} className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-medium text-slate-700">
+              <div className="p-4 space-y-4 text-xs">
+                {/* 3 Radio Selectors (Sperm Source, Sample State, Intended Use) with Reactive Constraints */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 border-b border-slate-200 pb-4">
+                  {/* 1. SPERM SOURCE */}
+                  <div className="md:col-span-3">
+                    <label className="block text-[11px] font-bold text-slate-700 mb-2">1. SPERM SOURCE</label>
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 cursor-pointer text-slate-700 font-medium">
                         <input
                           type="radio"
-                          name="sampleState"
-                          value={state}
-                          checked={sampleState === state}
-                          onChange={() => setSampleState(state)}
-                          className="h-4 w-4 text-pink-600 border-slate-300 focus:ring-pink-500"
+                          name="spermSource"
+                          value="Husband / Partner"
+                          checked={spermSource === 'Husband / Partner'}
+                          onChange={() => handleSpermSourceChange('Husband / Partner')}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300"
                         />
-                        {state}
+                        <span>Husband / Partner</span>
                       </label>
-                    ))}
+                      <label className="flex items-center gap-2 cursor-pointer text-slate-700 font-medium">
+                        <input
+                          type="radio"
+                          name="spermSource"
+                          value="Donor"
+                          checked={spermSource === 'Donor'}
+                          onChange={() => handleSpermSourceChange('Donor')}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300"
+                        />
+                        <span>Donor</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* 2. SAMPLE STATE (Fresh is DISABLED when Donor is selected) */}
+                  <div className="md:col-span-3">
+                    <label className="block text-[11px] font-bold text-slate-700 mb-2">2. SAMPLE STATE</label>
+                    <div className="space-y-2">
+                      {(['Fresh', 'Frozen', 'Thawed / Prepared'] as SampleState[]).map((state) => {
+                        const isFreshDonorDisabled = spermSource === 'Donor' && state === 'Fresh';
+                        return (
+                          <label
+                            key={state}
+                            className={`flex items-center gap-2 font-medium ${
+                              isFreshDonorDisabled
+                                ? 'cursor-not-allowed opacity-40 text-slate-400'
+                                : 'cursor-pointer text-slate-700'
+                            }`}
+                            title={isFreshDonorDisabled ? 'Donor sperm must be quarantined & frozen under ART rules' : ''}
+                          >
+                            <input
+                              type="radio"
+                              name="sampleState"
+                              value={state}
+                              checked={sampleState === state}
+                              disabled={isFreshDonorDisabled}
+                              onChange={() => {
+                                setSampleState(state);
+                              }}
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300"
+                            />
+                            <span>{state}</span>
+                            {isFreshDonorDisabled && (
+                              <span className="text-[9px] text-rose-500 font-bold">(N/A for Donor)</span>
+                            )}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 3. INTENDED USE */}
+                  <div className="md:col-span-3">
+                    <label className="block text-[11px] font-bold text-slate-700 mb-2">3. INTENDED USE</label>
+                    <div className="space-y-2">
+                      {(['Semen Analysis', 'IUI', 'IVF / ICSI', 'Cryopreservation'] as IntendedUse[]).map((use) => {
+                        const isHsaDonorDisabled = spermSource === 'Donor' && use === 'Semen Analysis';
+                        return (
+                          <label
+                            key={use}
+                            className={`flex items-center gap-2 font-medium ${
+                              isHsaDonorDisabled
+                                ? 'cursor-not-allowed opacity-40 text-slate-400'
+                                : 'cursor-pointer text-slate-700'
+                            }`}
+                            title={isHsaDonorDisabled ? 'Semen Analysis (HSA) is only performed for Husband samples' : ''}
+                          >
+                            <input
+                              type="radio"
+                              name="intendedUse"
+                              value={use}
+                              checked={intendedUse === use}
+                              disabled={isHsaDonorDisabled}
+                              onChange={() => {
+                                setIntendedUse(use);
+                              }}
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300"
+                            />
+                            <span>{use}</span>
+                            {isHsaDonorDisabled && (
+                              <span className="text-[9px] text-slate-400 font-bold">(Husband Only)</span>
+                            )}
+                          </label>
+                        );
+                      })}
+                    </div>
+
+                    {/* Sub-Selection for Semen Analysis: HSA vs SQA */}
+                    {intendedUse === 'Semen Analysis' && (
+                      <div className="mt-3 p-2 bg-blue-50/80 border border-blue-200 rounded-lg space-y-1.5 animate-fadeIn">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-blue-900">
+                            Analysis Method (SMART)
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold text-slate-800">
+                            <input
+                              type="radio"
+                              name="semenAnalysisType"
+                              value="HSA"
+                              checked={semenAnalysisType === 'HSA'}
+                              onChange={() => {
+                                setSemenAnalysisType('HSA');
+                              }}
+                              className="h-3.5 w-3.5 text-blue-600"
+                            />
+                            <span>HSA</span>
+                          </label>
+                          <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold text-slate-800">
+                            <input
+                              type="radio"
+                              name="semenAnalysisType"
+                              value="SQA"
+                              checked={semenAnalysisType === 'SQA'}
+                              onChange={() => {
+                                setSemenAnalysisType('SQA');
+                              }}
+                              className="h-3.5 w-3.5 text-blue-600"
+                            />
+                            <span>SQA</span>
+                          </label>
+                        </div>
+                        <p className="text-[9px] text-blue-700 leading-tight">
+                          {semenAnalysisType === 'HSA'
+                            ? '• Diagnostic WHO 6th ed (1-page report, no washing).'
+                            : '• Includes Post-Wash & 24-hr survival assessment.'}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Sub-Selection for IUI: IUI Indication */}
+                    {intendedUse === 'IUI' && (
+                      <div className="mt-3 p-2 bg-indigo-50/80 border border-indigo-200 rounded-lg space-y-1.5 animate-fadeIn">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-indigo-900">
+                          IUI Indication (Excel Flow)
+                        </label>
+                        <select
+                          value={iuiIndication}
+                          onChange={(e) => {
+                            const val = e.target.value as IuiIndication;
+                            setIuiIndication(val);
+                            if (val.includes('DONOR')) {
+                              setSpermSource('Donor');
+                              setSampleState('Frozen');
+                            } else if (val.includes('THAW')) {
+                              setSpermSource('Husband / Partner');
+                              setSampleState('Frozen');
+                            } else if (val.includes('HUSBAND SINGLE') || val.includes('HUSBAND DOUBLE')) {
+                              setSpermSource('Husband / Partner');
+                              setSampleState('Fresh');
+                            }
+                          }}
+                          className="h-7 w-full rounded border border-indigo-300 bg-white px-1.5 text-[10px] font-bold text-indigo-900"
+                        >
+                          <option value="HUSBAND SINGLE IUI">HUSBAND SINGLE IUI (Fresh • 1 Page)</option>
+                          <option value="HUSBAND DOUBLE IUI">HUSBAND DOUBLE IUI (Fresh • 2 Pages)</option>
+                          <option value="HUSBAND THAW SINGLE">HUSBAND THAW SINGLE (Frozen • 1 Page)</option>
+                          <option value="HUSBAND THAW DOUBLE">HUSBAND THAW DOUBLE (Frozen • 2 Pages)</option>
+                          <option value="DONOR SINGLE IUI">DONOR SINGLE IUI (Frozen Quarantined • 1 Page)</option>
+                          <option value="DONOR DOUBLE IUI">DONOR DOUBLE IUI (Frozen Quarantined • 2 Pages)</option>
+                          <option value="TIC / FM">TIC / FM (Timed Intercourse / Follicular Study)</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Collection Parameters Side Column */}
+                  <div className="md:col-span-3 space-y-2.5">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Collection Date / Time</label>
+                      <input
+                        type="datetime-local"
+                        value={collectionDateTime}
+                        onChange={(e) => setCollectionDateTime(e.target.value)}
+                        className="h-7 w-full rounded border border-slate-300 px-2 text-[11px] outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Collection Method</label>
+                      <select
+                        value={collectionMethod}
+                        onChange={(e) => setCollectionMethod(e.target.value)}
+                        className="h-7 w-full rounded border border-slate-300 px-2 text-[11px] outline-none focus:border-blue-500"
+                      >
+                        <option>Masturbation</option>
+                        <option>PESA</option>
+                        <option>TESA / TESE</option>
+                        <option>Micro-TESE</option>
+                        <option>Surgical Retrieval</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Abstinence (Days)</label>
+                      <input
+                        type="number"
+                        value={abstinenceDays}
+                        onChange={(e) => setAbstinenceDays(Number(e.target.value))}
+                        className="h-7 w-full rounded border border-slate-300 px-2 text-[11px] outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Collected By</label>
+                      <select
+                        value={collectedBy}
+                        onChange={(e) => setCollectedBy(e.target.value)}
+                        className="h-7 w-full rounded border border-slate-300 px-2 text-[11px] outline-none focus:border-blue-500"
+                      >
+                        <option>EMB-01 - Dr. Satish</option>
+                        <option>EMB-02 - Dr. Amit Verma</option>
+                        <option>EMB-03 - Dr. Neha Kapoor</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Received By</label>
+                      <select
+                        value={receivedBy}
+                        onChange={(e) => setReceivedBy(e.target.value)}
+                        className="h-7 w-full rounded border border-slate-300 px-2 text-[11px] outline-none focus:border-blue-500"
+                      >
+                        <option>EMB-01 - Dr. Satish</option>
+                        <option>EMB-02 - Dr. Amit Verma</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Notes</label>
+                      <input
+                        type="text"
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        placeholder="Enter notes if any..."
+                        className="h-7 w-full rounded border border-slate-300 px-2 text-[11px] outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Middle Section: Sample ID, QR Code, RFID Barcode & Status */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center border-b border-slate-200 pb-4">
+                  <div className="md:col-span-4">
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Original Sample ID</label>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        value={sampleId}
+                        onChange={(e) => setSampleId(e.target.value)}
+                        className="h-8 w-full rounded border border-slate-300 px-2 font-mono font-bold text-xs text-slate-800"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleGenerateSampleId}
+                        className="h-8 rounded bg-[#0b4a8b] hover:bg-blue-800 px-2.5 text-[10px] font-bold text-white whitespace-nowrap"
+                      >
+                        Generate ID
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* QR Code */}
+                  <div className="md:col-span-3 flex flex-col items-center justify-center text-center">
+                    <span className="text-[10px] font-bold text-slate-600 mb-1">QR Code</span>
+                    <div className="h-16 w-16 bg-slate-900 p-1.5 rounded flex items-center justify-center shadow-xs">
+                      <svg viewBox="0 0 24 24" className="h-full w-full fill-white">
+                        <path d="M2 2h8v8H2V2zm2 2v4h4V4H4zm-2 10h8v8H2v-8zm2 2v4h4v-4H4zm10-14h8v8h-8V2zm2 2v4h4V4h-4zm-1 9h2v2h-2v-2zm3 0h2v2h-2v-2zm-3 3h2v2h-2v-2zm3 3h2v2h-2v-2zm2-3h2v2h-2v-2zm-2-3h2v2h-2v-2zm3-3h2v2h-2v-2zm-6 9h2v2h-2v-2z" />
+                      </svg>
+                    </div>
+                    <span className="text-[9px] text-slate-500 mt-1 font-medium">Scan to Validate</span>
+                  </div>
+
+                  {/* RFID / Barcode */}
+                  <div className="md:col-span-5">
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">RFID / Barcode</label>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        value={rfidBarcode}
+                        onChange={(e) => setRfidBarcode(e.target.value)}
+                        placeholder="Scan / Enter Barcode or RFID"
+                        className="h-8 w-full rounded border border-slate-300 px-2 text-xs font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleBarcodeScan}
+                        className="h-8 rounded bg-[#0b4a8b] hover:bg-blue-800 px-4 text-xs font-bold text-white whitespace-nowrap"
+                      >
+                        Scan
+                      </button>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="text-[10px] text-slate-500 font-bold uppercase">Status</span>
+                      {isValidated ? (
+                        <span className="rounded bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                          VALIDATED ✓
+                        </span>
+                      ) : (
+                        <span className="rounded bg-rose-100 border border-rose-300 px-2.5 py-0.5 text-[10px] font-bold text-rose-700">
+                          NOT YET VALIDATED
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* SOURCE DETAILS */}
+                <div>
+                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-2">SOURCE DETAILS</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-7 gap-3 items-end">
+                    <div>
+                      <label className="block text-[10px] text-slate-500 mb-0.5">
+                        {spermSource === 'Donor' ? 'Donor ID' : 'Husband / Partner ID'}
+                      </label>
+                      <input
+                        type="text"
+                        value={partnerId}
+                        onChange={(e) => setPartnerId(e.target.value)}
+                        className="h-7 w-full rounded border border-slate-300 px-2 font-mono font-bold text-[11px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-500 mb-0.5">DOB / Age</label>
+                      <input
+                        type="text"
+                        value={partnerDobAge}
+                        onChange={(e) => setPartnerDobAge(e.target.value)}
+                        className="h-7 w-full rounded border border-slate-300 px-2 font-medium text-[11px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-500 mb-0.5">Phone</label>
+                      <input
+                        type="text"
+                        value={partnerPhone}
+                        onChange={(e) => setPartnerPhone(e.target.value)}
+                        className="h-7 w-full rounded border border-slate-300 px-2 font-medium text-[11px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-500 mb-0.5">
+                        {sampleState === 'Fresh'
+                          ? 'Frozen Straw ID'
+                          : spermSource === 'Donor'
+                          ? 'Donor Frozen Straw (Drop Down)'
+                          : 'Husband Frozen Straw (Drop Down)'}
+                      </label>
+                      {sampleState === 'Fresh' ? (
+                        <input
+                          type="text"
+                          value="NA"
+                          disabled
+                          className="h-7 w-full rounded border border-slate-200 bg-slate-100 px-2 font-mono text-[11px] text-slate-400 font-bold"
+                        />
+                      ) : spermSource === 'Donor' ? (
+                        <select
+                          value={frozenStrawId}
+                          onChange={(e) => {
+                            setFrozenStrawId(e.target.value);
+                          }}
+                          className="h-7 w-full rounded border border-blue-400 bg-blue-50/50 px-2 font-mono text-[11px] font-bold text-blue-800"
+                        >
+                          <option value="DON-2026/001">DON-2026/001 (CryoLife / B+)</option>
+                          <option value="DON-2026/002">DON-2026/002 (LifeCell / O+)</option>
+                          <option value="DON-2026/003">DON-2026/003 (Mumbai Bank / A+)</option>
+                        </select>
+                      ) : (
+                        <select
+                          value={frozenStrawId}
+                          onChange={(e) => {
+                            setFrozenStrawId(e.target.value);
+                          }}
+                          className="h-7 w-full rounded border border-blue-400 bg-blue-50/50 px-2 font-mono text-[11px] font-bold text-blue-800"
+                        >
+                          <option value="FROZ-26-000554">FROZ-26-000554 (Tank 1 / Can 2)</option>
+                          <option value="FROZ-26-000412">FROZ-26-000412 (Tank 2 / Can 1)</option>
+                        </select>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-500 mb-0.5">Storage Location</label>
+                      <select
+                        value={storageLocation}
+                        onChange={(e) => setStorageLocation(e.target.value)}
+                        disabled={sampleState === 'Fresh'}
+                        className={`h-7 w-full rounded border px-2 text-[11px] ${
+                          sampleState === 'Fresh'
+                            ? 'bg-slate-100 text-slate-400 border-slate-200'
+                            : 'border-slate-300'
+                        }`}
+                      >
+                        <option>Tank 1 - Canister 2</option>
+                        <option>Tank 2 - Canister 1</option>
+                        <option>Tank 3 - Canister 4</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-500 mb-0.5">Donor Type</label>
+                      <select
+                        value={donorType}
+                        onChange={(e) => setDonorType(e.target.value)}
+                        disabled={spermSource !== 'Donor'}
+                        className={`h-7 w-full rounded border px-2 text-[11px] ${
+                          spermSource !== 'Donor' ? 'bg-slate-100 text-slate-400 border-slate-200' : 'border-slate-300'
+                        }`}
+                      >
+                        <option>Select</option>
+                        <option>Anonymous</option>
+                        <option>Open Identity</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-1.5 pb-1">
+                      <input
+                        type="checkbox"
+                        id="consentCheck"
+                        checked={consentVerified}
+                        onChange={(e) => setConsentVerified(e.target.checked)}
+                        className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300"
+                      />
+                      <label htmlFor="consentCheck" className="text-[11px] font-bold text-slate-700 cursor-pointer">
+                        Consent Verified
+                      </label>
+                    </div>
                   </div>
                 </div>
               </div>
-
-              {/* Collection Parameters */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Collection Date / Time</label>
-                  <input
-                    type="datetime-local"
-                    value={collectionDateTime}
-                    onChange={(e) => setCollectionDateTime(e.target.value)}
-                    className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-medium outline-none focus:border-pink-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Collection Method</label>
-                  <select
-                    value={collectionMethod}
-                    onChange={(e) => setCollectionMethod(e.target.value)}
-                    className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-medium outline-none focus:border-pink-500"
-                  >
-                    <option>Masturbation</option>
-                    <option>PESA</option>
-                    <option>TESA / TESE</option>
-                    <option>Micro-TESE</option>
-                    <option>Surgical Retrieval</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Abstinence (Days)</label>
-                  <input
-                    type="number"
-                    value={abstinenceDays}
-                    onChange={(e) => setAbstinenceDays(Number(e.target.value))}
-                    className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-medium outline-none focus:border-pink-500"
-                  />
-                </div>
-              </div>
-
-              {/* Sample ID & RFID / Barcode Scanning */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-12 items-end pt-1">
-                <div className="sm:col-span-4">
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Original Sample ID</label>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="text"
-                      value={sampleId}
-                      onChange={(e) => setSampleId(e.target.value)}
-                      className="h-10 w-full rounded-xl border border-slate-200 px-3 font-mono text-xs font-bold text-slate-800"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleGenerateSampleId}
-                      className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2.5 text-[10px] font-bold uppercase text-slate-700 hover:bg-slate-100"
-                    >
-                      Gen
-                    </button>
-                  </div>
-                </div>
-
-                <div className="sm:col-span-5">
-                  <label className="block text-xs font-medium text-slate-600 mb-1">RFID / Barcode</label>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="text"
-                      value={rfidBarcode}
-                      onChange={(e) => setRfidBarcode(e.target.value)}
-                      placeholder="Scan or enter barcode"
-                      className="h-10 w-full rounded-xl border border-slate-200 px-3 font-mono text-xs font-semibold text-slate-800"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => showToast(`Scanned Barcode: ${rfidBarcode} verified successfully`)}
-                      className="rounded-xl bg-[#181d38] hover:bg-[#23294c] px-4 py-2.5 text-xs font-bold uppercase text-white shadow-xs"
-                    >
-                      Scan
-                    </button>
-                  </div>
-                </div>
-
-                <div className="sm:col-span-3">
-                  <div className="flex flex-col items-center justify-center rounded-xl bg-emerald-50 border border-emerald-200/80 p-2 text-center">
-                    <span className="text-[10px] uppercase font-bold text-emerald-600 tracking-wider">Witness Status</span>
-                    <span className="text-xs font-black text-emerald-700 mt-0.5">VALIDATED</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* If Frozen, show storage coordinates */}
-              {sampleState === 'Frozen' && (
-                <div className="rounded-xl border border-amber-200/80 bg-amber-50/50 p-3 space-y-2 text-xs">
-                  <span className="font-bold text-amber-900 uppercase text-[10px]">Frozen Storage Coordinates</span>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
-                    <div>
-                      <span className="block text-[10px] text-slate-500">Straw / Vial ID</span>
-                      <strong className="font-mono text-slate-800">{strawVialId}</strong>
-                    </div>
-                    <div>
-                      <span className="block text-[10px] text-slate-500">Tank / Canister</span>
-                      <strong className="text-slate-800">{tankCanister}</strong>
-                    </div>
-                    <div>
-                      <span className="block text-[10px] text-slate-500">Storage Location</span>
-                      <strong className="text-slate-800">{storageLocation}</strong>
-                    </div>
-                    <div>
-                      <span className="block text-[10px] text-slate-500">Stored On</span>
-                      <strong className="text-slate-800">{storedOn}</strong>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* 2. VALIDATION SUMMARY (COL 4) */}
-            <div className="lg:col-span-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 border-b border-slate-100 pb-2.5">
-                2. Validation Summary
-              </h3>
-
-              <div className="space-y-2 text-xs">
-                {Object.entries(checks).map(([k, v]) => {
-                  const label = k
-                    .replace(/([A-Z])/g, ' $1')
-                    .replace(/^./, (str) => str.toUpperCase());
-                  return (
-                    <div key={k} className="flex items-center justify-between border-b border-slate-100/70 pb-1.5">
-                      <span className="text-slate-600">{label}</span>
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 font-bold text-xs">
-                        ✓
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Status Box */}
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3.5 text-center space-y-1">
-                <div className="flex items-center justify-center gap-1.5 text-emerald-700 font-bold text-xs">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                  ALL CHECKS PASSED
+            <div className="lg:col-span-4 rounded-xl border border-slate-300/80 bg-white shadow-xs overflow-hidden flex flex-col justify-between">
+              <div>
+                <div className="bg-[#0b4a8b] px-4 py-2 text-white flex items-center justify-between">
+                  <h2 className="text-xs font-bold uppercase tracking-wider">
+                    2. VALIDATION SUMMARY
+                  </h2>
                 </div>
-                <p className="text-[11px] text-emerald-800">
-                  Sample is Validated. You can proceed to next step.
-                </p>
+
+                <div className="p-4 space-y-2 text-xs">
+                  {[
+                    { key: 'patientCoupleMatch', label: 'Patient / Couple Match' },
+                    { key: 'cycleVisitMatch', label: 'Cycle / Visit Match' },
+                    { key: 'sourceValid', label: 'Source Valid' },
+                    { key: 'sampleStateValid', label: 'Sample State Valid' },
+                    { key: 'intendedUseValid', label: 'Intended Use Valid' },
+                    { key: 'sampleAvailability', label: 'Sample Availability' },
+                    { key: 'processSequenceValid', label: 'Process Sequence Valid' },
+                    { key: 'operatorAuthorized', label: 'Operator Authorized' },
+                  ].map(({ key, label }) => (
+                    <div key={key} className="flex items-center justify-between border-b border-slate-100 pb-1">
+                      <span className="text-slate-600 text-[11px]">{label}</span>
+                      <span className="text-emerald-600 font-bold text-xs">✓</span>
+                    </div>
+                  ))}
+
+                  {/* Status Banner */}
+                  <div className="mt-4 rounded-xl border border-emerald-300 bg-emerald-50 p-3 flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-xs">
+                      <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                        <polyline points="9 12 11 14 15 10" />
+                      </svg>
+                    </div>
+                    <div>
+                      <div className="font-black text-emerald-900 text-xs tracking-wide">ALL CHECKS PASSED</div>
+                      <div className="text-[11px] text-emerald-800">Sample is Valid.</div>
+                      <div className="text-[10px] text-emerald-700 font-medium">You can proceed to next step.</div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2 pt-1">
+              <div className="p-4 pt-0 flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => showToast('Sample accepted and locked into process pipeline')}
-                  className="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 py-2.5 text-xs font-bold uppercase text-white shadow-xs"
+                  onClick={() => {
+                    setCurrentView('workflow');
+                    showToast(`Sample validated. Opening ${intendedUse} workflow...`);
+                  }}
+                  className="flex-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 py-2.5 text-xs font-bold text-white shadow-xs transition"
                 >
                   Accept &amp; Continue →
                 </button>
                 <button
                   type="button"
-                  onClick={() => showToast('Sample placed on Clinical Hold')}
-                  className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-bold uppercase text-rose-600 hover:bg-rose-100"
+                  onClick={() => showToast('Sample placed on Clinical Hold / Rejected')}
+                  className="rounded-lg bg-rose-600 hover:bg-rose-700 px-4 py-2.5 text-xs font-bold text-white shadow-xs transition"
                 >
-                  Hold / Reject
+                  Hold / Reject ✕
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      ) : (
+        /* DOWNSTREAM WORKFLOW VIEW (Appears on clicking Accept & Continue or selecting flow) */
+        <div className="space-y-4">
+          {/* Navigation Bar to switch back to registration */}
+          <div className="flex items-center justify-between bg-white border border-slate-200 px-4 py-2.5 rounded-xl shadow-xs">
+            <button
+              type="button"
+              onClick={() => setCurrentView('registration')}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 transition"
+            >
+              ← Back to Registration
+            </button>
 
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 font-medium">Current Flow:</span>
+              <span className="rounded-md bg-blue-50 border border-blue-200 px-2.5 py-1 text-xs font-bold text-blue-700">
+                {spermSource} ➔ {sampleState} ➔ {intendedUse}
+              </span>
+            </div>
           </div>
 
-          {/* ROW 2: PROCESS FLOW INTERACTIVE STEPPER */}
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 border-b border-slate-100 pb-2">
-              3. Process Flow ({workflowMode} Workflow)
-            </h3>
+          {/* DYNAMIC SCREEN ROUTING BASED ON INTENDED USE & SPERM SOURCE */}
+          {intendedUse === 'Cryopreservation' ? (
+            /* CRYOPRESERVATION FLOW: Semen Self OR Donor Semen */
+            spermSource === 'Donor' ? (
+              <SemenDonorForm />
+            ) : (
+              <SemenSelfForm />
+            )
+          ) : (
+            /* STANDARD ANDROLOGY FLOW: BOX 3, BOX 4, BOX 5 / BOX 6 / BOX 7 */
+            <>
+              {/* ROW 2: BOX 3 (PROCESS FLOW SPERM / IUI / IVF / SEMEN ANALYSIS WORKFLOW) */}
+              <div className="rounded-xl border border-slate-300/80 bg-white shadow-xs overflow-hidden">
+                <div className="bg-[#0b4a8b] px-4 py-2 text-white flex items-center justify-between">
+                  <h2 className="text-xs font-bold uppercase tracking-wider">
+                    3. PROCESS FLOW ({intendedUse.toUpperCase()} {intendedUse === 'Semen Analysis' ? `• ${semenAnalysisType}` : intendedUse === 'IUI' ? `• ${iuiIndication}` : ''})
+                  </h2>
+                  <span className="text-[11px] bg-white/20 px-2 py-0.5 rounded font-medium">
+                    {spermSource} • {sampleState}
+                  </span>
+                </div>
 
-            {/* Visual Stepper */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-6 text-center text-xs">
-              {[
-                { title: 'Sample Collection', time: '09:42 AM', done: true },
-                { title: 'Sample Validation', time: '09:55 AM', done: true },
-                { title: sampleState === 'Frozen' ? 'Thaw (Frozen)' : 'Thaw (Skipped)', time: sampleState === 'Frozen' ? '10:05 AM' : 'N/A', done: true },
-                { title: 'Sperm Preparation', time: '10:18 AM', done: true },
-                { title: workflowMode === 'IUI' ? 'Syringe Witness' : 'Assigned to Dish', time: '10:25 AM', done: true },
-                { title: 'Complete', time: '10:30 AM', done: true },
-              ].map((step, idx) => (
-                <div key={idx} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-1">
-                  <div className="flex items-center justify-center">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#181d38] text-white font-bold text-[10px]">
-                      {idx + 1}
+                <div className="p-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-8 items-center text-center">
+                    {(intendedUse === 'Semen Analysis' ? [
+                      { label: 'Sample Collection', icon: '🧪', status: 'completed' },
+                      { label: 'Sample Validation', icon: '🛡️', status: 'active' },
+                      { label: 'Liquefaction (30m)', icon: '⏱️', status: 'ready' },
+                      { label: 'Macroscopic Exam', icon: '🔍', status: 'ready' },
+                      { label: 'Microscopic Exam', icon: '🔬', status: 'ready' },
+                      { label: semenAnalysisType === 'SQA' ? 'Wash Prep (SQA)' : 'Wash (N/A HSA)', icon: '🧬', status: semenAnalysisType === 'SQA' ? 'ready' : 'skipped' },
+                      { label: semenAnalysisType === 'SQA' ? '24-Hr Survival' : 'Survival (N/A HSA)', icon: '📊', status: semenAnalysisType === 'SQA' ? 'ready' : 'skipped' },
+                      { label: 'Report Sign-off', icon: '✅', status: 'ready' },
+                    ] : intendedUse === 'IVF / ICSI' ? [
+                      { label: 'Sample Received', icon: '🧪', status: 'completed' },
+                      { label: 'Sample Validation', icon: '🛡️', status: 'active' },
+                      { label: sampleState === 'Frozen' ? 'Thaw Straw' : 'Density Gradient', icon: '🧬', status: 'ready' },
+                      { label: 'Post-Prep Eval', icon: '🔬', status: 'ready' },
+                      { label: 'Fertilization Dish', icon: '🧫', status: 'ready' },
+                      { label: 'Witness Cohort Match', icon: '🔒', status: 'ready' },
+                      { label: 'Insemination / ICSI', icon: '💉', status: 'ready' },
+                      { label: 'Incubator Culture', icon: '✅', status: 'ready' },
+                    ] : [
+                      { label: 'Sample Collection', icon: '🧪', status: 'completed' },
+                      { label: 'Sample Validation', icon: '🛡️', status: 'active' },
+                      { label: sampleState === 'Frozen' ? 'Thaw Straw' : 'Sperm Wash', icon: sampleState === 'Frozen' ? '❄️' : '🧬', status: 'ready' },
+                      { label: sampleState === 'Frozen' ? 'Post-Thaw Eval' : 'Post-Wash Eval', icon: '🧪', status: 'ready' },
+                      { label: 'Final Syringe (IUI)', icon: '💉', status: 'ready' },
+                      { label: 'Double Witnessing', icon: '👥', status: 'ready' },
+                      { label: 'Pre-IUI Authorization', icon: '🔒', status: 'ready' },
+                      { label: 'Insemination Done', icon: '✅', status: 'ready' },
+                    ]).map((step, idx) => {
+                      const isCurrent = step.status === 'active';
+                      return (
+                        <div key={idx} className="flex flex-col items-center">
+                          <div
+                            className={`h-11 w-11 rounded-full flex items-center justify-center text-base border-2 shadow-xs transition ${
+                              isCurrent
+                                ? 'border-blue-600 bg-blue-50 text-blue-800 scale-105 ring-2 ring-blue-400/40'
+                                : step.status === 'completed'
+                                ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                                : step.status === 'skipped'
+                                ? 'border-slate-200 bg-slate-100 text-slate-300 line-through'
+                                : 'border-slate-200 bg-slate-50 text-slate-400'
+                            }`}
+                          >
+                            {step.icon}
+                          </div>
+                          <span className="text-[10px] font-bold text-slate-700 mt-1.5 leading-tight">{step.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-center">
+                    <span className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1 rounded-full">
+                      You are here: <span className="underline">Sample Validation</span>
                     </span>
                   </div>
-                  <div className="font-bold text-slate-800 text-[11px] mt-1">{step.title}</div>
-                  <div className="text-[10px] text-slate-500">{step.time}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* ROW 3: SPERM PREPARATION + LINK TO DISH + AUTHORIZATION */}
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-            
-            {/* 4. SPERM PREPARATION (COL 5) */}
-            <div className="lg:col-span-5 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 border-b border-slate-100 pb-2">
-                4. Sperm Preparation &amp; Assignment
-              </h3>
-
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div>
-                  <label className="block text-slate-600 font-medium mb-1">Preparation ID</label>
-                  <input
-                    type="text"
-                    value={prepId}
-                    onChange={(e) => setPrepId(e.target.value)}
-                    className="h-9 w-full rounded-xl border border-slate-200 px-3 font-mono font-bold text-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-600 font-medium mb-1">Preparation Method</label>
-                  <select
-                    value={prepMethod}
-                    onChange={(e) => setPrepMethod(e.target.value)}
-                    className="h-9 w-full rounded-xl border border-slate-200 px-3 font-medium text-slate-800"
-                  >
-                    <option>Density Gradient</option>
-                    <option>Swim Up</option>
-                    <option>Simple Wash</option>
-                    <option>MACS Separation</option>
-                  </select>
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                <div>
-                  <label className="block text-[11px] text-slate-600 mb-1">Count (M/ml)</label>
-                  <input
-                    type="number"
-                    value={concentration}
-                    onChange={(e) => setConcentration(Number(e.target.value))}
-                    className="h-9 w-full rounded-xl border border-slate-200 px-2 font-semibold text-slate-800"
-                  />
+              {/* ROW 3: BOX 4 (SAMPLE INFORMATION & TRACEABILITY) */}
+              <div className="rounded-xl border border-slate-300/80 bg-white shadow-xs overflow-hidden">
+                <div className="bg-[#0b4a8b] px-4 py-2 text-white">
+                  <h2 className="text-xs font-bold uppercase tracking-wider">
+                    4. SAMPLE INFORMATION &amp; TRACEABILITY
+                  </h2>
                 </div>
-                <div>
-                  <label className="block text-[11px] text-slate-600 mb-1">Motility (%)</label>
-                  <input
-                    type="number"
-                    value={motility}
-                    onChange={(e) => setMotility(Number(e.target.value))}
-                    className="h-9 w-full rounded-xl border border-slate-200 px-2 font-semibold text-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] text-slate-600 mb-1">Prog. Motility (%)</label>
-                  <input
-                    type="number"
-                    value={progMotility}
-                    onChange={(e) => setProgMotility(Number(e.target.value))}
-                    className="h-9 w-full rounded-xl border border-slate-200 px-2 font-semibold text-slate-800"
-                  />
-                </div>
-              </div>
 
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                <div>
-                  <label className="block text-[11px] text-slate-600 mb-1">Pre Vol (ml)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={volume}
-                    onChange={(e) => setVolume(Number(e.target.value))}
-                    className="h-9 w-full rounded-xl border border-slate-200 px-2 font-semibold text-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] text-slate-600 mb-1">Final Vol (ml)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={finalVolume}
-                    onChange={(e) => setFinalVolume(Number(e.target.value))}
-                    className="h-9 w-full rounded-xl border border-slate-200 px-2 font-semibold text-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] text-slate-600 mb-1">Vitality (%)</label>
-                  <input
-                    type="number"
-                    value={vitality}
-                    onChange={(e) => setVitality(Number(e.target.value))}
-                    className="h-9 w-full rounded-xl border border-slate-200 px-2 font-semibold text-slate-800"
-                  />
-                </div>
-              </div>
+                <div className="p-4 space-y-4">
+                  {/* Sample Lineage Flow */}
+                  <div className="flex flex-wrap items-center justify-center gap-4 bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs font-mono">
+                    <div className="text-center">
+                      <span className="block text-[10px] uppercase font-sans font-bold text-slate-500">Original Sample ID</span>
+                      <strong className="text-blue-700 text-sm">{sampleId}</strong>
+                    </div>
+                    <span className="text-slate-400 font-bold text-lg font-sans">➔</span>
+                    <div className="text-center">
+                      <span className="block text-[10px] uppercase font-sans font-bold text-slate-500">
+                        {intendedUse === 'Semen Analysis' ? 'Analysis Method' : 'Prepared Sample ID'}
+                      </span>
+                      <strong className="text-slate-800 text-sm">
+                        {intendedUse === 'Semen Analysis'
+                          ? (semenAnalysisType === 'HSA' ? 'HSA (Diagnostic Baseline)' : 'SQA (Qualitative + Survival)')
+                          : prepSampleId}
+                      </strong>
+                    </div>
+                    <span className="text-slate-400 font-bold text-lg font-sans">➔</span>
+                    <div className="text-center">
+                      <span className="block text-[10px] uppercase font-sans font-bold text-slate-500">
+                        {intendedUse === 'Semen Analysis'
+                          ? 'Summary Report'
+                          : intendedUse === 'IVF / ICSI'
+                          ? 'Fertilization Dish ID'
+                          : 'Final Syringe ID'}
+                      </span>
+                      <strong className="text-emerald-700 text-sm">
+                        {intendedUse === 'Semen Analysis'
+                          ? (semenAnalysisType === 'HSA' ? 'HSASummary.rdlc (1 Page)' : 'SQASummary.rdlc (1 Page)')
+                          : intendedUse === 'IVF / ICSI'
+                          ? 'ICSI-DISH-00158'
+                          : finalSyringeId}
+                      </strong>
+                    </div>
+                  </div>
 
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Preparation Notes</label>
-                <input
-                  type="text"
-                  value={prepNotes}
-                  onChange={(e) => setPrepNotes(e.target.value)}
-                  className="h-9 w-full rounded-xl border border-slate-200 px-3 text-xs text-slate-800"
-                />
-              </div>
-            </div>
-
-            {/* 5. LINK TO IVF / ICSI / IUI (COL 4) */}
-            <div className="lg:col-span-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 border-b border-slate-100 pb-2">
-                5. Link to {workflowMode === 'IUI' ? 'IUI Syringe' : 'IVF / ICSI Dish'}
-              </h3>
-
-              <div className="space-y-3 text-xs">
-                <div>
-                  <label className="block text-slate-600 font-medium mb-1">
-                    {workflowMode === 'IUI' ? 'Insemination Syringe ID' : 'Oocyte / Dish ID'}
-                  </label>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="text"
-                      value={dishId}
-                      onChange={(e) => setDishId(e.target.value)}
-                      className="h-9 w-full rounded-xl border border-slate-200 px-3 font-mono font-bold text-slate-800"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => showToast(`Dish scanned and linked: ${dishId}`)}
-                      className="rounded-xl bg-[#181d38] px-3.5 py-2 text-xs font-bold text-white uppercase"
-                    >
-                      Scan
-                    </button>
+                  {/* Traceability Table */}
+                  <div className="overflow-x-auto rounded-lg border border-slate-200">
+                    <table className="min-w-full divide-y divide-slate-200 text-xs">
+                      <thead className="bg-slate-100 font-bold text-slate-700">
+                        <tr>
+                          <th className="px-3 py-2 text-left">Step</th>
+                          <th className="px-3 py-2 text-left">ID / Description</th>
+                          <th className="px-3 py-2 text-left">Date / Time</th>
+                          <th className="px-3 py-2 text-left">Operator</th>
+                          <th className="px-3 py-2 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        {(intendedUse === 'Semen Analysis' ? [
+                          { step: 'Sample Received', id: sampleId, time: '18-Aug-2026 09:42', operator: 'EMB-01', status: '✓' },
+                          { step: 'Sample Validated', id: sampleId, time: '18-Aug-2026 09:55', operator: 'EMB-01', status: '✓' },
+                          { step: 'Liquefaction Evaluation', id: `${liquefaction} min`, time: '18-Aug-2026 10:12', operator: 'EMB-01', status: '✓' },
+                          { step: 'Macroscopic Exam (Vol / pH / Viscosity)', id: `${volume} ml / pH ${ph}`, time: '18-Aug-2026 10:15', operator: 'EMB-02', status: '✓' },
+                          { step: 'Microscopic Exam (Count / Motility / Morph)', id: `${concentration} M/ml / ${progMotility}% PR`, time: '18-Aug-2026 10:20', operator: 'EMB-02', status: '✓' },
+                          ...(semenAnalysisType === 'SQA' ? [
+                            { step: 'Sample Wash Preparation', id: prepMethod, time: '18-Aug-2026 10:35', operator: 'EMB-02', status: '✓' },
+                            { step: '24-Hr Survival Motility Readout', id: `${survival24Hr}% Motile`, time: '19-Aug-2026 10:35', operator: 'EMB-02', status: '✓' },
+                          ] : []),
+                          { step: 'Diagnostic Sign-off', id: analysisResult, time: '18-Aug-2026 10:40', operator: 'DR-01', status: '✓' },
+                        ] : intendedUse === 'IVF / ICSI' ? [
+                          { step: 'Sample Received', id: sampleId, time: '18-Aug-2026 09:42', operator: 'EMB-01', status: '✓' },
+                          { step: 'Sample Validated', id: sampleId, time: '18-Aug-2026 09:55', operator: 'EMB-01', status: '✓' },
+                          { step: sampleState === 'Frozen' ? 'Straw Thaw Event' : 'Density Gradient Wash', id: sampleState === 'Frozen' ? frozenStrawId : prepSampleId, time: '18-Aug-2026 10:15', operator: 'EMB-02', status: '✓' },
+                          { step: 'Post-Prep Assessment', id: `${postCount} M/ml (${postProgMotility}% PR)`, time: '18-Aug-2026 10:25', operator: 'EMB-02', status: '✓' },
+                          { step: 'Dish Loading & Cohort Match', id: 'ICSI-DISH-00158', time: '18-Aug-2026 10:45', operator: 'DR-01', status: '✓' },
+                          { step: 'Insemination / ICSI Done', id: 'ICSI-DISH-00158', time: '18-Aug-2026 11:00', operator: 'DR-01', status: '✓' },
+                        ] : [
+                          { step: 'Sample Received', id: sampleId, time: '18-Aug-2026 09:42', operator: 'EMB-01', status: '✓' },
+                          { step: 'Sample Validated', id: sampleId, time: '18-Aug-2026 09:55', operator: 'EMB-01', status: '✓' },
+                          { step: 'Thaw Event', id: sampleState === 'Frozen' ? frozenStrawId : 'N/A (Fresh)', time: sampleState === 'Frozen' ? '18-Aug-2026 10:05' : 'N/A', operator: sampleState === 'Frozen' ? 'EMB-02' : 'N/A', status: '✓' },
+                          { step: 'Preparation Completed', id: prepSampleId, time: '18-Aug-2026 10:18', operator: 'EMB-02', status: '✓' },
+                          { step: 'Final Syringe Witnessed', id: finalSyringeId, time: '18-Aug-2026 10:25', operator: 'DR-01', status: '✓' },
+                          { step: 'Pre-IUI Authorization', id: finalSyringeId, time: '18-Aug-2026 10:30', operator: 'DR-01', status: '✓' },
+                          { step: 'Insemination Done', id: finalSyringeId, time: '18-Aug-2026 10:32', operator: 'DR-01', status: '✓' },
+                        ]).map((row, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50/70 transition">
+                            <td className="px-3 py-2 font-medium text-slate-700">{row.step}</td>
+                            <td className="px-3 py-2 font-mono font-bold text-slate-800">{row.id}</td>
+                            <td className="px-3 py-2 text-slate-600">{row.time}</td>
+                            <td className="px-3 py-2 text-slate-600">{row.operator}</td>
+                            <td className="px-3 py-2 text-center text-emerald-600 font-bold">{row.status}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-slate-600 font-medium mb-1">Procedure Type</label>
-                  <div className="flex items-center gap-4 pt-1">
-                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                      <input
-                        type="radio"
-                        name="linkProc"
-                        value="ICSI"
-                        checked={linkProcedure === 'ICSI'}
-                        onChange={() => setLinkProcedure('ICSI')}
-                        className="h-4 w-4 text-pink-600 border-slate-300"
-                      />
-                      ICSI
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                      <input
-                        type="radio"
-                        name="linkProc"
-                        value="Conventional IVF"
-                        checked={linkProcedure === 'Conventional IVF'}
-                        onChange={() => setLinkProcedure('Conventional IVF')}
-                        className="h-4 w-4 text-pink-600 border-slate-300"
-                      />
-                      Conventional IVF
-                    </label>
-                  </div>
-                </div>
-
-                {/* Link Badge */}
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 text-base">
-                    🔗
-                  </div>
+              {/* ROW 4: DYNAMIC DOWNSTREAM BOXES (BOX 5: SEMEN ANALYSIS, BOX 6: PRE-IUI AUTH / SIGN-OFF, BOX 7: AUDIT TRAIL) */}
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+                
+                {/* BOX 5: SEMEN ANALYSIS & PREPARATION */}
+                <div className={`${intendedUse === 'Semen Analysis' ? 'lg:col-span-8' : 'lg:col-span-6'} rounded-xl border border-slate-300/80 bg-white shadow-xs overflow-hidden flex flex-col justify-between`}>
                   <div>
-                    <div className="font-bold text-emerald-900 text-xs">LINK CONFIRMED</div>
-                    <div className="text-[10px] text-emerald-700">
-                      Sperm sample successfully linked to ICSI/IVF dish.
+                    <div className="bg-[#0b4a8b] px-4 py-2 text-white flex items-center justify-between">
+                      <h2 className="text-xs font-bold uppercase tracking-wider">
+                        {intendedUse === 'Semen Analysis'
+                          ? `5. SEMEN ANALYSIS (${semenAnalysisType === 'HSA' ? 'HSA - HUSBAND SEMEN ANALYSIS' : 'SQA - SEMEN QUALITATIVE ANALYSIS'})`
+                          : intendedUse === 'IUI'
+                          ? `5. IUI SEMEN PREPARATION (${sampleState === 'Frozen' ? 'THAWED SAMPLE' : 'FRESH SAMPLE'} • ${iuiIndication})`
+                          : '5. SPERM PREPARATION FOR IVF / ICSI'}
+                      </h2>
+                      {intendedUse === 'Semen Analysis' && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSemenAnalysisType('HSA')}
+                            className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase transition ${
+                              semenAnalysisType === 'HSA' ? 'bg-white text-blue-900 shadow-xs' : 'bg-white/20 text-white hover:bg-white/30'
+                            }`}
+                          >
+                            HSA (1 Page)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSemenAnalysisType('SQA')}
+                            className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase transition ${
+                              semenAnalysisType === 'SQA' ? 'bg-white text-blue-900 shadow-xs' : 'bg-white/20 text-white hover:bg-white/30'
+                            }`}
+                          >
+                            SQA (+ Survival)
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* SMART THAW NOTIFICATION BANNER (When Frozen is selected) */}
+                    {sampleState === 'Frozen' && (
+                      <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-xs flex items-center justify-between text-amber-900">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">❄️</span>
+                          <span>
+                            <strong>SMART Thaw Rule Active:</strong> Pre-freezing fields are <strong>Locked (Read-only)</strong> from Cryo Master. Post-thaw fields are <strong>Active</strong>.
+                          </span>
+                        </div>
+                        <span className="font-mono font-bold bg-amber-200/80 px-2 py-0.5 rounded text-[11px]">
+                          Straw: {frozenStrawId}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="p-4 space-y-4 text-xs">
+                      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-600 font-bold">Analysis Date / Time</span>
+                          <input
+                            type="text"
+                            defaultValue="18-Aug-2026 09:58"
+                            className="h-7 rounded border border-slate-300 px-2 text-xs font-medium"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-600 font-bold">Analysed By</span>
+                          <select className="h-7 rounded border border-slate-300 px-2 text-xs font-medium">
+                            <option>EMB-02 - Dr. Amit Verma</option>
+                            <option>EMB-01 - Dr. Satish</option>
+                            <option>EMB-03 - Dr. Neha Kapoor</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* BEFORE PROCESSING / PRE-FREEZING SECTION */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-[11px] font-bold text-slate-800 uppercase tracking-tight flex items-center gap-1.5">
+                            <span>{sampleState === 'Frozen' ? '❄️ Pre-Freezing Parameters (Locked Snapshot)' : '🧪 Before Processing Parameters (Pre-Wash)'}</span>
+                            {sampleState === 'Frozen' && (
+                              <span className="rounded bg-slate-200 text-slate-700 px-1.5 py-0.2 text-[9px] font-bold">Read-Only</span>
+                            )}
+                          </h4>
+                          <span className="text-[10px] text-slate-500 font-medium">WHO Reference Criteria</span>
+                        </div>
+
+                        {/* WHO Parameters Table */}
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                          {/* Left Column: Macroscopic */}
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-0.5">
+                              <span className="text-slate-600 font-medium">Volume</span>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={volume}
+                                  disabled={sampleState === 'Frozen'}
+                                  onChange={(e) => setVolume(e.target.value)}
+                                  className={`h-6 w-14 rounded border border-slate-300 px-1 text-right font-bold ${
+                                    sampleState === 'Frozen' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
+                                  }`}
+                                />
+                                <span className="text-slate-400 text-[11px] w-6">ml</span>
+                                <span className="text-slate-400 text-[10px]">≥ 1.4</span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-0.5">
+                              <span className="text-slate-600 font-medium">Appearance</span>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={appearance}
+                                  disabled={sampleState === 'Frozen'}
+                                  onChange={(e) => setAppearance(e.target.value)}
+                                  className={`h-6 w-24 rounded border border-slate-300 px-1 text-right text-xs ${
+                                    sampleState === 'Frozen' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
+                                  }`}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-0.5">
+                              <span className="text-slate-600 font-medium">Liquefaction</span>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={liquefaction}
+                                  disabled={sampleState === 'Frozen'}
+                                  onChange={(e) => setLiquefaction(e.target.value)}
+                                  className={`h-6 w-14 rounded border border-slate-300 px-1 text-right font-bold ${
+                                    sampleState === 'Frozen' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
+                                  }`}
+                                />
+                                <span className="text-slate-400 text-[11px] w-6">min</span>
+                                <span className="text-slate-400 text-[10px]">≤ 60</span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-0.5">
+                              <span className="text-slate-600 font-medium">pH</span>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={ph}
+                                  disabled={sampleState === 'Frozen'}
+                                  onChange={(e) => setPh(e.target.value)}
+                                  className={`h-6 w-14 rounded border border-slate-300 px-1 text-right font-bold ${
+                                    sampleState === 'Frozen' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
+                                  }`}
+                                />
+                                <span className="text-slate-400 text-[11px] w-6">-</span>
+                                <span className="text-slate-400 text-[10px]">≥ 7.2</span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-0.5">
+                              <span className="text-slate-600 font-medium">Concentration</span>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={concentration}
+                                  disabled={sampleState === 'Frozen'}
+                                  onChange={(e) => setConcentration(e.target.value)}
+                                  className={`h-6 w-14 rounded border border-slate-300 px-1 text-right font-bold ${
+                                    sampleState === 'Frozen' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
+                                  }`}
+                                />
+                                <span className="text-slate-400 text-[11px] w-14">million/ml</span>
+                                <span className="text-slate-400 text-[10px]">≥ 16</span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-0.5">
+                              <span className="text-slate-600 font-medium">Total Count</span>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={totalCount}
+                                  disabled={sampleState === 'Frozen'}
+                                  onChange={(e) => setTotalCount(e.target.value)}
+                                  className={`h-6 w-14 rounded border border-slate-300 px-1 text-right font-bold ${
+                                    sampleState === 'Frozen' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
+                                  }`}
+                                />
+                                <span className="text-slate-400 text-[11px] w-14">million</span>
+                                <span className="text-slate-400 text-[10px]">≥ 39</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Right Column: Microscopic */}
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-0.5">
+                              <span className="text-slate-600 font-medium">Motility (Progressive)</span>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={progMotility}
+                                  disabled={sampleState === 'Frozen'}
+                                  onChange={(e) => setProgMotility(e.target.value)}
+                                  className={`h-6 w-12 rounded border border-slate-300 px-1 text-right font-bold ${
+                                    sampleState === 'Frozen' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
+                                  }`}
+                                />
+                                <span className="text-slate-400 text-[11px] w-4">%</span>
+                                <span className="text-slate-400 text-[10px]">≥ 30</span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-0.5">
+                              <span className="text-slate-600 font-medium">Total Motility</span>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={totalMotility}
+                                  disabled={sampleState === 'Frozen'}
+                                  onChange={(e) => setTotalMotility(e.target.value)}
+                                  className={`h-6 w-12 rounded border border-slate-300 px-1 text-right font-bold ${
+                                    sampleState === 'Frozen' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
+                                  }`}
+                                />
+                                <span className="text-slate-400 text-[11px] w-4">%</span>
+                                <span className="text-slate-400 text-[10px]">≥ 42</span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-0.5">
+                              <span className="text-slate-600 font-medium">Morphology (Normal)</span>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={morphology}
+                                  disabled={sampleState === 'Frozen'}
+                                  onChange={(e) => setMorphology(e.target.value)}
+                                  className={`h-6 w-12 rounded border border-slate-300 px-1 text-right font-bold ${
+                                    sampleState === 'Frozen' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
+                                  }`}
+                                />
+                                <span className="text-slate-400 text-[11px] w-4">%</span>
+                                <span className="text-slate-400 text-[10px]">≥ 4</span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-0.5">
+                              <span className="text-slate-600 font-medium">Vitality</span>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={vitality}
+                                  disabled={sampleState === 'Frozen'}
+                                  onChange={(e) => setVitality(e.target.value)}
+                                  className={`h-6 w-12 rounded border border-slate-300 px-1 text-right font-bold ${
+                                    sampleState === 'Frozen' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
+                                  }`}
+                                />
+                                <span className="text-slate-400 text-[11px] w-4">%</span>
+                                <span className="text-slate-400 text-[10px]">≥ 54</span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-0.5">
+                              <span className="text-slate-600 font-medium">WBC</span>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={wbc}
+                                  disabled={sampleState === 'Frozen'}
+                                  onChange={(e) => setWbc(e.target.value)}
+                                  className={`h-6 w-12 rounded border border-slate-300 px-1 text-right font-medium ${
+                                    sampleState === 'Frozen' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
+                                  }`}
+                                />
+                                <span className="text-slate-400 text-[11px] w-8">/HPF</span>
+                                <span className="text-slate-400 text-[10px]">&lt; 1</span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-0.5">
+                              <span className="text-slate-600 font-medium">Agglutination</span>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={agglutination}
+                                  disabled={sampleState === 'Frozen'}
+                                  onChange={(e) => setAgglutination(e.target.value)}
+                                  className={`h-6 w-16 rounded border border-slate-300 px-1 text-right text-xs ${
+                                    sampleState === 'Frozen' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
+                                  }`}
+                                />
+                                <span className="text-slate-400 text-[10px]">None</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* AFTER PROCESSING / POST-THAW SECTION */}
+                      {intendedUse === 'Semen Analysis' && semenAnalysisType === 'HSA' ? (
+                        /* HSA MODE: After Processing is DISABLED (As per SMART HSASummary protocol) */
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-slate-600">
+                          <div className="flex items-center gap-2 font-bold text-slate-700 mb-1">
+                            <span>ℹ️</span>
+                            <span>HSA Protocol: After-Processing &amp; Survival Motility are Disabled</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 leading-relaxed">
+                            Husband Semen Analysis (HSA) is a diagnostic baseline assessment. As per SMART application architecture and standard andrology protocol, sample washing and 24-hr survival tests are only performed in SQA or cycle preparation.
+                          </p>
+                        </div>
+                      ) : (
+                        /* SQA, IUI, or IVF/ICSI MODE: After Processing / Post-Thaw is ACTIVE */
+                        <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-[11px] font-bold text-blue-900 uppercase tracking-tight flex items-center gap-1.5">
+                              <span>{sampleState === 'Frozen' ? '❄️ Post-Thaw Evaluation (Active)' : '🧬 After Processing / Washed Sperm Parameters'}</span>
+                            </h4>
+                            <span className="text-[10px] font-bold text-blue-700 bg-blue-100 border border-blue-300 px-2 py-0.5 rounded">
+                              {sampleState === 'Frozen' ? 'Thaw Assessment' : prepMethod}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-600 mb-0.5">
+                                {sampleState === 'Frozen' ? 'Post-Thaw Volume' : 'Post-Wash Volume'}
+                              </label>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={postVolume}
+                                  onChange={(e) => setPostVolume(e.target.value)}
+                                  className="h-7 w-full rounded border border-slate-300 px-2 font-bold text-xs"
+                                />
+                                <span className="text-slate-400 text-[10px]">ml</span>
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-600 mb-0.5">
+                                {sampleState === 'Frozen' ? 'Post-Thaw Count' : 'Post-Wash Count'}
+                              </label>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={postCount}
+                                  onChange={(e) => setPostCount(e.target.value)}
+                                  className="h-7 w-full rounded border border-slate-300 px-2 font-bold text-xs"
+                                />
+                                <span className="text-slate-400 text-[10px]">M/ml</span>
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Progressive Motility</label>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={postProgMotility}
+                                  onChange={(e) => setPostProgMotility(e.target.value)}
+                                  className="h-7 w-full rounded border border-slate-300 px-2 font-bold text-xs text-blue-700"
+                                />
+                                <span className="text-slate-400 text-[10px]">%</span>
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Total Motility</label>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={postTotalMotility}
+                                  onChange={(e) => setPostTotalMotility(e.target.value)}
+                                  className="h-7 w-full rounded border border-slate-300 px-2 font-bold text-xs text-blue-700"
+                                />
+                                <span className="text-slate-400 text-[10px]">%</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* SQA ONLY: 24-HOUR & 12-HOUR SURVIVAL MOTILITY ROW (txtIUIAPAS24Hr in SMART) */}
+                          {intendedUse === 'Semen Analysis' && semenAnalysisType === 'SQA' && (
+                            <div className="pt-2 border-t border-blue-200/80 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                              <div className="bg-white p-2 rounded border border-blue-200 shadow-2xs">
+                                <label className="block text-[10px] font-bold text-purple-900 mb-0.5">
+                                  24-Hour Survival Motility (%)
+                                </label>
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="text"
+                                    value={survival24Hr}
+                                    onChange={(e) => setSurvival24Hr(e.target.value)}
+                                    className="h-7 w-full rounded border border-purple-300 px-2 font-black text-xs text-purple-800"
+                                  />
+                                  <span className="text-purple-600 text-[10px] font-bold">%</span>
+                                </div>
+                                <span className="text-[9px] text-slate-400">SMART txtIUIAPAS24Hr</span>
+                              </div>
+
+                              <div className="bg-white p-2 rounded border border-blue-200 shadow-2xs">
+                                <label className="block text-[10px] font-bold text-purple-900 mb-0.5">
+                                  12-Hour Survival Motility (%)
+                                </label>
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="text"
+                                    value={survival12Hr}
+                                    onChange={(e) => setSurvival12Hr(e.target.value)}
+                                    className="h-7 w-full rounded border border-purple-300 px-2 font-black text-xs text-purple-800"
+                                  />
+                                  <span className="text-purple-600 text-[10px] font-bold">%</span>
+                                </div>
+                                <span className="text-[9px] text-slate-400">SMART txtIUIAPAS12Hr</span>
+                              </div>
+
+                              <div className="bg-white p-2 rounded border border-blue-200 shadow-2xs">
+                                <label className="block text-[10px] font-bold text-slate-700 mb-0.5">Linearity</label>
+                                <select
+                                  value={linearity}
+                                  onChange={(e) => setLinearity(e.target.value)}
+                                  className="h-7 w-full rounded border border-slate-300 px-1.5 text-xs font-bold text-slate-800"
+                                >
+                                  <option>Rapid Linear</option>
+                                  <option>Slow Linear</option>
+                                  <option>Non-Linear</option>
+                                </select>
+                                <span className="text-[9px] text-slate-400">Progression Velocity</span>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Inventory Audit Note for Thawed Samples */}
+                          {sampleState === 'Frozen' && (
+                            <p className="text-[10px] text-amber-800 italic">
+                              * Database action on save: Stored procedure <code>updateIUIThawIDToSelfAndDonor</code> connects straw <strong>{frozenStrawId}</strong> to <strong>{cycleVisitId}</strong> and marks it consumed (InUse=0).
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="block text-[10px] text-slate-500 mb-1">Remarks &amp; Recommendations</label>
+                        <input
+                          type="text"
+                          value={analysisRemarks}
+                          onChange={(e) => setAnalysisRemarks(e.target.value)}
+                          placeholder="e.g. Normal liquefaction, good progression, sample suitable for planned procedure."
+                          className="h-7 w-full rounded border border-slate-300 px-2 text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-4 pt-0 border-t border-slate-100 mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-bold text-slate-600">Diagnosis:</span>
+                      <span className="rounded bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 font-black text-emerald-800 text-xs tracking-wider">
+                        {analysisResult}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {intendedUse === 'Semen Analysis' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            showToast(`Opening ${semenAnalysisType === 'HSA' ? 'HSASummary.rdlc' : 'SQASummary.rdlc'} 1-page summary report preview.`);
+                          }}
+                          className="rounded-lg border border-blue-400 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 text-xs font-bold text-blue-800 transition flex items-center gap-1"
+                        >
+                          <span>📄</span>
+                          <span>Print {semenAnalysisType} Summary</span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAnalysisSaved(true);
+                          showToast('Analysis & Processing parameters successfully recorded.');
+                        }}
+                        className="rounded-lg bg-[#0b4a8b] hover:bg-blue-800 px-4 py-1.5 text-xs font-bold text-white shadow-xs"
+                      >
+                        Save &amp; Lock Parameters
+                      </button>
                     </div>
                   </div>
                 </div>
+
+                {/* BOX 6: PRE-IUI AUTHORIZATION OR DIAGNOSTIC SIGN-OFF */}
+                <div className={`${intendedUse === 'Semen Analysis' ? 'lg:col-span-4' : 'lg:col-span-3'} rounded-xl border border-slate-300/80 bg-white shadow-xs overflow-hidden flex flex-col justify-between`}>
+                  <div>
+                    <div className="bg-[#0b4a8b] px-4 py-2 text-white">
+                      <h2 className="text-xs font-bold uppercase tracking-wider">
+                        {intendedUse === 'Semen Analysis'
+                          ? '6. DIAGNOSTIC INTERPRETATION'
+                          : intendedUse === 'IVF / ICSI'
+                          ? '6. DISH MATCH & WITNESS'
+                          : '6. PRE-IUI AUTHORIZATION'}
+                      </h2>
+                    </div>
+
+                    <div className="p-4 space-y-3 text-xs">
+                      {intendedUse === 'Semen Analysis' ? (
+                        /* DIAGNOSTIC INTERPRETATION VIEW */
+                        <div className="space-y-3">
+                          <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 space-y-1 text-[11px]">
+                            <span className="block text-[10px] font-bold text-slate-500 uppercase">WHO 6th Ed Category</span>
+                            <div className="text-sm font-black text-slate-800">{analysisResult}</div>
+                            <p className="text-[10px] text-slate-500">
+                              All sperm parameters (Count, PR Motility, Vitality, Morphology) meet normal fertile thresholds.
+                            </p>
+                          </div>
+
+                          <div className="space-y-1.5 pt-1">
+                            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Diagnostic Checkpoints</span>
+                            {[
+                              { label: 'Liquefaction within 60 min', pass: true },
+                              { label: 'Sperm Conc ≥ 16 M/ml', pass: true },
+                              { label: 'Progressive Motility ≥ 30%', pass: true },
+                              { label: 'Morphology ≥ 4%', pass: true },
+                              { label: 'Vitality ≥ 54%', pass: true },
+                              { label: 'WBC < 1 M/ml (No Pyospermia)', pass: true },
+                            ].map((cp, idx) => (
+                              <div key={idx} className="flex items-center justify-between text-[11px]">
+                                <span className="text-slate-600">{cp.label}</span>
+                                <span className="text-emerald-600 font-bold">✓</span>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="pt-2 border-t border-slate-100 flex justify-between text-[11px]">
+                            <span className="text-slate-500">Signed By</span>
+                            <strong className="text-slate-800">{authBy}</strong>
+                          </div>
+                        </div>
+                      ) : intendedUse === 'IVF / ICSI' ? (
+                        /* IVF / ICSI COHORT WITNESS VIEW */
+                        <div className="space-y-2.5">
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Dish ID</span>
+                            <strong className="font-mono text-blue-700">ICSI-DISH-00158</strong>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Oocyte Cohort</span>
+                            <strong className="text-slate-800">12 MII Oocytes</strong>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Embryologist</span>
+                            <strong className="text-slate-800">{authBy}</strong>
+                          </div>
+                          <div className="pt-2 border-t border-slate-100 space-y-1">
+                            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Witness Checkpoints</span>
+                            {[
+                              'Patient & Partner RFID Match',
+                              'Sperm Prep Tube Match',
+                              'ICSI Injector Pipette Verified',
+                              'Dish ID Matched to Patient UHID',
+                            ].map((item, idx) => (
+                              <div key={idx} className="flex items-center justify-between text-[11px]">
+                                <span className="text-slate-600">{item}</span>
+                                <span className="text-emerald-600 font-bold">✓</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        /* STANDARD IUI AUTHORIZATION VIEW */
+                        <div className="space-y-2.5">
+                          <div className="space-y-1.5">
+                            <div className="flex justify-between">
+                              <span className="text-slate-500 text-[11px]">Prepared Sample ID</span>
+                              <strong className="font-mono text-slate-800">{prepSampleId}</strong>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500 text-[11px]">Final Syringe ID</span>
+                              <strong className="font-mono text-blue-700">{finalSyringeId}</strong>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500 text-[11px]">Authorization By</span>
+                              <strong className="text-slate-800">{authBy}</strong>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500 text-[11px]">Authorization Time</span>
+                              <span className="text-slate-700">18-Aug-2026 10:30</span>
+                            </div>
+                          </div>
+
+                          <div className="pt-2 border-t border-slate-100 space-y-1">
+                            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Checkpoints</span>
+                            {[
+                              'Patient / Cycle Match',
+                              'Sperm Source & ID Match',
+                              'Prepared Sample Match',
+                              'Final Syringe Match',
+                              'Procedure = IUI',
+                              'Ready for Insemination',
+                            ].map((item, idx) => (
+                              <div key={idx} className="flex items-center justify-between text-[11px]">
+                                <span className="text-slate-600">{item}</span>
+                                <span className="text-emerald-600 font-bold">✓</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="p-4 pt-0">
+                    <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-3 flex items-center gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white shadow-xs">
+                        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div className="font-black text-emerald-900 text-xs uppercase tracking-wider">
+                          {intendedUse === 'Semen Analysis' ? 'REPORT VERIFIED' : 'AUTHORIZED'}
+                        </div>
+                        <div className="text-[10px] text-emerald-800">
+                          {intendedUse === 'Semen Analysis'
+                            ? 'Ready for consultation & print.'
+                            : intendedUse === 'IVF / ICSI'
+                            ? 'Ready for ICSI / Insemination.'
+                            : 'You can proceed for IUI.'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* BOX 7: AUDIT TRAIL (COL 3, only for IUI / IVF or stacked for Semen Analysis) */}
+                {intendedUse !== 'Semen Analysis' && (
+                  <div className="lg:col-span-3 rounded-xl border border-slate-300/80 bg-white shadow-xs overflow-hidden flex flex-col justify-between">
+                    <div>
+                      <div className="bg-[#0b4a8b] px-4 py-2 text-white">
+                        <h2 className="text-xs font-bold uppercase tracking-wider">
+                          7. AUDIT TRAIL
+                        </h2>
+                      </div>
+
+                      <div className="p-4 space-y-3">
+                        <div className="overflow-x-auto rounded border border-slate-200">
+                          <table className="min-w-full divide-y divide-slate-200 text-[10px]">
+                            <thead className="bg-slate-50 font-bold text-slate-600">
+                              <tr>
+                                <th className="px-1.5 py-1 text-left">Date / Time</th>
+                                <th className="px-1.5 py-1 text-left">Event</th>
+                                <th className="px-1.5 py-1 text-left">ID</th>
+                                <th className="px-1.5 py-1 text-left">Operator</th>
+                                <th className="px-1.5 py-1 text-left">Action</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 bg-white">
+                              {[
+                                { time: '18-Aug 09:42', event: 'Sample Received', id: 'SEM-18472', op: 'EMB-01', act: 'Create' },
+                                { time: '18-Aug 09:55', event: 'Sample Validated', id: 'SEM-18472', op: 'EMB-01', act: 'Validate' },
+                                { time: '18-Aug 10:18', event: 'Prep Completed', id: 'PREP-918', op: 'EMB-02', act: 'Update' },
+                                { time: '18-Aug 10:25', event: 'Syringe Witness', id: 'IUI-SYR-918', op: 'DR-01', act: 'Witness' },
+                                { time: '18-Aug 10:30', event: 'Pre-IUI Auth', id: 'IUI-SYR-918', op: 'DR-01', act: 'Authorize' },
+                                { time: '18-Aug 10:32', event: 'Insemination Done', id: 'IUI-SYR-918', op: 'DR-01', act: 'Complete' },
+                              ].map((row, idx) => (
+                                <tr key={idx} className="hover:bg-slate-50">
+                                  <td className="px-1.5 py-1 text-slate-500 whitespace-nowrap">{row.time}</td>
+                                  <td className="px-1.5 py-1 font-medium text-slate-700">{row.event}</td>
+                                  <td className="px-1.5 py-1 font-mono text-slate-800">{row.id}</td>
+                                  <td className="px-1.5 py-1 text-slate-600">{row.op}</td>
+                                  <td className="px-1.5 py-1 text-blue-700 font-bold">{row.act}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-4 pt-0">
+                      <button
+                        type="button"
+                        onClick={() => showToast('Displaying comprehensive immutable audit logs for this sample.')}
+                        className="w-full rounded-lg border border-slate-300 bg-slate-50 hover:bg-slate-100 py-2 text-xs font-bold text-slate-700 flex items-center justify-center gap-1.5 transition"
+                      >
+                        <span>View Full Audit Log</span>
+                        <span>📋</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
               </div>
-            </div>
 
-            {/* 6. FINAL AUTHORIZATION (COL 3) */}
-            <div className="lg:col-span-3 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 border-b border-slate-100 pb-2">
-                6. Authorization (Final Witness)
-              </h3>
-
-              <div className="space-y-2 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-600">Patient / Cycle Match</span>
-                  <span className="font-bold text-emerald-600">✓</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-600">Sperm Source Match</span>
-                  <span className="font-bold text-emerald-600">✓</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-600">Dish / Syringe Match</span>
-                  <span className="font-bold text-emerald-600">✓</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-600">Operator Authorized</span>
-                  <span className="font-bold text-emerald-600">✓</span>
-                </div>
+              {/* BOTTOM SAFETY ALERT BANNER */}
+              <div className="rounded-xl border border-amber-300 bg-amber-50/90 px-4 py-3 flex items-center justify-center gap-2 text-center text-xs font-semibold text-amber-900 shadow-xs">
+                <span className="text-amber-600 text-sm">⚠️</span>
+                <span>
+                  <strong>NOTE:</strong> All samples are uniquely identified. Mismatch at any step <strong>WILL BLOCK</strong> the process and raise an alert.
+                </span>
               </div>
-
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-3 text-center space-y-1">
-                <div className="font-black text-emerald-800 text-xs uppercase tracking-wider">
-                  AUTHORIZED
-                </div>
-                <p className="text-[10px] text-emerald-700">
-                  Ready to proceed for {workflowMode === 'IUI' ? 'IUI Insemination' : 'ICSI / IVF Procedure'}.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => showToast('Authorized: Electronic witness record locked and time-stamped.')}
-                className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 py-2.5 text-xs font-bold uppercase text-white shadow-md shadow-emerald-600/20 transition"
-              >
-                Authorize {workflowMode === 'IUI' ? 'IUI' : 'IVF / ICSI'}
-              </button>
-            </div>
-
-          </div>
+            </>
+          )}
         </div>
       )}
 

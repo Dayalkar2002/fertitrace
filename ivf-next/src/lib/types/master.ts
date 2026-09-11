@@ -11,6 +11,10 @@ export interface PatientMasterRow {
   husbandName: string;
   address: string;
   dateOfCreation: string | null;
+  aadhar?: string;
+  husbandAadhar?: string;
+  mobile?: string;
+  raw?: Record<string, unknown>;
 }
 
 export interface PatientMasterDetail {

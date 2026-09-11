@@ -8,6 +8,10 @@ export interface DashboardKpis {
   ivf: number;
   et: number;
   bt: number;
+  oocytes?: number;
+  embryos?: number;
+  cryo?: number;
+  witness?: number;
 }
 
 export interface DashboardModule {

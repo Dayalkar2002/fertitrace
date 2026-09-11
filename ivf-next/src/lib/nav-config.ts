@@ -43,6 +43,7 @@ export interface MasterMenuItem {
   catId?: number;
   column: 1 | 2 | 3 | 4;
   route: string;
+  isFertiTrace?: boolean;
 }
 
 function routeFor(item: Omit<MasterMenuItem, 'route'>): string {
@@ -71,45 +72,52 @@ function routeFor(item: Omit<MasterMenuItem, 'route'>): string {
 }
 
 const RAW_REGISTRY: Omit<MasterMenuItem, 'route'>[] = [
-  { label: 'Allergies Master', type: 'common', catId: 12, column: 1 },
-  { label: 'Catheter Master', type: 'common', catId: 9, column: 1 },
-  { label: 'Contamination', type: 'common', catId: 27, column: 1 },
-  { label: 'Donor Lab', type: 'donor-lab', column: 1 },
-  { label: 'FSH Drug Master', type: 'common', catId: 14, column: 1 },
-  { label: 'Indication Master', type: 'common', catId: 23, column: 1 },
-  { label: 'Media Brand', type: 'common', catId: 28, column: 1 },
-  { label: 'Out Come Drug Master', type: 'outcome-drug', column: 1 },
-  { label: 'Referring Doctor', type: 'common', catId: 21, column: 1 },
-  { label: 'Termination Master', type: 'common', catId: 11, column: 1 },
-  { label: 'Antagonist Master', type: 'common', catId: 18, column: 2 },
-  { label: 'Clomiphene Citrate', type: 'common', catId: 17, column: 2 },
-  { label: 'Diagnosis Master', type: 'common', catId: 20, column: 2 },
-  { label: 'Findings', type: 'common', catId: 26, column: 2 },
-  { label: 'Gas', type: 'common', catId: 31, column: 2 },
-  { label: 'Lab Oper. Master', type: 'common', catId: 2, column: 2 },
-  { label: 'Media Series', type: 'common', catId: 29, column: 2 },
-  { label: 'Patient Management', type: 'patient', column: 2 },
-  { label: 'Satellite Master', type: 'satellite', column: 2 },
-  { label: 'User Master', type: 'user', column: 2 },
-  { label: 'Appearance Master', type: 'common', catId: 4, column: 3 },
-  { label: 'Collection Problem', type: 'common', catId: 24, column: 3 },
-  { label: 'Doctor Master', type: 'doctor', column: 3 },
-  { label: 'Personnel Master', type: 'common', catId: 16, column: 3 },
-  { label: 'HMG Drug Master', type: 'common', catId: 15, column: 3 },
-  { label: 'Linearity', type: 'common', catId: 25, column: 3 },
-  { label: 'Method Master', type: 'common', catId: 3, column: 3 },
-  { label: 'Patient Selection', type: 'patient-selection', column: 3 },
-  { label: 'Sperm Id Master', type: 'common', catId: 22, column: 3 },
-  { label: 'Viscosity Master', type: 'common', catId: 6, column: 3 },
-  { label: 'Appointment Scheduler', type: 'appointments', column: 4 },
-  { label: 'Colour Master', type: 'common', catId: 5, column: 4 },
-  { label: 'Done By Master', type: 'common', catId: 10, column: 4 },
-  { label: 'Fructose Master', type: 'common', catId: 8, column: 4 },
-  { label: 'Incubator Used', type: 'common', catId: 30, column: 4 },
-  { label: 'Liquefaction Master', type: 'common', catId: 7, column: 4 },
-  { label: 'Other Drug Master', type: 'common', catId: 19, column: 4 },
-  { label: 'Other Drug Master 2', type: 'common', catId: 32, column: 4 },
-  { label: 'Ovulation Induction', type: 'common', catId: 13, column: 4 },
+  // Column 1
+  { label: 'Allergies Master', type: 'common', catId: 12, column: 1, isFertiTrace: false },
+  { label: 'Catheter Master', type: 'common', catId: 9, column: 1, isFertiTrace: true },
+  { label: 'Contamination', type: 'common', catId: 27, column: 1, isFertiTrace: false },
+  { label: 'Donor Lab', type: 'donor-lab', column: 1, isFertiTrace: false },
+  { label: 'FSH Drug Master', type: 'common', catId: 14, column: 1, isFertiTrace: false },
+  { label: 'Indication Master', type: 'common', catId: 23, column: 1, isFertiTrace: false },
+  { label: 'Media Brand', type: 'common', catId: 28, column: 1, isFertiTrace: true },
+  { label: 'Out Come Drug Master', type: 'outcome-drug', column: 1, isFertiTrace: false },
+  { label: 'Referring Doctor', type: 'common', catId: 21, column: 1, isFertiTrace: false },
+  { label: 'Termination Master', type: 'common', catId: 11, column: 1, isFertiTrace: false },
+
+  // Column 2
+  { label: 'Antagonist Master', type: 'common', catId: 18, column: 2, isFertiTrace: false },
+  { label: 'Clomiphene Citrate', type: 'common', catId: 17, column: 2, isFertiTrace: false },
+  { label: 'Diagnosis Master', type: 'common', catId: 20, column: 2, isFertiTrace: false },
+  { label: 'Findings', type: 'common', catId: 26, column: 2, isFertiTrace: false },
+  { label: 'Gas', type: 'common', catId: 31, column: 2, isFertiTrace: true },
+  { label: 'Lab Oper. Master', type: 'common', catId: 2, column: 2, isFertiTrace: true },
+  { label: 'Media Series', type: 'common', catId: 29, column: 2, isFertiTrace: true },
+  { label: 'Patient Management', type: 'patient', column: 2, isFertiTrace: true },
+  { label: 'Satellite Master', type: 'satellite', column: 2, isFertiTrace: true },
+  { label: 'User Master', type: 'user', column: 2, isFertiTrace: true },
+
+  // Column 3
+  { label: 'Appearance Master', type: 'common', catId: 4, column: 3, isFertiTrace: false },
+  { label: 'Collection Problem', type: 'common', catId: 24, column: 3, isFertiTrace: false },
+  { label: 'Doctor Master', type: 'doctor', column: 3, isFertiTrace: true },
+  { label: 'Personnel Master', type: 'common', catId: 16, column: 3, isFertiTrace: false },
+  { label: 'HMG Drug Master', type: 'common', catId: 15, column: 3, isFertiTrace: false },
+  { label: 'Linearity', type: 'common', catId: 25, column: 3, isFertiTrace: false },
+  { label: 'Method Master', type: 'common', catId: 3, column: 3, isFertiTrace: false },
+  { label: 'Patient Selection', type: 'patient-selection', column: 3, isFertiTrace: true },
+  { label: 'Sperm Id Master', type: 'common', catId: 22, column: 3, isFertiTrace: true },
+  { label: 'Viscosity Master', type: 'common', catId: 6, column: 3, isFertiTrace: false },
+
+  // Column 4
+  { label: 'Appointment Scheduler', type: 'appointments', column: 4, isFertiTrace: false },
+  { label: 'Colour Master', type: 'common', catId: 5, column: 4, isFertiTrace: false },
+  { label: 'Done By Master', type: 'common', catId: 10, column: 4, isFertiTrace: false },
+  { label: 'Fructose Master', type: 'common', catId: 8, column: 4, isFertiTrace: false },
+  { label: 'Incubator Used', type: 'common', catId: 30, column: 4, isFertiTrace: true },
+  { label: 'Liquefaction Master', type: 'common', catId: 7, column: 4, isFertiTrace: false },
+  { label: 'Other Drug Master', type: 'common', catId: 19, column: 4, isFertiTrace: false },
+  { label: 'Other Drug Master 2', type: 'common', catId: 32, column: 4, isFertiTrace: false },
+  { label: 'Ovulation Induction', type: 'common', catId: 13, column: 4, isFertiTrace: false },
 ];
 
 export const MASTER_REGISTRY: MasterMenuItem[] = RAW_REGISTRY.map((item) => ({
@@ -119,31 +127,6 @@ export const MASTER_REGISTRY: MasterMenuItem[] = RAW_REGISTRY.map((item) => ({
 
 export function getMasterColumns(): MasterMenuItem[][] {
   return [1, 2, 3, 4].map((col) => MASTER_REGISTRY.filter((item) => item.column === col));
-}
-
-// Masters specifically used for barcode preparation, specimen labeling, witnessing, and clinical operations
-const BARCODE_MASTER_RAW: Omit<MasterMenuItem, 'route'>[] = [
-  { label: 'Patient Management', type: 'patient', column: 1 },
-  { label: 'Patient Selection', type: 'patient-selection', column: 1 },
-  { label: 'Doctor Master', type: 'doctor', column: 1 },
-  { label: 'Satellite Master', type: 'satellite', column: 2 },
-  { label: 'User / Operator Master', type: 'user', column: 2 },
-  { label: 'Sperm Id Master', type: 'common', catId: 22, column: 2 },
-  { label: 'Media Brand', type: 'common', catId: 28, column: 3 },
-  { label: 'Media Series', type: 'common', catId: 29, column: 3 },
-  { label: 'Catheter Master', type: 'common', catId: 9, column: 3 },
-  { label: 'Incubator Master', type: 'common', catId: 30, column: 4 },
-  { label: 'Gas Master', type: 'common', catId: 31, column: 4 },
-  { label: 'Lab Operator Master', type: 'common', catId: 2, column: 4 },
-];
-
-export const BARCODE_MASTER_REGISTRY: MasterMenuItem[] = BARCODE_MASTER_RAW.map((item) => ({
-  ...item,
-  route: routeFor(item),
-}));
-
-export function getBarcodeMasterColumns(): MasterMenuItem[][] {
-  return [1, 2, 3, 4].map((col) => BARCODE_MASTER_REGISTRY.filter((item) => item.column === col));
 }
 
 export function getCommonMasterLabel(catId: number): string {
@@ -194,7 +177,7 @@ export const REPORT_MENU_GROUPS: NavMenuGroup[] = [
 /** Top navigation focused strictly on: Dashboard, Master (barcode preparation masters), Barcode Label, and Cryo section */
 export const TOP_NAV_MENUS: TopNavMenu[] = [
   { label: 'Dashboard', route: '/dashboard', icon: 'dashboard' },
-  { label: 'Master', icon: 'masters', columns: getBarcodeMasterColumns() },
+  { label: 'Master', icon: 'masters', columns: getMasterColumns() },
   { label: 'Barcode Label', route: '/label-printing', icon: 'label' },
   {
     label: 'Cryo',
@@ -297,12 +280,6 @@ export const DEFAULT_LEFT_MENUS: LeftMenuItem[] = [
     icon: 'sperm',
     orderIndex: 4,
     isActive: true,
-    subModules: [
-      { nodeId: 105, nodeName: 'sperm_witness', label: 'Sperm Witnessing', route: '/sperm', icon: 'sperm', orderIndex: 1, isActive: true },
-      { nodeId: 106, nodeName: 'semen_analysis', label: 'Semen Analysis', route: '/sperm?mode=Semen+Analysis', icon: 'sperm', orderIndex: 2, isActive: true },
-      { nodeId: 107, nodeName: 'sperm_iui', label: 'IUI Preparation', route: '/sperm?mode=IUI', icon: 'sperm', orderIndex: 3, isActive: true },
-      { nodeId: 108, nodeName: 'sperm_cryo', label: 'Sperm Cryopreservation', route: '/sperm?mode=Cryopreservation', icon: 'sperm', orderIndex: 4, isActive: true },
-    ],
   },
   {
     nodeId: 5,

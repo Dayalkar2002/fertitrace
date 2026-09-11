@@ -16,29 +16,39 @@ import type { CycleEntry, SourceOption } from '@/lib/types/cycle';
 
 const DEFAULT_OOCYTE_OPTIONS: SourceOption[] = [
   {
-    id: 'self_oocyte',
-    label: 'Self Oocyte',
-    description: "Patient's own oocytes will be used",
+    id: 'Fresh',
+    label: 'Fresh cycle (FR)',
+    description: "Patient's own stimulated cycle (Self Oocyte)",
   },
   {
-    id: 'donor_oocyte',
-    label: 'Donor Oocyte',
-    description: 'Oocytes will be obtained from a donor',
+    id: 'FET',
+    label: 'Frozen Thaw Embryo Transfer (FET)',
+    description: 'Thawing and transfer of cryopreserved embryos',
   },
   {
-    id: 'oocyte_recipient',
-    label: 'Oocyte Recipient',
-    description: 'Patient will receive oocytes from a donor',
+    id: 'FrozenOocytes',
+    label: 'Frozen Oocyte (FZO)',
+    description: "Patient's own retrieved oocytes cryopreserved",
   },
   {
-    id: 'embryo_recipient',
-    label: 'Embryo Recipient',
+    id: 'ThawOocytes',
+    label: 'Thaw Oocyte (THO)',
+    description: "Thawing of patient's cryopreserved oocytes",
+  },
+  {
+    id: 'ER',
+    label: 'Embryo Recipient (ER)',
     description: 'Patient will receive embryos from a donor couple',
   },
   {
-    id: 'combination_special',
-    label: 'Combination / Special Cycle',
-    description: 'Combination of above / special arrangement',
+    id: 'OD',
+    label: 'Oocyte Donor (OD)',
+    description: 'Donor will donate oocytes to recipient',
+  },
+  {
+    id: 'OR',
+    label: 'Oocyte Recipient (OR)',
+    description: 'Patient will receive oocytes from a donor',
   },
 ];
 
@@ -76,7 +86,7 @@ const DEFAULT_SEMEN_OPTIONS: SourceOption[] = [
 ];
 
 const emptyForm = {
-  oocyteSource: 'self_oocyte',
+  oocyteSource: 'Fresh',
   semenSource: 'husband_fresh',
   cycleDate: new Date().toISOString().split('T')[0],
   donorId: '',
@@ -204,12 +214,13 @@ export function CycleEntryForm() {
   }
 
   // Display patient details
-  const patientName = selectedPatient?.name || 'Lubna Babulal Saf';
-  const uhid = selectedPatient?.uhid || 'CM2506281';
-  const partnerName = selectedPatient?.partner || 'Ferozing';
+  const hasPatient = Boolean(selectedPatient);
+  const patientName = selectedPatient?.name || 'No Patient Selected';
+  const uhid = selectedPatient?.uhid || '—';
+  const partnerName = selectedPatient?.partner || '—';
   const ageGender = selectedPatient
-    ? `${selectedPatient.age || 28} Y / ${selectedPatient.gender || 'Female'}`
-    : '28 Y / Female';
+    ? `${selectedPatient.age || '—'} Y / ${selectedPatient.gender || 'Female'}`
+    : '—';
 
   return (
     <div className="mx-auto max-w-[1240px] space-y-4 font-sans text-slate-800 selection:bg-purple-500 selection:text-white">
@@ -233,7 +244,7 @@ export function CycleEntryForm() {
         <div className="flex items-center gap-2">
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700">
             <span className="font-semibold text-slate-500">Date : </span>
-            <span>01-Jul-2025</span>
+            <span>{new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700">
             <span className="font-semibold text-slate-500">User : </span>
@@ -243,21 +254,23 @@ export function CycleEntryForm() {
       </div>
 
       {/* 2. Patient Context Strip */}
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-sky-200 bg-[#f0f7ff] px-4 py-3 text-xs shadow-2xs">
+      <div className={`flex flex-wrap items-center justify-between gap-4 rounded-xl border px-4 py-3 text-xs shadow-2xs transition ${
+        hasPatient ? 'border-sky-200 bg-[#f0f7ff]' : 'border-amber-200 bg-amber-50/50'
+      }`}>
         <div className="flex flex-wrap items-center gap-6">
           {/* Patient Name */}
           <div className="flex items-center gap-2">
-            <svg className="h-4 w-4 text-[#1d4ed8]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg className={`h-4 w-4 ${hasPatient ? 'text-[#1d4ed8]' : 'text-amber-600'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
               <circle cx="12" cy="7" r="4" />
             </svg>
             <span className="font-semibold text-slate-600">Patient Name :</span>
-            <span className="font-bold text-slate-900">{patientName}</span>
+            <span className={`font-bold ${hasPatient ? 'text-slate-900' : 'text-amber-800 italic'}`}>{patientName}</span>
           </div>
 
           {/* UHID */}
           <div className="flex items-center gap-2">
-            <svg className="h-4 w-4 text-[#1d4ed8]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg className="h-4 w-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <rect x="3" y="4" width="18" height="16" rx="2" />
               <line x1="7" y1="8" x2="17" y2="8" />
               <line x1="7" y1="12" x2="13" y2="12" />
@@ -268,7 +281,7 @@ export function CycleEntryForm() {
 
           {/* Partner */}
           <div className="flex items-center gap-2">
-            <svg className="h-4 w-4 text-[#1d4ed8]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg className="h-4 w-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
               <circle cx="9" cy="7" r="4" />
               <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
@@ -280,7 +293,7 @@ export function CycleEntryForm() {
 
           {/* Age / Gender */}
           <div className="flex items-center gap-2">
-            <svg className="h-4 w-4 text-[#1d4ed8]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg className="h-4 w-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="10" />
               <path d="M12 6v6l4 2" />
             </svg>
@@ -289,13 +302,72 @@ export function CycleEntryForm() {
           </div>
         </div>
 
-        {/* Change Patient Action */}
+        {/* Change / Select Patient Action */}
         <button
           type="button"
           onClick={() => router.push('/dashboard?selectPatient=1')}
-          className="rounded-lg bg-[#1d4ed8] hover:bg-[#1e40af] px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs transition"
+          className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs transition ${
+            hasPatient ? 'bg-[#1d4ed8] hover:bg-[#1e40af]' : 'bg-amber-600 hover:bg-amber-700'
+          }`}
         >
-          Change Patient
+          {hasPatient ? 'Change Patient' : 'Select Patient'}
+        </button>
+      </div>
+
+      {/* No Patient Warning Alert Banner */}
+      {!hasPatient && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50/90 px-4 py-3 text-xs text-amber-900 shadow-2xs animate-fadeIn">
+          <div className="flex items-center gap-2.5">
+            <span className="text-lg">⚠️</span>
+            <div>
+              <span className="font-bold">No Patient Selected: </span>
+              <span>Please select a patient before saving or proceeding with cycle registration.</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => router.push('/dashboard?selectPatient=1')}
+            className="rounded-lg bg-amber-600 hover:bg-amber-700 px-3.5 py-1.5 font-bold text-white shadow-xs transition"
+          >
+            Select Patient
+          </button>
+        </div>
+      )}
+
+      {/* SMART Cryo Stock Summary Bar (Matching SMART legacy header) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-2.5 text-xs shadow-2xs">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-emerald-950 text-[11px] font-semibold">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="text-slate-600">ET Frozen :</span>
+            <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">0</strong>
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="text-slate-600">BT Frozen :</span>
+            <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">0</strong>
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="text-slate-600">Total Frozen Oocytes :</span>
+            <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">0</strong>
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="text-slate-600">MII Frozen :</span>
+            <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">0</strong>
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="text-slate-600">MI Frozen :</span>
+            <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">0</strong>
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="text-slate-600">GV Frozen :</span>
+            <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">0</strong>
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setForm(emptyForm)}
+          className="rounded-lg bg-emerald-700 hover:bg-emerald-800 px-3 py-1 text-xs font-bold text-white shadow-xs transition"
+        >
+          + Add New
         </button>
       </div>
 
@@ -303,7 +375,7 @@ export function CycleEntryForm() {
       <div className="flex items-center justify-center gap-2 rounded-xl border border-[#fef08a] bg-[#fffbeb] px-4 py-2.5 text-center text-xs font-medium text-slate-700 shadow-2xs">
         <span className="text-base">💡</span>
         <span>
-          Select the appropriate options below. Based on your selection, the next screen will open for further data entry.
+          Select the appropriate cycle type and semen source below. Based on your selection, the workflow will update accordingly.
         </span>
       </div>
 
@@ -312,14 +384,14 @@ export function CycleEntryForm() {
         {/* 4. Main 2-Column Selection Panel */}
         <div className="grid gap-5 lg:grid-cols-2">
           
-          {/* OOCYTE SOURCE */}
+          {/* CYCLE TYPE / OOCYTE SOURCE */}
           <div className="flex flex-col rounded-2xl border border-purple-200/80 bg-[#fdfaff] shadow-xs overflow-hidden">
             <div className="flex items-center gap-2.5 bg-[#8b5cf6] px-4 py-2.5 text-white">
               <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-[13px] font-bold text-[#8b5cf6]">
                 1
               </div>
               <h2 className="text-sm font-bold tracking-wide">
-                OOCYTE SOURCE &nbsp; ( Select One )
+                CYCLE TYPE / OOCYTE SOURCE &nbsp; ( Select One )
               </h2>
             </div>
             
@@ -780,13 +852,36 @@ function InfoIcon() {
 
 function getOocyteIcon(id: string) {
   switch (id) {
+    case 'Fresh':
     case 'self_oocyte':
       return (
-        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg className="h-5 w-5 text-purple-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <circle cx="12" cy="8" r="4" />
           <path d="M6 21v-2a6 6 0 0 1 12 0v2" />
         </svg>
       );
+    case 'FET':
+      return (
+        <svg className="h-5 w-5 text-cyan-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+      );
+    case 'FrozenOocytes':
+      return (
+        <svg className="h-5 w-5 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="12" cy="12" r="7" />
+          <path d="M12 8v8M8 12h8" />
+        </svg>
+      );
+    case 'ThawOocytes':
+      return (
+        <svg className="h-5 w-5 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M12 3v3m0 12v3M3 12h3m12 0h3" />
+          <circle cx="12" cy="12" r="5" />
+        </svg>
+      );
+    case 'OD':
     case 'donor_oocyte':
       return (
         <svg className="h-5 w-5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -795,6 +890,7 @@ function getOocyteIcon(id: string) {
           <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
         </svg>
       );
+    case 'OR':
     case 'oocyte_recipient':
       return (
         <svg className="h-5 w-5 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -802,6 +898,7 @@ function getOocyteIcon(id: string) {
           <circle cx="12" cy="7" r="4" />
         </svg>
       );
+    case 'ER':
     case 'embryo_recipient':
       return (
         <svg className="h-5 w-5 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -811,11 +908,8 @@ function getOocyteIcon(id: string) {
       );
     default:
       return (
-        <svg className="h-5 w-5 text-pink-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M16 3h5v5" />
-          <path d="M4 20L21 3" />
-          <path d="M21 16v5h-5" />
-          <path d="M15 15l6 6" />
+        <svg className="h-5 w-5 text-purple-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="12" cy="12" r="9" />
         </svg>
       );
   }

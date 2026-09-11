@@ -70,6 +70,26 @@ function getInitials(name: string): string {
   return name.slice(0, 2).toUpperCase();
 }
 
+function calculateAgeYearsFromDob(dobStr: string | null | undefined): number {
+  if (!dobStr) return 0;
+  const dob = new Date(dobStr);
+  if (isNaN(dob.getTime())) return 0;
+  const today = new Date();
+  let years = today.getFullYear() - dob.getFullYear();
+  const m = today.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+    years--;
+  }
+  return years > 0 ? years : 0;
+}
+
+function calculateDobFromAge(age: number): string {
+  if (!age || age <= 0) return '';
+  const currentYear = new Date().getFullYear();
+  const birthYear = currentYear - age;
+  return `${birthYear}-01-01`;
+}
+
 export function PatientMasterForm() {
   const { token } = useAuth();
   const [form, setForm] = useState(emptyForm());
@@ -89,9 +109,74 @@ export function PatientMasterForm() {
   const [activeTab, setActiveTab] = useState<'form' | 'list'>('form');
 
   const isUnmarried = form.maritalStatus === 'Unmarried';
+  const isNri = form.nationality === 'NRI' || form.nationality === 'Foreign National';
   const partnerNameLabel = isUnmarried ? 'Father Name' : 'Husband Name';
   const partnerAgeLabel = isUnmarried ? 'Father Age' : 'Husband Age';
   const partnerDobLabel = isUnmarried ? 'Father Birth Date' : 'Husband Birth Date';
+
+  // Duplicate Aadhaar Checking (SMART legacy: PatientAadharExists)
+  const duplicateAadharMatch = form.aadhar.trim()
+    ? rows.find(
+        (r) =>
+          r.id !== form.patId &&
+          ((r.raw?.PatAdhar && String(r.raw.PatAdhar).trim() === form.aadhar.trim()) ||
+            (r.raw?.aadhar && String(r.raw.aadhar).trim() === form.aadhar.trim()))
+      )
+    : null;
+
+  const duplicateHusbandAadharMatch =
+    !isUnmarried && form.husbandAadhar.trim()
+      ? rows.find(
+          (r) =>
+            r.id !== form.patId &&
+            ((r.raw?.HusbandAdhar && String(r.raw.HusbandAdhar).trim() === form.husbandAadhar.trim()) ||
+              (r.raw?.husbandAadhar && String(r.raw.husbandAadhar).trim() === form.husbandAadhar.trim()))
+        )
+      : null;
+
+  function handlePatientDobChange(val: string) {
+    updateField('dob', val);
+    const calculatedAge = calculateAgeYearsFromDob(val);
+    if (calculatedAge > 0) {
+      updateField('age', calculatedAge);
+    }
+  }
+
+  function handlePatientAgeChange(ageNum: number) {
+    updateField('age', ageNum);
+    const calculatedDob = calculateDobFromAge(ageNum);
+    if (calculatedDob) {
+      updateField('dob', calculatedDob);
+    }
+  }
+
+  function handleHusbandDobChange(val: string) {
+    updateField('husbandDob', val);
+    const calculatedAge = calculateAgeYearsFromDob(val);
+    if (calculatedAge > 0) {
+      updateField('husbandAge', calculatedAge);
+    }
+  }
+
+  function handleHusbandAgeChange(ageNum: number) {
+    updateField('husbandAge', ageNum);
+    const calculatedDob = calculateDobFromAge(ageNum);
+    if (calculatedDob) {
+      updateField('husbandDob', calculatedDob);
+    }
+  }
+
+  function formatWithHusbandName() {
+    if (!form.name.trim() || !form.husbandName.trim()) return;
+    const husbParts = form.husbandName.trim().split(/\s+/);
+    const husbFirstName = husbParts[0];
+    const patParts = form.name.trim().split(/\s+/);
+    if (patParts.length === 1) {
+      updateField('name', `${patParts[0]} ${husbFirstName} ${husbParts.slice(1).join(' ')}`.trim());
+    } else if (!form.name.toLowerCase().includes(husbFirstName.toLowerCase())) {
+      updateField('name', `${patParts[0]} ${husbFirstName} ${patParts.slice(1).join(' ')}`.trim());
+    }
+  }
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -171,6 +256,25 @@ export function PatientMasterForm() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!token) return;
+
+    if (duplicateAadharMatch) {
+      setError(`Duplicate Patient Aadhaar: Already registered for patient "${duplicateAadharMatch.name}" (ID: #${duplicateAadharMatch.id}).`);
+      return;
+    }
+    if (duplicateHusbandAadharMatch) {
+      setError(`Duplicate Husband Aadhaar: Already registered for patient "${duplicateHusbandAadharMatch.name}" (ID: #${duplicateHusbandAadharMatch.id}).`);
+      return;
+    }
+
+    if (!isNri && !form.aadhar.trim()) {
+      setError('Patient Aadhaar Card is required for Indian patients.');
+      return;
+    }
+    if (isNri && !form.passport?.trim()) {
+      setError('Patient Passport number is required for NRI / Foreign patients.');
+      return;
+    }
+
     setSaving(true);
     setError('');
     setSuccess('');
@@ -232,11 +336,19 @@ export function PatientMasterForm() {
   const filteredRows = rows.filter((r) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
+    const rawAadhar = r.raw?.PatAdhar ? String(r.raw.PatAdhar).toLowerCase() : '';
+    const rawMobile = r.raw?.PatMobileNo ? String(r.raw.PatMobileNo).toLowerCase() : '';
+    const rawHusbandAadhar = r.raw?.HusbandAdhar ? String(r.raw.HusbandAdhar).toLowerCase() : '';
     return (
       r.name.toLowerCase().includes(q) ||
       (r.husbandName && r.husbandName.toLowerCase().includes(q)) ||
       (r.category && r.category.toLowerCase().includes(q)) ||
-      (r.address && r.address.toLowerCase().includes(q))
+      (r.address && r.address.toLowerCase().includes(q)) ||
+      (r.refNo && r.refNo.toLowerCase().includes(q)) ||
+      String(r.id).includes(q) ||
+      rawAadhar.includes(q) ||
+      rawMobile.includes(q) ||
+      rawHusbandAadhar.includes(q)
     );
   });
 
@@ -326,7 +438,29 @@ export function PatientMasterForm() {
             accent="border-purple-200/80 bg-purple-50/20"
           >
             <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
-              <Field label="Full Name *" value={form.name} onChange={(v) => updateField('name', v)} placeholder="e.g. Lubna Babulal Saf" />
+              <div className="flex flex-col">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-700">Full Name *</span>
+                  {!isUnmarried && form.husbandName.trim() && !form.name.toLowerCase().includes(form.husbandName.trim().split(/\s+/)[0].toLowerCase()) && (
+                    <button
+                      type="button"
+                      onClick={formatWithHusbandName}
+                      className="text-[10px] font-bold text-purple-600 hover:text-purple-800 underline transition"
+                      title="Format patient name with husband's first name per ART SMART standard"
+                    >
+                      ✨ + Husband Name
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => updateField('name', e.target.value)}
+                  placeholder="e.g. Lubna Babulal Saf"
+                  className="mt-1 h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-800 outline-none transition focus:border-[#6345A6] focus:ring-2 focus:ring-[#6345A6]/15"
+                />
+              </div>
+
               <Field label="Ref No" value={form.refNo} onChange={(v) => updateField('refNo', v)} placeholder="REF-2025-001" />
               <Field label="Category" value={form.category} onChange={(v) => updateField('category', v)} readOnly title="Updated automatically from cycles" placeholder="Self OPU + ICSI" />
               
@@ -356,8 +490,8 @@ export function PatientMasterForm() {
               </label>
 
               <Field label="Registration Date" type="date" value={form.dateOfCreation ?? ''} onChange={(v) => updateField('dateOfCreation', v)} />
-              <Field label="Birth Date" type="date" value={form.dob ?? ''} onChange={(v) => updateField('dob', v)} />
-              <Field label="Age" type="number" value={String(form.age)} onChange={(v) => updateField('age', Number(v))} />
+              <Field label="Birth Date *" type="date" value={form.dob ?? ''} onChange={handlePatientDobChange} />
+              <Field label="Age *" type="number" value={String(form.age)} onChange={(v) => handlePatientAgeChange(Number(v))} />
             </div>
           </SectionCard>
 
@@ -386,8 +520,25 @@ export function PatientMasterForm() {
               <Field label="Phone" value={form.phone} onChange={(v) => updateField('phone', v)} placeholder="Landline optional" />
               <Field label="Email" value={form.email} onChange={(v) => updateField('email', v)} placeholder="patient@example.com" />
               <Field label="Patient PAN" value={form.panCard} onChange={(v) => updateField('panCard', v)} placeholder="ABCDE1234F" />
-              <Field label="Patient Aadhar" value={form.aadhar} onChange={(v) => updateField('aadhar', v)} placeholder="1234 5678 9012" />
-              <Field label="Patient Passport" value={form.passport || ''} onChange={(v) => updateField('passport', v)} placeholder="Passport No." />
+              <div>
+                <Field
+                  label={isNri ? 'Patient Aadhar (Optional)' : 'Patient Aadhar *'}
+                  value={form.aadhar}
+                  onChange={(v) => updateField('aadhar', v)}
+                  placeholder="1234 5678 9012"
+                />
+                {duplicateAadharMatch && (
+                  <span className="mt-1 block text-[10px] font-bold text-rose-600 animate-fadeIn">
+                    ⚠️ Already registered: {duplicateAadharMatch.name} (#{duplicateAadharMatch.id})
+                  </span>
+                )}
+              </div>
+              <Field
+                label={isNri ? 'Patient Passport *' : 'Patient Passport (Optional)'}
+                value={form.passport || ''}
+                onChange={(v) => updateField('passport', v)}
+                placeholder="Passport No."
+              />
             </div>
           </SectionCard>
 
@@ -415,15 +566,32 @@ export function PatientMasterForm() {
           >
             <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
               <Field label={partnerNameLabel} value={form.husbandName} onChange={(v) => updateField('husbandName', v)} placeholder="e.g. Ferozing Saf" />
-              <Field label={partnerAgeLabel} type="number" value={String(form.husbandAge)} onChange={(v) => updateField('husbandAge', Number(v))} />
-              <Field label={partnerDobLabel} type="date" value={form.husbandDob ?? ''} onChange={(v) => updateField('husbandDob', v)} />
+              <Field label={`${partnerAgeLabel} *`} type="number" value={String(form.husbandAge)} onChange={(v) => handleHusbandAgeChange(Number(v))} />
+              <Field label={`${partnerDobLabel} *`} type="date" value={form.husbandDob ?? ''} onChange={handleHusbandDobChange} />
               <Field label="Partner Mobile" value={form.husbandPhone ?? ''} onChange={(v) => updateField('husbandPhone', v)} placeholder="+91 98765 00000" />
               
               {!isUnmarried && (
                 <>
                   <Field label="Husband PAN" value={form.husbandPan} onChange={(v) => updateField('husbandPan', v)} />
-                  <Field label="Husband Aadhar" value={form.husbandAadhar} onChange={(v) => updateField('husbandAadhar', v)} />
-                  <Field label="Husband Passport" value={form.husbandPassport || ''} onChange={(v) => updateField('husbandPassport', v)} placeholder="Passport No." />
+                  <div>
+                    <Field
+                      label={isNri ? 'Husband Aadhar (Optional)' : 'Husband Aadhar *'}
+                      value={form.husbandAadhar}
+                      onChange={(v) => updateField('husbandAadhar', v)}
+                      placeholder="1234 5678 9012"
+                    />
+                    {duplicateHusbandAadharMatch && (
+                      <span className="mt-1 block text-[10px] font-bold text-rose-600 animate-fadeIn">
+                        ⚠️ Already registered: {duplicateHusbandAadharMatch.name} (#{duplicateHusbandAadharMatch.id})
+                      </span>
+                    )}
+                  </div>
+                  <Field
+                    label={isNri ? 'Husband Passport *' : 'Husband Passport (Optional)'}
+                    value={form.husbandPassport || ''}
+                    onChange={(v) => updateField('husbandPassport', v)}
+                    placeholder="Passport No."
+                  />
                   <Field label="Husband Email" value={form.husbandEmail} onChange={(v) => updateField('husbandEmail', v)} />
                 </>
               )}

@@ -2,14 +2,15 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
-import type { TopNavMenu } from '@/lib/nav-config';
-import { TOP_NAV_MENUS } from '@/lib/nav-config';
-import { NavIcon } from '@/components/nav-icons';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { TopNavMenu, MasterMenuItem } from '@/lib/nav-config';
+import { TOP_NAV_MENUS, getMasterColumns } from '@/lib/nav-config';
 
 export function TopNav() {
   const pathname = usePathname();
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [masterSearch, setMasterSearch] = useState('');
+  const [masterFilter, setMasterFilter] = useState<'all' | 'fertitrace' | 'standard'>('all');
   const navRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -21,6 +22,14 @@ export function TopNav() {
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
+
+  // Reset master search/filter when menu closes
+  useEffect(() => {
+    if (openMenu !== 'Master') {
+      setMasterSearch('');
+      setMasterFilter('all');
+    }
+  }, [openMenu]);
 
   function isActive(menu: TopNavMenu): boolean {
     if (menu.route) return pathname === menu.route || pathname.startsWith(`${menu.route}/`);
@@ -34,49 +43,26 @@ export function TopNav() {
     return !!(menu.columns?.length || menu.groups?.length || menu.items?.length);
   }
 
-  // 4 categorized sections for Barcode Preparation Masters
-  const MASTER_CATEGORIES = [
-    {
-      title: 'Patient & Identity',
-      badge: 'Clinical',
-      color: 'border-purple-200 bg-purple-50/60 text-[#6345A6]',
-      items: [
-        { label: 'Patient Management', route: '/masters/patient', desc: 'Demographics & Aadhar', icon: 'patient' },
-        { label: 'Patient Selection', route: '/dashboard?selectPatient=1', desc: 'Active patient picker', icon: 'patient' },
-        { label: 'Doctor Master', route: '/masters/doctor', desc: 'Referring & treating doctors', icon: 'masters' },
-      ],
-    },
-    {
-      title: 'Facility & Operators',
-      badge: 'Staff',
-      color: 'border-blue-200 bg-blue-50/60 text-blue-600',
-      items: [
-        { label: 'Satellite Master', route: '/masters/satellite', desc: 'Branch centers & clinics', icon: 'masters' },
-        { label: 'User / Operator Master', route: '/masters/user', desc: 'Logins & role permissions', icon: 'users' },
-        { label: 'Lab Operator Master', route: '/masters/common/2', desc: 'Witnessing technician registry', icon: 'users' },
-      ],
-    },
-    {
-      title: 'Consumables & ID',
-      badge: 'Witness',
-      color: 'border-teal-200 bg-teal-50/60 text-teal-600',
-      items: [
-        { label: 'Sperm Id Master', route: '/masters/common/22', desc: 'Sample & straw tracking code', icon: 'sperm' },
-        { label: 'Media Brand', route: '/masters/common/28', desc: 'Culture & wash media brand', icon: 'inventory' },
-        { label: 'Media Series', route: '/masters/common/29', desc: 'Media lot & series registry', icon: 'inventory' },
-      ],
-    },
-    {
-      title: 'Equipment & Gases',
-      badge: 'Lab Setup',
-      color: 'border-amber-200 bg-amber-50/60 text-amber-700',
-      items: [
-        { label: 'Catheter Master', route: '/masters/common/9', desc: 'ET catheter types & lots', icon: 'masters' },
-        { label: 'Incubator Master', route: '/masters/common/30', desc: 'Culture chambers & slots', icon: 'masters' },
-        { label: 'Gas Master', route: '/masters/common/31', desc: 'CO2 / Tri-gas mixtures', icon: 'masters' },
-      ],
-    },
-  ];
+  // All columns of masters (columns 1 to 4)
+  const masterColumns = useMemo(() => getMasterColumns(), []);
+
+  // Filtered master columns based on search and active filter tab
+  const filteredColumns = useMemo(() => {
+    const q = masterSearch.trim().toLowerCase();
+    return masterColumns.map((col) =>
+      col.filter((item) => {
+        const matchesQuery = !q || item.label.toLowerCase().includes(q);
+        if (!matchesQuery) return false;
+        if (masterFilter === 'fertitrace') return !!item.isFertiTrace;
+        if (masterFilter === 'standard') return !item.isFertiTrace;
+        return true;
+      })
+    );
+  }, [masterColumns, masterSearch, masterFilter]);
+
+  const totalVisibleMasters = useMemo(() => {
+    return filteredColumns.reduce((acc, col) => acc + col.length, 0);
+  }, [filteredColumns]);
 
   return (
     <nav ref={navRef} className="hidden flex-1 items-center gap-1.5 xl:flex">
@@ -85,7 +71,7 @@ export function TopNav() {
           {menu.route && !hasDropdown(menu) ? (
             <Link
               href={menu.route}
-              className={`rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
+              className={`whitespace-nowrap inline-flex items-center rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
                 isActive(menu)
                   ? 'bg-purple-100 text-[#6345A6] shadow-2xs font-extrabold'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
@@ -98,14 +84,18 @@ export function TopNav() {
               <button
                 type="button"
                 onClick={() => setOpenMenu(openMenu === menu.label ? null : menu.label)}
-                className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
+                className={`whitespace-nowrap inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
                   openMenu === menu.label || isActive(menu)
                     ? 'bg-purple-100 text-[#6345A6] shadow-2xs font-extrabold'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
                 <span>{menu.label}</span>
-                <span className={`text-[10px] transition-transform duration-200 ${openMenu === menu.label ? 'rotate-180 text-[#6345A6]' : 'opacity-60'}`}>
+                <span
+                  className={`text-[10px] transition-transform duration-200 ${
+                    openMenu === menu.label ? 'rotate-180 text-[#6345A6]' : 'opacity-60'
+                  }`}
+                >
                   ▾
                 </span>
               </button>
@@ -113,87 +103,189 @@ export function TopNav() {
               {openMenu === menu.label && (
                 <>
                   {menu.label === 'Master' ? (
-                    /* Master Dropdown: Categorized Card Grid, safely positioned to never clip */
-                    <div
-                      className="absolute left-0 sm:left-[-120px] md:left-[-180px] lg:left-[-160px] xl:left-[-120px] top-full z-50 mt-2.5 w-[760px] max-w-[calc(100vw-300px)] rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150"
-                    >
-                      {/* Dropdown Header */}
-                      <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
-                        <div className="flex items-center gap-2.5">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-purple-100 text-[#6345A6]">
-                            <span className="text-base">🏷️</span>
+                    /* Master Dropdown: All 32+ Masters across 4 columns with Two-Color Highlighting */
+                    <div className="absolute left-0 sm:left-[-120px] md:left-[-180px] lg:left-[-220px] xl:left-[-200px] top-full z-50 mt-2.5 w-[900px] max-w-[calc(100vw-280px)] rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150 max-h-[calc(100vh-120px)] overflow-y-auto">
+                      {/* Header with Title, Search, and Two-Color Legend */}
+                      <div className="border-b border-slate-100 pb-3.5">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="flex items-center gap-2.5">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-purple-100 text-[#6345A6]">
+                              <span className="text-base">🏷️</span>
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-black text-slate-900">
+                                  Master Directory
+                                </span>
+                                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                                  All 4 Columns
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-slate-400">
+                                Clinic, laboratory witnessing & configuration registries
+                              </div>
+                            </div>
                           </div>
-                          <div>
-                            <div className="text-xs font-black text-slate-900">
-                              Barcode Preparation Masters
-                            </div>
-                            <div className="text-[11px] text-slate-400">
-                              Core clinic & laboratory registries used for specimen identification & witnessing
-                            </div>
+
+                          {/* Search Input */}
+                          <div className="relative flex items-center">
+                            <input
+                              type="text"
+                              value={masterSearch}
+                              onChange={(e) => setMasterSearch(e.target.value)}
+                              placeholder="Search masters..."
+                              className="w-48 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 transition focus:border-[#6345A6] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#6345A6]"
+                            />
+                            {masterSearch && (
+                              <button
+                                type="button"
+                                onClick={() => setMasterSearch('')}
+                                className="absolute right-2 text-xs text-slate-400 hover:text-slate-600"
+                              >
+                                ✕
+                              </button>
+                            )}
                           </div>
                         </div>
-                        <span className="rounded-full bg-purple-50 px-2.5 py-0.5 text-[10px] font-bold text-[#6345A6] border border-purple-100">
-                          12 Masters
-                        </span>
+
+                        {/* Two-Color Legend & Filter Tabs */}
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-slate-50/80 px-3 py-2 border border-slate-100">
+                          {/* Legend showing both distinct colors */}
+                          <div className="flex items-center gap-3 text-[11px]">
+                            <span className="flex items-center gap-1.5 font-bold text-purple-900">
+                              <span className="h-2.5 w-2.5 rounded-full bg-[#6345A6] shadow-2xs ring-2 ring-purple-200" />
+                              <span>FertiTrace In-Use (12)</span>
+                            </span>
+                            <span className="text-slate-300">•</span>
+                            <span className="flex items-center gap-1.5 font-semibold text-slate-600">
+                              <span className="h-2.5 w-2.5 rounded-full bg-slate-300 ring-2 ring-slate-100" />
+                              <span>Standard Masters (20+)</span>
+                            </span>
+                          </div>
+
+                          {/* Filter Tabs */}
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setMasterFilter('all')}
+                              className={`rounded-lg px-2.5 py-1 text-[10px] font-bold transition ${
+                                masterFilter === 'all'
+                                  ? 'bg-purple-600 text-white shadow-2xs'
+                                  : 'text-slate-600 hover:bg-slate-200'
+                              }`}
+                            >
+                              All ({totalVisibleMasters})
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setMasterFilter('fertitrace')}
+                              className={`rounded-lg px-2.5 py-1 text-[10px] font-bold transition ${
+                                masterFilter === 'fertitrace'
+                                  ? 'bg-[#6345A6] text-white shadow-2xs'
+                                  : 'text-purple-700 bg-purple-50 hover:bg-purple-100'
+                              }`}
+                            >
+                              🟣 FertiTrace
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setMasterFilter('standard')}
+                              className={`rounded-lg px-2.5 py-1 text-[10px] font-bold transition ${
+                                masterFilter === 'standard'
+                                  ? 'bg-slate-700 text-white shadow-2xs'
+                                  : 'text-slate-600 hover:bg-slate-200'
+                              }`}
+                            >
+                              ⚪ Standard
+                            </button>
+                          </div>
+                        </div>
                       </div>
 
-                      {/* 4 Categorized Columns */}
-                      <div className="grid grid-cols-4 gap-3">
-                        {MASTER_CATEGORIES.map((cat) => (
-                          <div
-                            key={cat.title}
-                            className="flex flex-col rounded-2xl border border-slate-100 bg-slate-50/50 p-2.5"
-                          >
-                            <div className="mb-2 flex items-center justify-between px-1">
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                                {cat.title}
-                              </span>
+                      {/* 4 Columns of Masters with Two-Colour Highlighting */}
+                      <div className="mt-3.5 grid grid-cols-4 gap-3">
+                        {filteredColumns.map((column, ci) => (
+                          <div key={ci} className="space-y-1.5">
+                            <div className="px-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 pb-1 mb-1">
+                              Column {ci + 1}
                             </div>
-
-                            <div className="space-y-1">
-                              {cat.items.map((item) => (
-                                <Link
-                                  key={item.label}
-                                  href={item.route}
-                                  onClick={() => setOpenMenu(null)}
-                                  className="group flex flex-col rounded-xl p-2 transition-all hover:bg-white hover:shadow-xs hover:border hover:border-purple-200"
-                                >
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-xs font-bold text-slate-800 group-hover:text-[#6345A6] transition-colors leading-tight">
-                                      {item.label}
+                            {column.length === 0 ? (
+                              <div className="px-2 py-3 text-center text-[10px] italic text-slate-400">
+                                No matching masters
+                              </div>
+                            ) : (
+                              column.map((item) => {
+                                const isUsed = !!item.isFertiTrace;
+                                return (
+                                  <Link
+                                    key={item.route + item.label}
+                                    href={item.route}
+                                    onClick={() => setOpenMenu(null)}
+                                    className={`group flex items-center justify-between rounded-xl p-2 transition-all border ${
+                                      isUsed
+                                        ? 'bg-purple-50/80 hover:bg-purple-100/90 border-purple-200/90 hover:border-purple-300 shadow-2xs'
+                                        : 'bg-slate-50/60 hover:bg-slate-100/90 border-slate-200/70 hover:border-slate-300 text-slate-700'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0 pr-1">
+                                      <span
+                                        className={`h-2 w-2 rounded-full shrink-0 transition-transform group-hover:scale-125 ${
+                                          isUsed
+                                            ? 'bg-[#6345A6] ring-2 ring-purple-200'
+                                            : 'bg-slate-400'
+                                        }`}
+                                      />
+                                      <span
+                                        className={`text-xs truncate transition-colors ${
+                                          isUsed
+                                            ? 'font-bold text-purple-950 group-hover:text-[#6345A6]'
+                                            : 'font-medium text-slate-700 group-hover:text-slate-900'
+                                        }`}
+                                      >
+                                        {item.label}
+                                      </span>
+                                    </div>
+                                    <span
+                                      className={`shrink-0 rounded-md px-1.5 py-0.5 text-[8.5px] font-bold leading-none ${
+                                        isUsed
+                                          ? 'bg-[#6345A6] text-white shadow-2xs'
+                                          : 'bg-slate-200/80 text-slate-600'
+                                      }`}
+                                    >
+                                      {isUsed ? 'In Use' : 'Standard'}
                                     </span>
-                                    <span className="text-[10px] text-slate-300 group-hover:text-[#6345A6] transition-colors opacity-0 group-hover:opacity-100">
-                                      →
-                                    </span>
-                                  </div>
-                                  <span className="text-[10px] text-slate-400 font-medium mt-0.5 leading-snug line-clamp-1">
-                                    {item.desc}
-                                  </span>
-                                </Link>
-                              ))}
-                            </div>
+                                  </Link>
+                                );
+                              })
+                            )}
                           </div>
                         ))}
                       </div>
 
-                      {/* Dropdown Footer: Link to Full Master Directory */}
+                      {/* Dropdown Footer */}
                       <div className="mt-4 flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-xs text-slate-500">
-                        <span>Need drugs, allergy, or other clinical registries?</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-slate-700">
+                            Showing {totalVisibleMasters} registries
+                          </span>
+                          <span className="text-slate-300">•</span>
+                          <span className="text-[11px] text-purple-800 font-bold">
+                            12 highlighted for FertiTrace project
+                          </span>
+                        </div>
                         <Link
                           href="/masters"
                           onClick={() => setOpenMenu(null)}
                           className="font-bold text-[#6345A6] hover:underline flex items-center gap-1"
                         >
-                          <span>Full Master Directory (32 Masters)</span>
+                          <span>Open Full Master Directory</span>
                           <span>→</span>
                         </Link>
                       </div>
                     </div>
                   ) : (
                     /* General Dropdowns (e.g. Cryo) */
-                    <div
-                      className="absolute left-0 top-full z-50 mt-2.5 min-w-[240px] rounded-2xl border border-slate-200 bg-white py-2 shadow-xl animate-in fade-in zoom-in-95 duration-150"
-                    >
+                    <div className="absolute left-0 top-full z-50 mt-2.5 min-w-[240px] rounded-2xl border border-slate-200 bg-white py-2 shadow-xl animate-in fade-in zoom-in-95 duration-150">
                       <div className="px-3 py-1.5 border-b border-slate-100 mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                         {menu.label} Navigation
                       </div>
