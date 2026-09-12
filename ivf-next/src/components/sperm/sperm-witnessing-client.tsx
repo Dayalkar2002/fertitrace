@@ -5,19 +5,20 @@ import { usePatient } from '@/contexts/patient-context';
 import { useAuth } from '@/contexts/auth-context';
 import { SemenSelfForm } from '@/components/cryo/semen-self-form';
 import { SemenDonorForm } from '@/components/cryo/semen-donor-form';
+import {
+  defaultSelectionFromMode,
+  deriveSpermFlow,
+  type SpermFlowSelection,
+  type SpermSource,
+  type SampleState,
+  type IntendedUse,
+  type SemenAnalysisType,
+  type IuiIndication,
+  type CycleIndication,
+  type AnalysisEntryPath,
+} from '@/lib/sperm-flow';
 
-export type SpermSource = 'Husband / Partner' | 'Donor';
-export type SampleState = 'Fresh' | 'Frozen' | 'Thawed / Prepared';
-export type IntendedUse = 'Semen Analysis' | 'IUI' | 'IVF / ICSI' | 'Cryopreservation';
-export type SemenAnalysisType = 'HSA' | 'SQA';
-export type IuiIndication = 
-  | 'HUSBAND SINGLE IUI' 
-  | 'HUSBAND DOUBLE IUI' 
-  | 'HUSBAND THAW SINGLE' 
-  | 'HUSBAND THAW DOUBLE' 
-  | 'DONOR SINGLE IUI' 
-  | 'DONOR DOUBLE IUI' 
-  | 'TIC / FM';
+export type { SpermSource, SampleState, IntendedUse, SemenAnalysisType, IuiIndication };
 
 export function SpermWitnessingClient() {
   const { selectedPatient } = usePatient();
@@ -26,56 +27,107 @@ export function SpermWitnessingClient() {
   // Workflow View State: 'registration' (Default initial view) | 'workflow' (Downstream view after Accept & Continue)
   const [currentView, setCurrentView] = useState<'registration' | 'workflow'>('registration');
 
-  // 1. Top Bar Demographics
-  const patientId = selectedPatient?.uhid || (selectedPatient?.id ? `P-2026-00${selectedPatient.id}` : 'P-2026-00125');
-  const patientName = selectedPatient?.name || 'Mrs. Anjali Sharma';
-  const partnerName = selectedPatient?.partner || 'Mr. Rohit Sharma';
-  const ageSex = selectedPatient?.age ? `${selectedPatient.age} Y / F` : '31 Y / F';
-  const lmpDate = '02-Aug-2026';
-  const cycleDay = '16';
-  const displayDate = '18-Aug-2026';
-  const operator = user?.userName || 'Sachin@gmail.com';
+  // 1. Top Bar Demographics — never invent a patient when none is selected
+  const hasPatient = Boolean(selectedPatient);
+  const blank = '—';
+  const patientId = selectedPatient?.uhid || (selectedPatient?.id ? String(selectedPatient.id) : blank);
+  const patientName = selectedPatient?.name || blank;
+  const ageSex = selectedPatient
+    ? `${selectedPatient.age || blank} Y / ${selectedPatient.gender || 'F'}`
+    : blank;
+  const lmpDate = blank;
+  const cycleDay = blank;
+  const displayDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const operator = user?.userName || blank;
 
-  // 2. Core Registration State (Box 1)
-  const [spermSource, setSpermSource] = useState<SpermSource>('Husband / Partner');
-  const [sampleState, setSampleState] = useState<SampleState>('Fresh');
-  const [intendedUse, setIntendedUse] = useState<IntendedUse>('IUI');
+  // Outcome-first registration (SMART indication drives source / type / fields)
+  const [flowSel, setFlowSel] = useState<SpermFlowSelection>(() => defaultSelectionFromMode('IUI'));
+  const flow = deriveSpermFlow(flowSel);
 
-  // Sub-types & Indications
-  const [semenAnalysisType, setSemenAnalysisType] = useState<SemenAnalysisType>('HSA');
-  const [iuiIndication, setIuiIndication] = useState<IuiIndication>('HUSBAND SINGLE IUI');
+  const spermSource = flow.spermSource;
+  const sampleState = flow.sampleState;
+  const intendedUse = flow.intendedUse;
+  const semenAnalysisType: SemenAnalysisType = flow.semenAnalysisType ?? flowSel.analysisType;
+  const iuiIndication = flowSel.iuiIndication;
 
-  // Radio Dependency Logic:
-  // When 'Donor' is selected -> Donor sample in ART is strictly Frozen (Quarantined)
-  const handleSpermSourceChange = (source: SpermSource) => {
-    setSpermSource(source);
-    if (source === 'Donor') {
-      setSampleState('Frozen');
-    } else {
-      // Return to fresh by default if previously on frozen because of donor
-      setSampleState('Fresh');
+  function patchFlow(partial: Partial<SpermFlowSelection>) {
+    setFlowSel((prev) => ({ ...prev, ...partial }));
+  }
+
+  function setSemenAnalysisType(type: SemenAnalysisType) {
+    patchFlow({ analysisType: type, iuiIndication: type });
+  }
+
+  function applyRadios(next: { source?: SpermSource; state?: SampleState; use?: IntendedUse }) {
+    const source = next.source ?? spermSource;
+    const rawState = next.state ?? sampleState;
+    const state: 'Fresh' | 'Frozen' = rawState === 'Frozen' || rawState === 'Thawed / Prepared' ? 'Frozen' : 'Fresh';
+    const use = next.use ?? intendedUse;
+    const preferDouble = flow.iuiInscription === 'DOUBLE';
+
+    if (use === 'Semen Analysis') {
+      patchFlow({
+        module: 'SEMEN_ANALYSIS',
+        analysisType: flowSel.analysisType,
+        iuiIndication: flowSel.analysisType,
+      });
+      return;
     }
-  };
+    if (use === 'Cryopreservation') {
+      patchFlow({
+        module: 'CRYOPRESERVATION',
+        cryoType: state === 'Frozen' ? 'Frozen' : 'Fresh',
+        cryoSource: source,
+      });
+      return;
+    }
+    if (use === 'IVF / ICSI') {
+      patchFlow({
+        module: 'CYCLE',
+        cycleSpermId: source === 'Donor' ? 'donor_frozen' : state === 'Frozen' ? 'husband_frozen' : 'husband_fresh',
+      });
+      return;
+    }
 
-  // URL Query Sync
+    let indication: IuiIndication;
+    if (source === 'Donor') indication = preferDouble ? 'DONOR DOUBLE IUI' : 'DONOR SINGLE IUI';
+    else if (state === 'Frozen') indication = preferDouble ? 'HUSBAND THAW DOUBLE' : 'HUSBAND THAW SINGLE';
+    else indication = preferDouble ? 'HUSBAND DOUBLE IUI' : 'HUSBAND SINGLE IUI';
+    patchFlow({ module: 'IUI', iuiIndication: indication });
+  }
+
+  // URL Query Sync — module from SMART nav shortcuts
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const modeParam = params.get('mode');
-      if (modeParam === 'Cryopreservation') setIntendedUse('Cryopreservation');
-      else if (modeParam === 'IUI') setIntendedUse('IUI');
-      else if (modeParam === 'Semen Analysis') setIntendedUse('Semen Analysis');
-      else if (modeParam === 'IVF / ICSI') setIntendedUse('IVF / ICSI');
-    }
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    setFlowSel(defaultSelectionFromMode(params.get('mode')));
   }, []);
 
-  const cycleVisitId = intendedUse === 'IUI' 
-    ? 'IUI-2026-0034' 
-    : intendedUse === 'Semen Analysis' 
-    ? (semenAnalysisType === 'HSA' ? 'HSA-2026-0089' : 'SQA-2026-0045')
-    : intendedUse === 'Cryopreservation' 
-    ? 'CRYO-2026-0042' 
-    : 'IVF-2026-00158';
+  useEffect(() => {
+    if (!hasPatient) setCurrentView('registration');
+  }, [hasPatient]);
+
+  useEffect(() => {
+    if (!selectedPatient) {
+      setPartnerId('');
+      setPartnerDobAge('');
+      setPartnerPhone('');
+      return;
+    }
+    setPartnerId(selectedPatient.uhid || String(selectedPatient.id));
+    setPartnerDobAge(selectedPatient.age ? `${selectedPatient.age} Y` : '');
+    setPartnerPhone(selectedPatient.mobile || selectedPatient.phone || '');
+  }, [selectedPatient]);
+
+  const cycleVisitId = !hasPatient
+    ? blank
+    : intendedUse === 'IUI'
+    ? 'IUI-pending'
+    : intendedUse === 'Semen Analysis'
+    ? (semenAnalysisType === 'HSA' ? 'HSA-pending' : 'SQA-pending')
+    : intendedUse === 'Cryopreservation'
+    ? 'CRYO-pending'
+    : 'IVF-pending';
 
   const procedureLabel = intendedUse === 'IUI' 
     ? `IUI (${iuiIndication})` 
@@ -86,62 +138,62 @@ export function SpermWitnessingClient() {
     : 'IVF / ICSI';
 
   // Collection fields
-  const [collectionDateTime, setCollectionDateTime] = useState('2026-08-18T09:42');
+  const [collectionDateTime, setCollectionDateTime] = useState('');
   const [collectionMethod, setCollectionMethod] = useState('Masturbation');
-  const [abstinenceDays, setAbstinenceDays] = useState(3);
-  const [collectedBy, setCollectedBy] = useState('EMB-01 - Dr. Satish');
-  const [receivedBy, setReceivedBy] = useState('EMB-01 - Dr. Satish');
+  const [abstinenceDays, setAbstinenceDays] = useState(0);
+  const [collectedBy, setCollectedBy] = useState('');
+  const [receivedBy, setReceivedBy] = useState('');
   const [notes, setNotes] = useState('');
 
   // Identifiers & Witness Scanning
-  const [sampleId, setSampleId] = useState('SEM-26-00018472');
+  const [sampleId, setSampleId] = useState('');
   const [rfidBarcode, setRfidBarcode] = useState('');
-  const [isValidated, setIsValidated] = useState(true);
+  const [isValidated, setIsValidated] = useState(false);
 
   // Source details
-  const [partnerId, setPartnerId] = useState('HUSB-26-00017');
-  const [partnerDobAge, setPartnerDobAge] = useState('34 Y');
-  const [partnerPhone, setPartnerPhone] = useState('9876543210');
-  const [frozenStrawId, setFrozenStrawId] = useState('FROZ-26-000554');
-  const [storageLocation, setStorageLocation] = useState('Tank 1 - Canister 2');
+  const [partnerId, setPartnerId] = useState('');
+  const [partnerDobAge, setPartnerDobAge] = useState('');
+  const [partnerPhone, setPartnerPhone] = useState('');
+  const [frozenStrawId, setFrozenStrawId] = useState('');
+  const [storageLocation, setStorageLocation] = useState('');
   const [donorType, setDonorType] = useState('Select');
-  const [consentVerified, setConsentVerified] = useState(true);
+  const [consentVerified, setConsentVerified] = useState(false);
 
   // Traceability Sample IDs
-  const [prepSampleId, setPrepSampleId] = useState('PREP-26-000918');
-  const [finalSyringeId, setFinalSyringeId] = useState('IUI-SYR-000918');
+  const [prepSampleId, setPrepSampleId] = useState('');
+  const [finalSyringeId, setFinalSyringeId] = useState('');
 
   // Semen Analysis Parameters (Box 5: Before Processing / Pre-Freezing)
-  const [volume, setVolume] = useState('2.8');
-  const [appearance, setAppearance] = useState('Grey White');
-  const [liquefaction, setLiquefaction] = useState('30');
-  const [ph, setPh] = useState('7.5');
-  const [concentration, setConcentration] = useState('48');
-  const [totalCount, setTotalCount] = useState('134');
-  const [progMotility, setProgMotility] = useState('62');
-  const [totalMotility, setTotalMotility] = useState('72');
-  const [morphology, setMorphology] = useState('5');
-  const [vitality, setVitality] = useState('80');
-  const [wbc, setWbc] = useState('0-1');
-  const [agglutination, setAgglutination] = useState('None');
+  const [volume, setVolume] = useState('');
+  const [appearance, setAppearance] = useState('');
+  const [liquefaction, setLiquefaction] = useState('');
+  const [ph, setPh] = useState('');
+  const [concentration, setConcentration] = useState('');
+  const [totalCount, setTotalCount] = useState('');
+  const [progMotility, setProgMotility] = useState('');
+  const [totalMotility, setTotalMotility] = useState('');
+  const [morphology, setMorphology] = useState('');
+  const [vitality, setVitality] = useState('');
+  const [wbc, setWbc] = useState('');
+  const [agglutination, setAgglutination] = useState('');
   const [analysisRemarks, setAnalysisRemarks] = useState('');
-  const [analysisResult, setAnalysisResult] = useState('NORMOZOOSPERMIA');
-  const [analysisSaved, setAnalysisSaved] = useState(true);
+  const [analysisResult, setAnalysisResult] = useState('');
+  const [analysisSaved, setAnalysisSaved] = useState(false);
 
   // Post-Processing & Survival Motility Parameters (SQA & IUI Wash / Thaw)
-  const [postVolume, setPostVolume] = useState('0.5');
-  const [postCount, setPostCount] = useState('38');
-  const [postProgMotility, setPostProgMotility] = useState('75');
-  const [postTotalMotility, setPostTotalMotility] = useState('85');
-  const [survival24Hr, setSurvival24Hr] = useState('45');
-  const [survival12Hr, setSurvival12Hr] = useState('60');
-  const [prepMethod, setPrepMethod] = useState('Density Gradient (80% / 40%)');
-  const [prepMedia, setPrepMedia] = useState('Sperm Preparation Media (HEPES)');
-  const [linearity, setLinearity] = useState('Rapid Linear');
+  const [postVolume, setPostVolume] = useState('');
+  const [postCount, setPostCount] = useState('');
+  const [postProgMotility, setPostProgMotility] = useState('');
+  const [postTotalMotility, setPostTotalMotility] = useState('');
+  const [survival24Hr, setSurvival24Hr] = useState('');
+  const [survival12Hr, setSurvival12Hr] = useState('');
+  const [prepMethod, setPrepMethod] = useState('');
+  const [prepMedia, setPrepMedia] = useState('');
+  const [linearity, setLinearity] = useState('');
 
   // Pre-IUI Authorization (Box 6)
-  const [authBy, setAuthBy] = useState('DR-01 - Dr. Satish');
-  const [authTime, setAuthTime] = useState('2026-08-18T10:30');
+  const [authBy, setAuthBy] = useState('');
+  const [authTime, setAuthTime] = useState('');
 
   // Toast notification
   const [toast, setToast] = useState<string | null>(null);
@@ -151,6 +203,10 @@ export function SpermWitnessingClient() {
   }
 
   function handleGenerateSampleId() {
+    if (!hasPatient) {
+      showToast('Select a patient first.');
+      return;
+    }
     const randomNum = Math.floor(10000000 + Math.random() * 90000000);
     const newId = `SEM-26-${randomNum.toString().slice(0, 8)}`;
     setSampleId(newId);
@@ -158,14 +214,16 @@ export function SpermWitnessingClient() {
   }
 
   function handleBarcodeScan() {
-    if (!rfidBarcode.trim()) {
-      setRfidBarcode('RF-88921-X');
-      setIsValidated(true);
-      showToast('Scanned RFID tag RF-88921-X verified and matched to patient!');
-    } else {
-      setIsValidated(true);
-      showToast(`Scanned tag ${rfidBarcode} verified successfully!`);
+    if (!hasPatient) {
+      showToast('Select a patient first.');
+      return;
     }
+    if (!rfidBarcode.trim()) {
+      showToast('Scan or enter a barcode / RFID.');
+      return;
+    }
+    setIsValidated(true);
+    showToast(`Scanned tag ${rfidBarcode} verified successfully!`);
   }
 
   return (
@@ -192,7 +250,9 @@ export function SpermWitnessingClient() {
 
           <div>
             <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Patient Name</span>
-            <span className="font-bold text-slate-800 text-sm">{patientName}</span>
+            <span className={`text-sm ${hasPatient ? 'font-bold text-slate-800' : 'font-medium text-slate-400'}`}>
+              {hasPatient ? patientName : 'Select a patient'}
+            </span>
           </div>
 
           <div>
@@ -244,197 +304,168 @@ export function SpermWitnessingClient() {
                   1. SPERM SAMPLE REGISTRATION
                 </h2>
                 <span className="text-[11px] bg-white/20 px-2 py-0.5 rounded font-medium">
-                  Mode: {intendedUse}
+                  {flow.summaryTitle || intendedUse}
                 </span>
               </div>
 
               <div className="p-4 space-y-4 text-xs">
-                {/* 3 Radio Selectors (Sperm Source, Sample State, Intended Use) with Reactive Constraints */}
+                {/* Outcome-first: module + SMART indication, then derived source/type */}
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4 border-b border-slate-200 pb-4">
-                  {/* 1. SPERM SOURCE */}
-                  <div className="md:col-span-3">
-                    <label className="block text-[11px] font-bold text-slate-700 mb-2">1. SPERM SOURCE</label>
-                    <div className="space-y-2">
-                      <label className="flex items-center gap-2 cursor-pointer text-slate-700 font-medium">
-                        <input
-                          type="radio"
-                          name="spermSource"
-                          value="Husband / Partner"
-                          checked={spermSource === 'Husband / Partner'}
-                          onChange={() => handleSpermSourceChange('Husband / Partner')}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300"
-                        />
-                        <span>Husband / Partner</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer text-slate-700 font-medium">
-                        <input
-                          type="radio"
-                          name="spermSource"
-                          value="Donor"
-                          checked={spermSource === 'Donor'}
-                          onChange={() => handleSpermSourceChange('Donor')}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300"
-                        />
-                        <span>Donor</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* 2. SAMPLE STATE (Fresh is DISABLED when Donor is selected) */}
-                  <div className="md:col-span-3">
-                    <label className="block text-[11px] font-bold text-slate-700 mb-2">2. SAMPLE STATE</label>
-                    <div className="space-y-2">
-                      {(['Fresh', 'Frozen', 'Thawed / Prepared'] as SampleState[]).map((state) => {
-                        const isFreshDonorDisabled = spermSource === 'Donor' && state === 'Fresh';
-                        return (
-                          <label
-                            key={state}
-                            className={`flex items-center gap-2 font-medium ${
-                              isFreshDonorDisabled
-                                ? 'cursor-not-allowed opacity-40 text-slate-400'
-                                : 'cursor-pointer text-slate-700'
-                            }`}
-                            title={isFreshDonorDisabled ? 'Donor sperm must be quarantined & frozen under ART rules' : ''}
-                          >
-                            <input
-                              type="radio"
-                              name="sampleState"
-                              value={state}
-                              checked={sampleState === state}
-                              disabled={isFreshDonorDisabled}
-                              onChange={() => {
-                                setSampleState(state);
-                              }}
-                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300"
-                            />
-                            <span>{state}</span>
-                            {isFreshDonorDisabled && (
-                              <span className="text-[9px] text-rose-500 font-bold">(N/A for Donor)</span>
-                            )}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* 3. INTENDED USE */}
-                  <div className="md:col-span-3">
-                    <label className="block text-[11px] font-bold text-slate-700 mb-2">3. INTENDED USE</label>
-                    <div className="space-y-2">
-                      {(['Semen Analysis', 'IUI', 'IVF / ICSI', 'Cryopreservation'] as IntendedUse[]).map((use) => {
-                        const isHsaDonorDisabled = spermSource === 'Donor' && use === 'Semen Analysis';
-                        return (
-                          <label
-                            key={use}
-                            className={`flex items-center gap-2 font-medium ${
-                              isHsaDonorDisabled
-                                ? 'cursor-not-allowed opacity-40 text-slate-400'
-                                : 'cursor-pointer text-slate-700'
-                            }`}
-                            title={isHsaDonorDisabled ? 'Semen Analysis (HSA) is only performed for Husband samples' : ''}
-                          >
-                            <input
-                              type="radio"
-                              name="intendedUse"
-                              value={use}
-                              checked={intendedUse === use}
-                              disabled={isHsaDonorDisabled}
-                              onChange={() => {
-                                setIntendedUse(use);
-                              }}
-                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300"
-                            />
-                            <span>{use}</span>
-                            {isHsaDonorDisabled && (
-                              <span className="text-[9px] text-slate-400 font-bold">(Husband Only)</span>
-                            )}
-                          </label>
-                        );
-                      })}
-                    </div>
-
-                    {/* Sub-Selection for Semen Analysis: HSA vs SQA */}
-                    {intendedUse === 'Semen Analysis' && (
-                      <div className="mt-3 p-2 bg-blue-50/80 border border-blue-200 rounded-lg space-y-1.5 animate-fadeIn">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-blue-900">
-                            Analysis Method (SMART)
-                          </span>
+                  <div className="md:col-span-9 space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-2">1. SPERM SOURCE</label>
+                        <div className="space-y-2">
+                          {(['Husband / Partner', 'Donor'] as SpermSource[]).map((src) => {
+                            const donorBlocked = intendedUse === 'Semen Analysis' && src === 'Donor';
+                            return (
+                              <label
+                                key={src}
+                                className={`flex items-center gap-2 text-[11px] font-medium ${
+                                  donorBlocked ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-700'
+                                }`}
+                              >
+                                <input
+                                  type="radio"
+                                  name="spermSource"
+                                  checked={spermSource === src}
+                                  disabled={donorBlocked}
+                                  onChange={() =>
+                                    applyRadios({
+                                      source: src,
+                                      state:
+                                        src === 'Donor' && intendedUse !== 'Cryopreservation'
+                                          ? 'Frozen'
+                                          : sampleState,
+                                    })
+                                  }
+                                  className="h-4 w-4 text-blue-600 border-slate-300"
+                                />
+                                <span>{src}</span>
+                              </label>
+                            );
+                          })}
                         </div>
-                        <div className="flex items-center gap-3">
-                          <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold text-slate-800">
-                            <input
-                              type="radio"
-                              name="semenAnalysisType"
-                              value="HSA"
-                              checked={semenAnalysisType === 'HSA'}
-                              onChange={() => {
-                                setSemenAnalysisType('HSA');
-                              }}
-                              className="h-3.5 w-3.5 text-blue-600"
-                            />
-                            <span>HSA</span>
-                          </label>
-                          <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold text-slate-800">
-                            <input
-                              type="radio"
-                              name="semenAnalysisType"
-                              value="SQA"
-                              checked={semenAnalysisType === 'SQA'}
-                              onChange={() => {
-                                setSemenAnalysisType('SQA');
-                              }}
-                              className="h-3.5 w-3.5 text-blue-600"
-                            />
-                            <span>SQA</span>
-                          </label>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-2">2. SAMPLE STATE</label>
+                        <div className="space-y-2">
+                          {(['Fresh', 'Frozen', 'Thawed / Prepared'] as SampleState[]).map((state) => {
+                            const donorFreshBlocked =
+                              spermSource === 'Donor' &&
+                              state === 'Fresh' &&
+                              intendedUse !== 'Cryopreservation';
+                            const analysisFrozenBlocked = intendedUse === 'Semen Analysis' && state !== 'Fresh';
+                            const cryoThawBlocked = intendedUse === 'Cryopreservation' && state === 'Thawed / Prepared';
+                            const blocked = donorFreshBlocked || analysisFrozenBlocked || cryoThawBlocked;
+                            return (
+                              <label
+                                key={state}
+                                className={`flex items-center gap-2 text-[11px] font-medium ${
+                                  blocked ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-700'
+                                }`}
+                              >
+                                <input
+                                  type="radio"
+                                  name="sampleState"
+                                  checked={sampleState === state}
+                                  disabled={blocked}
+                                  onChange={() => applyRadios({ state })}
+                                  className="h-4 w-4 text-blue-600 border-slate-300"
+                                />
+                                <span>{state}</span>
+                              </label>
+                            );
+                          })}
                         </div>
-                        <p className="text-[9px] text-blue-700 leading-tight">
-                          {semenAnalysisType === 'HSA'
-                            ? '• Diagnostic WHO 6th ed (1-page report, no washing).'
-                            : '• Includes Post-Wash & 24-hr survival assessment.'}
-                        </p>
                       </div>
-                    )}
-
-                    {/* Sub-Selection for IUI: IUI Indication */}
-                    {intendedUse === 'IUI' && (
-                      <div className="mt-3 p-2 bg-indigo-50/80 border border-indigo-200 rounded-lg space-y-1.5 animate-fadeIn">
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-indigo-900">
-                          IUI Indication (Excel Flow)
-                        </label>
-                        <select
-                          value={iuiIndication}
-                          onChange={(e) => {
-                            const val = e.target.value as IuiIndication;
-                            setIuiIndication(val);
-                            if (val.includes('DONOR')) {
-                              setSpermSource('Donor');
-                              setSampleState('Frozen');
-                            } else if (val.includes('THAW')) {
-                              setSpermSource('Husband / Partner');
-                              setSampleState('Frozen');
-                            } else if (val.includes('HUSBAND SINGLE') || val.includes('HUSBAND DOUBLE')) {
-                              setSpermSource('Husband / Partner');
-                              setSampleState('Fresh');
-                            }
-                          }}
-                          className="h-7 w-full rounded border border-indigo-300 bg-white px-1.5 text-[10px] font-bold text-indigo-900"
-                        >
-                          <option value="HUSBAND SINGLE IUI">HUSBAND SINGLE IUI (Fresh • 1 Page)</option>
-                          <option value="HUSBAND DOUBLE IUI">HUSBAND DOUBLE IUI (Fresh • 2 Pages)</option>
-                          <option value="HUSBAND THAW SINGLE">HUSBAND THAW SINGLE (Frozen • 1 Page)</option>
-                          <option value="HUSBAND THAW DOUBLE">HUSBAND THAW DOUBLE (Frozen • 2 Pages)</option>
-                          <option value="DONOR SINGLE IUI">DONOR SINGLE IUI (Frozen Quarantined • 1 Page)</option>
-                          <option value="DONOR DOUBLE IUI">DONOR DOUBLE IUI (Frozen Quarantined • 2 Pages)</option>
-                          <option value="TIC / FM">TIC / FM (Timed Intercourse / Follicular Study)</option>
-                        </select>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-2">3. INTENDED USE</label>
+                        <div className="space-y-2">
+                          {(['Semen Analysis', 'IUI', 'IVF / ICSI', 'Cryopreservation'] as IntendedUse[]).map((use) => {
+                            const hsaDonorDisabled = spermSource === 'Donor' && use === 'Semen Analysis';
+                            return (
+                              <label
+                                key={use}
+                                className={`flex items-center gap-2 text-[11px] font-medium ${
+                                  hsaDonorDisabled ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-700'
+                                }`}
+                              >
+                                <input
+                                  type="radio"
+                                  name="intendedUse"
+                                  checked={intendedUse === use}
+                                  disabled={hsaDonorDisabled}
+                                  onChange={() => applyRadios({ use })}
+                                  className="h-4 w-4 text-blue-600 border-slate-300"
+                                />
+                                <span>{use}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                        {intendedUse === 'Semen Analysis' && (
+                          <div className="mt-3">
+                            <select
+                              value={`${semenAnalysisType}|${flowSel.analysisEntryPath}`}
+                              onChange={(e) => {
+                                const [type, path] = e.target.value.split('|') as [SemenAnalysisType, AnalysisEntryPath];
+                                patchFlow({ analysisType: type, iuiIndication: type, analysisEntryPath: path });
+                              }}
+                              className="h-7 w-full rounded border border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-800"
+                            >
+                              <option value="HSA|iui">HSA — Via IUI</option>
+                              <option value="HSA|cycle">HSA — Via Cycle</option>
+                              <option value="SQA|iui">SQA — Via IUI</option>
+                              <option value="SQA|cycle">SQA — Via Cycle</option>
+                            </select>
+                          </div>
+                        )}
+                        {intendedUse === 'IUI' && (
+                          <div className="mt-3 flex items-center gap-4">
+                            {(['SINGLE', 'DOUBLE'] as const).map((n) => (
+                              <label key={n} className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold">
+                                <input
+                                  type="radio"
+                                  name="iuiInscription"
+                                  checked={(flow.iuiInscription || 'SINGLE') === n}
+                                  onChange={() => {
+                                    const double = n === 'DOUBLE';
+                                    let indication: IuiIndication;
+                                    if (spermSource === 'Donor') indication = double ? 'DONOR DOUBLE IUI' : 'DONOR SINGLE IUI';
+                                    else if (sampleState === 'Frozen') indication = double ? 'HUSBAND THAW DOUBLE' : 'HUSBAND THAW SINGLE';
+                                    else indication = double ? 'HUSBAND DOUBLE IUI' : 'HUSBAND SINGLE IUI';
+                                    patchFlow({ iuiIndication: indication });
+                                  }}
+                                  className="h-3.5 w-3.5 text-blue-600"
+                                />
+                                {n}
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                        {intendedUse === 'IVF / ICSI' && (
+                          <div className="mt-3 flex items-center gap-4">
+                            {(['IVF', 'ICSI'] as CycleIndication[]).map((c) => (
+                              <label key={c} className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold">
+                                <input type="radio" name="cycleIndication" checked={flowSel.cycleIndication === c} onChange={() => patchFlow({ cycleIndication: c })} className="h-3.5 w-3.5 text-blue-600" />
+                                {c}
+                              </label>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
                   </div>
 
-                  {/* Collection Parameters Side Column */}
-                  <div className="md:col-span-3 space-y-2.5">
+
+                  {/* Collection Parameters — shown when SMART requires a fresh collection */}
+                  <div className={`md:col-span-3 space-y-2.5 ${flow.collectionRequired ? '' : 'opacity-40 pointer-events-none'}`}>
+                    {!flow.collectionRequired && (
+                      <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">
+                        Collection N/A for this outcome (frozen bank / TIC)
+                      </p>
+                    )}
                     <div>
                       <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Collection Date / Time</label>
                       <input
@@ -474,6 +505,7 @@ export function SpermWitnessingClient() {
                         onChange={(e) => setCollectedBy(e.target.value)}
                         className="h-7 w-full rounded border border-slate-300 px-2 text-[11px] outline-none focus:border-blue-500"
                       >
+                        <option value="">Select</option>
                         <option>EMB-01 - Dr. Satish</option>
                         <option>EMB-02 - Dr. Amit Verma</option>
                         <option>EMB-03 - Dr. Neha Kapoor</option>
@@ -486,6 +518,7 @@ export function SpermWitnessingClient() {
                         onChange={(e) => setReceivedBy(e.target.value)}
                         className="h-7 w-full rounded border border-slate-300 px-2 text-[11px] outline-none focus:border-blue-500"
                       >
+                        <option value="">Select</option>
                         <option>EMB-01 - Dr. Satish</option>
                         <option>EMB-02 - Dr. Amit Verma</option>
                       </select>
@@ -702,35 +735,41 @@ export function SpermWitnessingClient() {
 
                 <div className="p-4 space-y-2 text-xs">
                   {[
-                    { key: 'patientCoupleMatch', label: 'Patient / Couple Match' },
-                    { key: 'cycleVisitMatch', label: 'Cycle / Visit Match' },
-                    { key: 'sourceValid', label: 'Source Valid' },
-                    { key: 'sampleStateValid', label: 'Sample State Valid' },
-                    { key: 'intendedUseValid', label: 'Intended Use Valid' },
-                    { key: 'sampleAvailability', label: 'Sample Availability' },
-                    { key: 'processSequenceValid', label: 'Process Sequence Valid' },
-                    { key: 'operatorAuthorized', label: 'Operator Authorized' },
-                  ].map(({ key, label }) => (
+                    { key: 'patientCoupleMatch', label: 'Patient / Couple Match', ok: hasPatient },
+                    { key: 'cycleVisitMatch', label: 'Cycle / Visit Match', ok: hasPatient },
+                    { key: 'sourceValid', label: 'Source Valid', ok: hasPatient },
+                    { key: 'sampleStateValid', label: 'Sample State Valid', ok: hasPatient },
+                    { key: 'intendedUseValid', label: 'Intended Use Valid', ok: hasPatient },
+                    { key: 'sampleAvailability', label: 'Sample Availability', ok: hasPatient && Boolean(sampleId) },
+                    { key: 'processSequenceValid', label: 'Process Sequence Valid', ok: hasPatient && isValidated },
+                    { key: 'operatorAuthorized', label: 'Operator Authorized', ok: Boolean(user) },
+                  ].map(({ key, label, ok }) => (
                     <div key={key} className="flex items-center justify-between border-b border-slate-100 pb-1">
                       <span className="text-slate-600 text-[11px]">{label}</span>
-                      <span className="text-emerald-600 font-bold text-xs">✓</span>
+                      <span className={`font-bold text-xs ${ok ? 'text-emerald-600' : 'text-slate-300'}`}>{ok ? '✓' : '—'}</span>
                     </div>
                   ))}
 
                   {/* Status Banner */}
-                  <div className="mt-4 rounded-xl border border-emerald-300 bg-emerald-50 p-3 flex items-center gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-xs">
-                      <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                        <polyline points="9 12 11 14 15 10" />
-                      </svg>
+                  {hasPatient ? (
+                    <div className="mt-4 rounded-xl border border-emerald-300 bg-emerald-50 p-3 flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-xs">
+                        <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                          <polyline points="9 12 11 14 15 10" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div className="font-black text-emerald-900 text-xs tracking-wide">PATIENT SELECTED</div>
+                        <div className="text-[11px] text-emerald-800">Complete sample details, then continue.</div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="font-black text-emerald-900 text-xs tracking-wide">ALL CHECKS PASSED</div>
-                      <div className="text-[11px] text-emerald-800">Sample is Valid.</div>
-                      <div className="text-[10px] text-emerald-700 font-medium">You can proceed to next step.</div>
+                  ) : (
+                    <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3">
+                      <div className="font-black text-amber-900 text-xs tracking-wide">NO PATIENT SELECTED</div>
+                      <div className="text-[11px] text-amber-800">Use Select Patient in the top bar. No sample data is shown until then.</div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
 
@@ -738,8 +777,16 @@ export function SpermWitnessingClient() {
                 <button
                   type="button"
                   onClick={() => {
+                    if (!hasPatient) {
+                      showToast('Select a patient first. No sample data is created without a patient.');
+                      return;
+                    }
                     setCurrentView('workflow');
-                    showToast(`Sample validated. Opening ${intendedUse} workflow...`);
+                    showToast(
+                      flow.skipAndrology
+                        ? 'TIC / FM selected. Follicular study only — andrology inputs skipped.'
+                        : `Outcome locked: ${flow.summaryTitle || intendedUse}. Opening SMART inputs...`
+                    );
                   }}
                   className="flex-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 py-2.5 text-xs font-bold text-white shadow-xs transition"
                 >
@@ -772,19 +819,25 @@ export function SpermWitnessingClient() {
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-500 font-medium">Current Flow:</span>
               <span className="rounded-md bg-blue-50 border border-blue-200 px-2.5 py-1 text-xs font-bold text-blue-700">
-                {spermSource} ➔ {sampleState} ➔ {intendedUse}
+                {flow.summaryTitle || intendedUse} • {spermSource} • {sampleState}
               </span>
             </div>
           </div>
 
           {/* DYNAMIC SCREEN ROUTING BASED ON INTENDED USE & SPERM SOURCE */}
           {intendedUse === 'Cryopreservation' ? (
-            /* CRYOPRESERVATION FLOW: Semen Self OR Donor Semen */
             spermSource === 'Donor' ? (
-              <SemenDonorForm />
+              <SemenDonorForm onBack={() => setCurrentView('registration')} />
             ) : (
-              <SemenSelfForm />
+              <SemenSelfForm cryoType={flowSel.cryoType} onBack={() => setCurrentView('registration')} />
             )
+          ) : flow.skipAndrology ? (
+            <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-xs">
+              <h3 className="text-sm font-black text-slate-800">TIC / FM — Andrology not required</h3>
+              <p className="mt-2 text-xs text-slate-600 max-w-xl mx-auto">
+                SMART IUI flow: indication TIC/FM needs follicular study only. Sperm ID, type, before/after processing, and HSA/SQA radios are not used.
+              </p>
+            </div>
           ) : (
             /* STANDARD ANDROLOGY FLOW: BOX 3, BOX 4, BOX 5 / BOX 6 / BOX 7 */
             <>
@@ -917,7 +970,13 @@ export function SpermWitnessingClient() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 bg-white">
-                        {(intendedUse === 'Semen Analysis' ? [
+                        {!(hasPatient && sampleId) ? (
+                          <tr>
+                            <td colSpan={5} className="px-3 py-4 text-center text-slate-400">
+                              No sample recorded. Select a patient and generate a sample ID.
+                            </td>
+                          </tr>
+                        ) : (intendedUse === 'Semen Analysis' ? [
                           { step: 'Sample Received', id: sampleId, time: '18-Aug-2026 09:42', operator: 'EMB-01', status: '✓' },
                           { step: 'Sample Validated', id: sampleId, time: '18-Aug-2026 09:55', operator: 'EMB-01', status: '✓' },
                           { step: 'Liquefaction Evaluation', id: `${liquefaction} min`, time: '18-Aug-2026 10:12', operator: 'EMB-01', status: '✓' },
@@ -1025,7 +1084,8 @@ export function SpermWitnessingClient() {
                           <span className="text-slate-600 font-bold">Analysed By</span>
                           <select className="h-7 rounded border border-slate-300 px-2 text-xs font-medium">
                             <option>EMB-02 - Dr. Amit Verma</option>
-                            <option>EMB-01 - Dr. Satish</option>
+                            <option value="">Select</option>
+                        <option>EMB-01 - Dr. Satish</option>
                             <option>EMB-03 - Dr. Neha Kapoor</option>
                           </select>
                         </div>
@@ -1255,7 +1315,7 @@ export function SpermWitnessingClient() {
                       </div>
 
                       {/* AFTER PROCESSING / POST-THAW SECTION */}
-                      {intendedUse === 'Semen Analysis' && semenAnalysisType === 'HSA' ? (
+                      {intendedUse === 'Semen Analysis' && (semenAnalysisType === 'HSA' || flow.afterProcessing === 'disabled') ? (
                         /* HSA MODE: After Processing is DISABLED (As per SMART HSASummary protocol) */
                         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-slate-600">
                           <div className="flex items-center gap-2 font-bold text-slate-700 mb-1">
@@ -1334,7 +1394,7 @@ export function SpermWitnessingClient() {
                           </div>
 
                           {/* SQA ONLY: 24-HOUR & 12-HOUR SURVIVAL MOTILITY ROW (txtIUIAPAS24Hr in SMART) */}
-                          {intendedUse === 'Semen Analysis' && semenAnalysisType === 'SQA' && (
+                          {((intendedUse === 'Semen Analysis' && semenAnalysisType === 'SQA') || flow.afterProcessing === 'survival24') && (
                             <div className="pt-2 border-t border-blue-200/80 grid grid-cols-2 sm:grid-cols-3 gap-3">
                               <div className="bg-white p-2 rounded border border-blue-200 shadow-2xs">
                                 <label className="block text-[10px] font-bold text-purple-900 mb-0.5">
@@ -1409,9 +1469,11 @@ export function SpermWitnessingClient() {
                   <div className="p-4 pt-0 border-t border-slate-100 mt-2 flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <span className="text-[11px] font-bold text-slate-600">Diagnosis:</span>
+                      {analysisResult && (
                       <span className="rounded bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 font-black text-emerald-800 text-xs tracking-wider">
                         {analysisResult}
                       </span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -1609,22 +1671,23 @@ export function SpermWitnessingClient() {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 bg-white">
-                              {[
-                                { time: '18-Aug 09:42', event: 'Sample Received', id: 'SEM-18472', op: 'EMB-01', act: 'Create' },
-                                { time: '18-Aug 09:55', event: 'Sample Validated', id: 'SEM-18472', op: 'EMB-01', act: 'Validate' },
-                                { time: '18-Aug 10:18', event: 'Prep Completed', id: 'PREP-918', op: 'EMB-02', act: 'Update' },
-                                { time: '18-Aug 10:25', event: 'Syringe Witness', id: 'IUI-SYR-918', op: 'DR-01', act: 'Witness' },
-                                { time: '18-Aug 10:30', event: 'Pre-IUI Auth', id: 'IUI-SYR-918', op: 'DR-01', act: 'Authorize' },
-                                { time: '18-Aug 10:32', event: 'Insemination Done', id: 'IUI-SYR-918', op: 'DR-01', act: 'Complete' },
-                              ].map((row, idx) => (
-                                <tr key={idx} className="hover:bg-slate-50">
-                                  <td className="px-1.5 py-1 text-slate-500 whitespace-nowrap">{row.time}</td>
-                                  <td className="px-1.5 py-1 font-medium text-slate-700">{row.event}</td>
-                                  <td className="px-1.5 py-1 font-mono text-slate-800">{row.id}</td>
-                                  <td className="px-1.5 py-1 text-slate-600">{row.op}</td>
-                                  <td className="px-1.5 py-1 text-blue-700 font-bold">{row.act}</td>
+                              {!(hasPatient && sampleId) ? (
+                                <tr>
+                                  <td colSpan={5} className="px-1.5 py-3 text-center text-slate-400">No audit events.</td>
                                 </tr>
-                              ))}
+                              ) : (
+                                [
+                                  { time: displayDate, event: 'Sample Received', id: sampleId, op: operator || '—', act: 'Create' },
+                                ].map((row, idx) => (
+                                  <tr key={idx} className="hover:bg-slate-50">
+                                    <td className="px-1.5 py-1 text-slate-500 whitespace-nowrap">{row.time}</td>
+                                    <td className="px-1.5 py-1 font-medium text-slate-700">{row.event}</td>
+                                    <td className="px-1.5 py-1 font-mono text-slate-800">{row.id}</td>
+                                    <td className="px-1.5 py-1 text-slate-600">{row.op}</td>
+                                    <td className="px-1.5 py-1 text-blue-700 font-bold">{row.act}</td>
+                                  </tr>
+                                ))
+                              )}
                             </tbody>
                           </table>
                         </div>
