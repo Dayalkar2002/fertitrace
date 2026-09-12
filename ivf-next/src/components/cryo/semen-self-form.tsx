@@ -19,78 +19,63 @@ export interface SemenSelfRecord {
   status: 'Stored' | 'Thawed' | 'Discarded';
 }
 
-export function SemenSelfForm({ onBack }: { onBack?: () => void }) {
+export function SemenSelfForm({ onBack, cryoType = 'Fresh' }: { onBack?: () => void; cryoType?: 'Fresh' | 'Frozen' }) {
   const { selectedPatient } = usePatient();
   const { user } = useAuth();
 
-  const patientName = selectedPatient?.name || 'Mrs. Anjali Sharma';
-  const partnerName = selectedPatient?.partner || 'Mr. Rohit Sharma';
-  const uhid = selectedPatient?.uhid || 'P-2026-00125';
+  const patientName = selectedPatient?.name || 'Select a patient';
+  const partnerName = selectedPatient?.partner || '—';
+  const uhid = selectedPatient?.uhid || '—';
   const operatorName = user?.userName || 'Dr. Satish (EMB-01)';
 
   // Pre-Freezing Details state (Matching Image 2: SemenSelf.aspx)
-  const [vol, setVol] = useState('2.5');
-  const [totalSperm, setTotalSperm] = useState('65');
-  const [totalMotility, setTotalMotility] = useState('60');
-  const [progMotility, setProgMotility] = useState('45');
-  const [grade1, setGrade1] = useState('30');
-  const [grade2, setGrade2] = useState('15');
-  const [grade3, setGrade3] = useState('10');
-  const [grade4, setGrade4] = useState('5');
-  const [wbc, setWbc] = useState('0-1');
-  const [rbc, setRbc] = useState('0');
-  const [epithCell, setEpithCell] = useState('0-1');
-  const [roundCell, setRoundCell] = useState('0');
-  const [recovery, setRecovery] = useState('75');
+  const [vol, setVol] = useState('');
+  const [totalSperm, setTotalSperm] = useState('');
+  const [totalMotility, setTotalMotility] = useState('');
+  const [progMotility, setProgMotility] = useState('');
+  const [grade1, setGrade1] = useState('');
+  const [grade2, setGrade2] = useState('');
+  const [grade3, setGrade3] = useState('');
+  const [grade4, setGrade4] = useState('');
+  const [wbc, setWbc] = useState('');
+  const [rbc, setRbc] = useState('');
+  const [epithCell, setEpithCell] = useState('');
+  const [roundCell, setRoundCell] = useState('');
+  const [recovery, setRecovery] = useState('');
   const [isHam, setIsHam] = useState(false);
-  const [thawCount, setThawCount] = useState('0');
-  const [frozenDate, setFrozenDate] = useState('2026-09-11');
-  const [validTill, setValidTill] = useState('2027-09-11');
-  const [location, setLocation] = useState('Tank 1 > Canister 2 > Goblet B > S01-S06');
+  const [thawCount, setThawCount] = useState('');
+  const [frozenDate, setFrozenDate] = useState('');
+  const [validTill, setValidTill] = useState('');
+  const [location, setLocation] = useState('');
 
   // Qualitative parameters
-  const [appearance, setAppearance] = useState('Normal');
-  const [colour, setColour] = useState('Normal');
-  const [viscosity, setViscosity] = useState('Normal');
-  const [normomorphs1, setNormomorphs1] = useState('5');
-  const [normomorphs2, setNormomorphs2] = useState('0');
-  const [liquefaction, setLiquefaction] = useState('Normal');
-  const [timeOfLiq, setTimeOfLiq] = useState('25');
-  const [agglutination, setAgglutination] = useState('Nil');
-  const [antibodies, setAntibodies] = useState('Negative');
-  const [fructose, setFructose] = useState('+Ve');
-  const [linearity, setLinearity] = useState('A');
-  const [velocity, setVelocity] = useState('25');
-  const [ph, setPh] = useState('7.6');
-  const [collProblem, setCollProblem] = useState('No');
-  const [contamination, setContamination] = useState('No');
-  const [abstinence, setAbstinence] = useState('3');
-  const [labOperator, setLabOperator] = useState('Dr. Satish (EMB-01)');
-  const [method, setMethod] = useState('Masturbation (No Culture)');
-  const [impression, setImpression] = useState('Normozoospermia - Suitable for slow freezing protocol');
-  const [husbandAadhar, setHusbandAadhar] = useState('8834 9122 0451');
+  const [appearance, setAppearance] = useState('');
+  const [colour, setColour] = useState('');
+  const [viscosity, setViscosity] = useState('');
+  const [normomorphs1, setNormomorphs1] = useState('');
+  const [normomorphs2, setNormomorphs2] = useState('');
+  const [liquefaction, setLiquefaction] = useState('');
+  const [timeOfLiq, setTimeOfLiq] = useState('');
+  const [agglutination, setAgglutination] = useState('');
+  const [antibodies, setAntibodies] = useState('');
+  const [fructose, setFructose] = useState('');
+  const [linearity, setLinearity] = useState('');
+  const [velocity, setVelocity] = useState('');
+  const [ph, setPh] = useState('');
+  const [collProblem, setCollProblem] = useState('');
+  const [contamination, setContamination] = useState('');
+  const [abstinence, setAbstinence] = useState('');
+  const [labOperator, setLabOperator] = useState('');
+  const [method, setMethod] = useState('');
+  const [impression, setImpression] = useState('');
+  const [husbandAadhar, setHusbandAadhar] = useState('');
 
   // Straw allocation
   const [strawCount, setStrawCount] = useState('6');
   const [strawColor, setStrawColor] = useState('Yellow');
 
   // Mock list of frozen samples for this patient
-  const [records, setRecords] = useState<SemenSelfRecord[]>([
-    {
-      srNo: 1,
-      id: 'FROZ-26-000554',
-      frozenDate: '11/Aug/2026',
-      validTill: '11/Aug/2027',
-      location: 'Tank 1 > Canister 2 > Goblet B',
-      straws: 6,
-      volume: '2.5 ml',
-      count: '65 M/ml',
-      motility: '60%',
-      progMotility: '45%',
-      husbandAadhar: '8834 9122 0451',
-      status: 'Stored',
-    },
-  ]);
+  const [records, setRecords] = useState<SemenSelfRecord[]>([]);
 
   const [toast, setToast] = useState<string | null>(null);
   function showToast(msg: string) {
@@ -146,7 +131,7 @@ export function SemenSelfForm({ onBack }: { onBack?: () => void }) {
             <h2 className="text-sm font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
               <span>❄️ Semen Cryopreservation (Self)</span>
               <span className="rounded bg-blue-100 text-blue-800 px-2 py-0.5 text-[10px] font-bold">
-                Husband / Partner
+                Husband / Partner • {cryoType}
               </span>
             </h2>
             <p className="text-[11px] text-slate-500">
@@ -167,18 +152,24 @@ export function SemenSelfForm({ onBack }: { onBack?: () => void }) {
         </div>
       </div>
 
+      {cryoType === 'Frozen' && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-[11px] text-amber-900">
+          <strong>Husband Frozen selected.</strong> Pre-freezing is locked from the semen bank. Choose a straw below, then enter post-thaw on continue.
+        </div>
+      )}
+
       {/* MAIN FORM: PRE-FREEZING DETAILS (Image 2) */}
       <form onSubmit={handleSubmit} className="rounded-xl border border-slate-300/80 bg-white shadow-xs overflow-hidden">
-        <div className="bg-[#1f5f38] px-4 py-2 text-white flex items-center justify-between">
+        <div className={`${cryoType === 'Frozen' ? 'bg-slate-600' : 'bg-[#1f5f38]'} px-4 py-2 text-white flex items-center justify-between`}>
           <h3 className="text-xs font-bold uppercase tracking-wider">
-            Pre Freezing Details
+            {cryoType === 'Frozen' ? 'Pre Freezing Details (Read-only snapshot)' : 'Pre Freezing Details'}
           </h3>
           <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded font-medium">
             WHO 5th/6th Criteria &amp; Cryo Banking
           </span>
         </div>
 
-        <div className="p-4 space-y-4">
+        <div className={`p-4 space-y-4 ${cryoType === 'Frozen' ? 'pointer-events-none opacity-70' : ''}`}>
           {/* Row 1: Volume, Count, Motility, Grades, Cytology, Thaw & Dates */}
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 border-b border-slate-200 pb-3">
             <div>
