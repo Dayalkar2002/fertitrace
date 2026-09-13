@@ -1,76 +1,13 @@
 import { buildParams, executeDRL, executeText } from '@/lib/db/spExecutor';
 import { formatSmartDate, parseFormDate, rowNum, rowVal, toInputDate } from '@/lib/db/row';
+import type { SemenDonorDetail, SemenDonorLab, SemenDonorListRow, SemenDonorSaveInput } from '@/lib/types/cryo';
+
+export type { SemenDonorDetail, SemenDonorLab, SemenDonorListRow, SemenDonorSaveInput };
 
 const SEMEN_DONOR_SP = 'spSemenDonor';
 const DONOR_LAB_SP = 'spDonorLabMasterExtDRL';
 const SEMEN_DONOR_PARAMS =
   '@DonorIDSrNo,@DonorID,@Date,@SemenQty,@SemenCount,@SemenMotility,@SemenProgMotility,@SemenWBC,@SemenRBC,@BloodGroup,@Age,@Looks,@Weight,@Height,@FacialFeature,@HairColor,@EyesColor,@SkinTone,@CongenitalDeformities,@GeneticallyAcquiredDisease,@ChronicIllness,@DiseaseRelative,@DiseaseFamily,@Habits,@Qualification,@MaritalStatus,@WorkingStatus,@BloodChemistryPanel,@CBC,@Urinalysis,@Karytyping,@HIV,@VDRL,@HCV,@Thalesemia,@QuarantinedPeriod,@Remarks,@Location,@HbsAg,@DonorLabID,@QueryIndex';
-
-export interface SemenDonorListRow {
-  donorIdSrNo: number;
-  donorId: string;
-  date: string;
-  thawId: string;
-}
-
-export interface SemenDonorLab {
-  id: number;
-  name: string;
-}
-
-export interface SemenDonorDetail {
-  donorIdSrNo: number;
-  donorId: string;
-  date: string;
-  dateDisplay: string;
-  semenQty: string;
-  semenCount: string;
-  semenMotility: string;
-  semenProgMotility: string;
-  grade1: string;
-  grade2: string;
-  grade3: string;
-  grade4: string;
-  semenWbc: string;
-  semenRbc: string;
-  bloodGroup: string;
-  age: string;
-  looks: string;
-  weight: string;
-  height: string;
-  facialFeature: string;
-  hairColor: string;
-  eyesColor: string;
-  skinTone: string;
-  congenitalDeformities: string;
-  geneticallyAcquiredDisease: string;
-  chronicIllness: string;
-  diseaseRelative: string;
-  diseaseFamily: string;
-  habits: string;
-  qualification: string;
-  maritalStatus: string;
-  workingStatus: string;
-  bloodChemistryPanel: string;
-  cbc: string;
-  urinalysis: string;
-  karytyping: string;
-  hiv: string;
-  vdrl: string;
-  hcv: string;
-  thalesemia: string;
-  quarantinedPeriod: string;
-  remarks: string;
-  location: string;
-  hbsAg: string;
-  donorLabId: number;
-  aadhar: string;
-  thawId: string;
-}
-
-export type SemenDonorSaveInput = Omit<SemenDonorDetail, 'dateDisplay' | 'thawId'> & {
-  thawId?: string;
-};
 
 function emptyDonorValues(queryIndex: number, donorIdSrNo = 0, date = new Date()): unknown[] {
   return [

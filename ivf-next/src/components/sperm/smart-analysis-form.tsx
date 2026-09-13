@@ -118,12 +118,11 @@ export function SmartAnalysisForm({
     let cancelled = false;
     void Promise.all(
       (Object.entries(SMART_MASTER_CATS) as [keyof typeof SMART_MASTER_CATS, number][]).map(
-        async ([key, catId]) => {
+        async ([key, catId]): Promise<[keyof typeof SMART_MASTER_CATS, CommonMasterRow[]]> => {
           try {
-            const rows = await listCommonMaster(token, catId);
-            return [key, rows] as const;
+            return [key, await listCommonMaster(token, catId)];
           } catch {
-            return [key, []] as const;
+            return [key, []];
           }
         }
       )

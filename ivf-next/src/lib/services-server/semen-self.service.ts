@@ -1,56 +1,12 @@
 import { buildParams, executeDRL, executeText } from '@/lib/db/spExecutor';
 import { formatSmartDate, rowNum, rowVal, toInputDate } from '@/lib/db/row';
+import type { SemenSelfRecord } from '@/lib/types/cryo';
+
+export type { SemenSelfRecord };
 
 const SEMEN_SELF_SP = 'spCycSelfSF';
 const SEMEN_SELF_PARAMS =
   '@CycSelfSemenFreezingID,@PatID,@SatID,@CycSSID,@CycABVol,@CycABSperms,@CycABMotility,@CycABProgMotility,@CycABGrade1,@CycABGrade2,@CycABGrade3,@CycABGrade4,@CycABWBC,@CycABRBC,@CycABECell,@CycABRCell,@CycABRecovery,@CycABHams,@CycSSLocation,@QueryIndex,@iAppID,@iColID,@iViscoID,@iIUIANMPH1,@iIUIANMPH2,@iLiqID,@sIUIATimeOfLiq,@sIUIAAgglut,@sIUIAAntibodies,@iFrucID,@iIUIALin,@iIUIAVelocity,@dIUIApH,@iIUIACollProb,@iIUIAContamination,@iIUIAAbstinence,@iLabOptID,@iMtdID,@DIUIAPValidTillDate,@CycSSCreationDate,@sImpression';
-
-export interface SemenSelfRecord {
-  freezingId: string;
-  cycSSID: number;
-  vol: string;
-  sperms: string;
-  motility: string;
-  progMotility: string;
-  grade1: string;
-  grade2: string;
-  grade3: string;
-  grade4: string;
-  wbc: string;
-  rbc: string;
-  epithCell: string;
-  roundCell: string;
-  recovery: string;
-  hams: boolean;
-  location: string;
-  frozenDate: string;
-  frozenDateInput: string;
-  thawDate: string;
-  thawId: string;
-  discardDate: string;
-  validTill: string;
-  validTillInput: string;
-  husbandAadhar: string;
-  abstinence: string;
-  labOptId: number;
-  methodId: number;
-  collProbId: number;
-  contaminationId: number;
-  appearanceId: number;
-  colourId: number;
-  viscosityId: number;
-  nmph1: string;
-  nmph2: string;
-  liqId: number;
-  timeOfLiq: string;
-  agglutination: string;
-  antibodies: string;
-  fructoseId: number;
-  linearityId: number;
-  velocity: string;
-  ph: string;
-  impression: string;
-}
 
 function listValues(patId: number, satId: number, queryIndex: number, cycSSID = 0, freezingId = ''): unknown[] {
   const now = new Date();

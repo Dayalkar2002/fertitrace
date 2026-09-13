@@ -1141,7 +1141,7 @@ export function SpermWitnessingClient() {
                         onWhereToUse={(v) =>
                           patchFlow({ cycleIndication: v === 'ICSI' ? 'ICSI' : 'IVF' })
                         }
-                        showValidTill={intendedUse === 'Cryopreservation'}
+                        showValidTill={flowSel.module === 'CRYOPRESERVATION'}
                         idOptions={frozenStrawId ? [frozenStrawId] : undefined}
                       />
 

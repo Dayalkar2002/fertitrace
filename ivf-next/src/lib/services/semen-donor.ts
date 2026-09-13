@@ -4,7 +4,7 @@ import type {
   SemenDonorLab,
   SemenDonorListRow,
   SemenDonorSaveInput,
-} from '@/lib/services-server/semen-donor.service';
+} from '@/lib/types/cryo';
 
 export type { SemenDonorDetail, SemenDonorLab, SemenDonorListRow, SemenDonorSaveInput };
 

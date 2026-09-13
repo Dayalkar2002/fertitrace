@@ -1,5 +1,5 @@
 import { apiFetch } from '@/lib/api';
-import type { SemenSelfRecord } from '@/lib/services-server/semen-self.service';
+import type { SemenSelfRecord } from '@/lib/types/cryo';
 
 export type { SemenSelfRecord };
 
