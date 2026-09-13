@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { usePatient } from '@/contexts/patient-context';
 import { useAuth } from '@/contexts/auth-context';
+import { raiseAlarmEvent } from '@/lib/services/alarms';
 import { SemenSelfForm } from '@/components/cryo/semen-self-form';
 import { SemenDonorForm } from '@/components/cryo/semen-donor-form';
 import {
@@ -17,12 +18,14 @@ import {
   type CycleIndication,
   type AnalysisEntryPath,
 } from '@/lib/sperm-flow';
+import { emptySmartAnalysis, type SmartAnalysisValues } from '@/lib/sperm-analysis';
+import { SmartAnalysisForm } from '@/components/sperm/smart-analysis-form';
 
 export type { SpermSource, SampleState, IntendedUse, SemenAnalysisType, IuiIndication };
 
 export function SpermWitnessingClient() {
   const { selectedPatient } = usePatient();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
 
   // Workflow View State: 'registration' (Default initial view) | 'workflow' (Downstream view after Accept & Continue)
   const [currentView, setCurrentView] = useState<'registration' | 'workflow'>('registration');
@@ -190,6 +193,36 @@ export function SpermWitnessingClient() {
   const [prepMethod, setPrepMethod] = useState('');
   const [prepMedia, setPrepMedia] = useState('');
   const [linearity, setLinearity] = useState('');
+  const [analysis, setAnalysis] = useState<SmartAnalysisValues>(() => emptySmartAnalysis());
+  const [analysis2, setAnalysis2] = useState<SmartAnalysisValues>(() => emptySmartAnalysis());
+  const [analysisPage, setAnalysisPage] = useState<1 | 2>(1);
+
+  useEffect(() => {
+    const indication =
+      intendedUse === 'IVF / ICSI'
+        ? flowSel.cycleIndication
+        : intendedUse === 'Semen Analysis'
+          ? semenAnalysisType
+          : iuiIndication;
+    const synced = {
+      indication,
+      semenType: (sampleState === 'Frozen' ? 'Frozen' : 'Fresh') as 'Fresh' | 'Frozen',
+      abstinence: String(abstinenceDays || '0'),
+      date: collectionDateTime,
+      idLocation: frozenStrawId,
+    };
+    setAnalysis((prev) => ({ ...prev, ...synced, abstinence: synced.abstinence || prev.abstinence, date: synced.date || prev.date, idLocation: synced.idLocation || prev.idLocation }));
+    setAnalysis2((prev) => ({ ...prev, ...synced, abstinence: synced.abstinence || prev.abstinence, date: synced.date || prev.date, idLocation: synced.idLocation || prev.idLocation }));
+  }, [
+    intendedUse,
+    flowSel.cycleIndication,
+    semenAnalysisType,
+    iuiIndication,
+    sampleState,
+    abstinenceDays,
+    collectionDateTime,
+    frozenStrawId,
+  ]);
 
   // Pre-IUI Authorization (Box 6)
   const [authBy, setAuthBy] = useState('');
@@ -222,6 +255,30 @@ export function SpermWitnessingClient() {
       showToast('Scan or enter a barcode / RFID.');
       return;
     }
+
+    const tag = rfidBarcode.trim();
+    const expected = [sampleId, selectedPatient?.uhid, selectedPatient?.id]
+      .filter((value) => value && value !== '—')
+      .map((value) => String(value).toLowerCase());
+    const matched = expected.some((value) => tag.toLowerCase().includes(value) || value.includes(tag.toLowerCase()));
+
+    if (!matched) {
+      const looksRfid = /^(RFID|RF[-_])/i.test(tag) || /^[A-Fa-f0-9]{8,}$/.test(tag);
+      const eventId = looksRfid ? 'FT-E03' : 'FT-E02';
+      setIsValidated(false);
+      void raiseAlarmEvent(token, {
+        eventId,
+        source: 'Sperm Witnessing',
+        patientId: String(selectedPatient?.id || selectedPatient?.uhid || ''),
+        patientName: selectedPatient?.name,
+        sampleId: sampleId || undefined,
+        detail: `Scanned tag ${tag} does not match patient ${patientId} or sample ${sampleId || '(none)'}.`,
+        raisedBy: user?.userName || user?.userLoginName || 'Operator',
+      }).catch(() => undefined);
+      showToast(`${eventId} identity mismatch — alarm raised to Communication.`);
+      return;
+    }
+
     setIsValidated(true);
     showToast(`Scanned tag ${rfidBarcode} verified successfully!`);
   }
@@ -782,11 +839,7 @@ export function SpermWitnessingClient() {
                       return;
                     }
                     setCurrentView('workflow');
-                    showToast(
-                      flow.skipAndrology
-                        ? 'TIC / FM selected. Follicular study only — andrology inputs skipped.'
-                        : `Outcome locked: ${flow.summaryTitle || intendedUse}. Opening SMART inputs...`
-                    );
+                    showToast(flow.summaryTitle || intendedUse);
                   }}
                   className="flex-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 py-2.5 text-xs font-bold text-white shadow-xs transition"
                 >
@@ -833,10 +886,7 @@ export function SpermWitnessingClient() {
             )
           ) : flow.skipAndrology ? (
             <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-xs">
-              <h3 className="text-sm font-black text-slate-800">TIC / FM — Andrology not required</h3>
-              <p className="mt-2 text-xs text-slate-600 max-w-xl mx-auto">
-                SMART IUI flow: indication TIC/FM needs follicular study only. Sperm ID, type, before/after processing, and HSA/SQA radios are not used.
-              </p>
+              <h3 className="text-sm font-bold text-slate-800">TIC / FM</h3>
             </div>
           ) : (
             /* STANDARD ANDROLOGY FLOW: BOX 3, BOX 4, BOX 5 / BOX 6 / BOX 7 */
@@ -1055,414 +1105,46 @@ export function SpermWitnessingClient() {
                       )}
                     </div>
 
-                    {/* SMART THAW NOTIFICATION BANNER (When Frozen is selected) */}
-                    {sampleState === 'Frozen' && (
-                      <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-xs flex items-center justify-between text-amber-900">
-                        <div className="flex items-center gap-2">
-                          <span className="text-base">❄️</span>
-                          <span>
-                            <strong>SMART Thaw Rule Active:</strong> Pre-freezing fields are <strong>Locked (Read-only)</strong> from Cryo Master. Post-thaw fields are <strong>Active</strong>.
-                          </span>
-                        </div>
-                        <span className="font-mono font-bold bg-amber-200/80 px-2 py-0.5 rounded text-[11px]">
-                          Straw: {frozenStrawId}
-                        </span>
-                      </div>
-                    )}
-
                     <div className="p-4 space-y-4 text-xs">
-                      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-2.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-slate-600 font-bold">Analysis Date / Time</span>
-                          <input
-                            type="text"
-                            defaultValue="18-Aug-2026 09:58"
-                            className="h-7 rounded border border-slate-300 px-2 text-xs font-medium"
-                          />
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-slate-600 font-bold">Analysed By</span>
-                          <select className="h-7 rounded border border-slate-300 px-2 text-xs font-medium">
-                            <option>EMB-02 - Dr. Amit Verma</option>
-                            <option value="">Select</option>
-                        <option>EMB-01 - Dr. Satish</option>
-                            <option>EMB-03 - Dr. Neha Kapoor</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* BEFORE PROCESSING / PRE-FREEZING SECTION */}
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="text-[11px] font-bold text-slate-800 uppercase tracking-tight flex items-center gap-1.5">
-                            <span>{sampleState === 'Frozen' ? '❄️ Pre-Freezing Parameters (Locked Snapshot)' : '🧪 Before Processing Parameters (Pre-Wash)'}</span>
-                            {sampleState === 'Frozen' && (
-                              <span className="rounded bg-slate-200 text-slate-700 px-1.5 py-0.2 text-[9px] font-bold">Read-Only</span>
-                            )}
-                          </h4>
-                          <span className="text-[10px] text-slate-500 font-medium">WHO Reference Criteria</span>
-                        </div>
-
-                        {/* WHO Parameters Table */}
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                          {/* Left Column: Macroscopic */}
-                          <div className="space-y-1">
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-0.5">
-                              <span className="text-slate-600 font-medium">Volume</span>
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="text"
-                                  value={volume}
-                                  disabled={sampleState === 'Frozen'}
-                                  onChange={(e) => setVolume(e.target.value)}
-                                  className={`h-6 w-14 rounded border border-slate-300 px-1 text-right font-bold ${
-                                    sampleState === 'Frozen' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
-                                  }`}
-                                />
-                                <span className="text-slate-400 text-[11px] w-6">ml</span>
-                                <span className="text-slate-400 text-[10px]">≥ 1.4</span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-0.5">
-                              <span className="text-slate-600 font-medium">Appearance</span>
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="text"
-                                  value={appearance}
-                                  disabled={sampleState === 'Frozen'}
-                                  onChange={(e) => setAppearance(e.target.value)}
-                                  className={`h-6 w-24 rounded border border-slate-300 px-1 text-right text-xs ${
-                                    sampleState === 'Frozen' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
-                                  }`}
-                                />
-                              </div>
-                            </div>
-
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-0.5">
-                              <span className="text-slate-600 font-medium">Liquefaction</span>
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="text"
-                                  value={liquefaction}
-                                  disabled={sampleState === 'Frozen'}
-                                  onChange={(e) => setLiquefaction(e.target.value)}
-                                  className={`h-6 w-14 rounded border border-slate-300 px-1 text-right font-bold ${
-                                    sampleState === 'Frozen' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
-                                  }`}
-                                />
-                                <span className="text-slate-400 text-[11px] w-6">min</span>
-                                <span className="text-slate-400 text-[10px]">≤ 60</span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-0.5">
-                              <span className="text-slate-600 font-medium">pH</span>
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="text"
-                                  value={ph}
-                                  disabled={sampleState === 'Frozen'}
-                                  onChange={(e) => setPh(e.target.value)}
-                                  className={`h-6 w-14 rounded border border-slate-300 px-1 text-right font-bold ${
-                                    sampleState === 'Frozen' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
-                                  }`}
-                                />
-                                <span className="text-slate-400 text-[11px] w-6">-</span>
-                                <span className="text-slate-400 text-[10px]">≥ 7.2</span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-0.5">
-                              <span className="text-slate-600 font-medium">Concentration</span>
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="text"
-                                  value={concentration}
-                                  disabled={sampleState === 'Frozen'}
-                                  onChange={(e) => setConcentration(e.target.value)}
-                                  className={`h-6 w-14 rounded border border-slate-300 px-1 text-right font-bold ${
-                                    sampleState === 'Frozen' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
-                                  }`}
-                                />
-                                <span className="text-slate-400 text-[11px] w-14">million/ml</span>
-                                <span className="text-slate-400 text-[10px]">≥ 16</span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-0.5">
-                              <span className="text-slate-600 font-medium">Total Count</span>
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="text"
-                                  value={totalCount}
-                                  disabled={sampleState === 'Frozen'}
-                                  onChange={(e) => setTotalCount(e.target.value)}
-                                  className={`h-6 w-14 rounded border border-slate-300 px-1 text-right font-bold ${
-                                    sampleState === 'Frozen' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
-                                  }`}
-                                />
-                                <span className="text-slate-400 text-[11px] w-14">million</span>
-                                <span className="text-slate-400 text-[10px]">≥ 39</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Right Column: Microscopic */}
-                          <div className="space-y-1">
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-0.5">
-                              <span className="text-slate-600 font-medium">Motility (Progressive)</span>
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="text"
-                                  value={progMotility}
-                                  disabled={sampleState === 'Frozen'}
-                                  onChange={(e) => setProgMotility(e.target.value)}
-                                  className={`h-6 w-12 rounded border border-slate-300 px-1 text-right font-bold ${
-                                    sampleState === 'Frozen' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
-                                  }`}
-                                />
-                                <span className="text-slate-400 text-[11px] w-4">%</span>
-                                <span className="text-slate-400 text-[10px]">≥ 30</span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-0.5">
-                              <span className="text-slate-600 font-medium">Total Motility</span>
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="text"
-                                  value={totalMotility}
-                                  disabled={sampleState === 'Frozen'}
-                                  onChange={(e) => setTotalMotility(e.target.value)}
-                                  className={`h-6 w-12 rounded border border-slate-300 px-1 text-right font-bold ${
-                                    sampleState === 'Frozen' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
-                                  }`}
-                                />
-                                <span className="text-slate-400 text-[11px] w-4">%</span>
-                                <span className="text-slate-400 text-[10px]">≥ 42</span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-0.5">
-                              <span className="text-slate-600 font-medium">Morphology (Normal)</span>
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="text"
-                                  value={morphology}
-                                  disabled={sampleState === 'Frozen'}
-                                  onChange={(e) => setMorphology(e.target.value)}
-                                  className={`h-6 w-12 rounded border border-slate-300 px-1 text-right font-bold ${
-                                    sampleState === 'Frozen' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
-                                  }`}
-                                />
-                                <span className="text-slate-400 text-[11px] w-4">%</span>
-                                <span className="text-slate-400 text-[10px]">≥ 4</span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-0.5">
-                              <span className="text-slate-600 font-medium">Vitality</span>
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="text"
-                                  value={vitality}
-                                  disabled={sampleState === 'Frozen'}
-                                  onChange={(e) => setVitality(e.target.value)}
-                                  className={`h-6 w-12 rounded border border-slate-300 px-1 text-right font-bold ${
-                                    sampleState === 'Frozen' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
-                                  }`}
-                                />
-                                <span className="text-slate-400 text-[11px] w-4">%</span>
-                                <span className="text-slate-400 text-[10px]">≥ 54</span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-0.5">
-                              <span className="text-slate-600 font-medium">WBC</span>
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="text"
-                                  value={wbc}
-                                  disabled={sampleState === 'Frozen'}
-                                  onChange={(e) => setWbc(e.target.value)}
-                                  className={`h-6 w-12 rounded border border-slate-300 px-1 text-right font-medium ${
-                                    sampleState === 'Frozen' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
-                                  }`}
-                                />
-                                <span className="text-slate-400 text-[11px] w-8">/HPF</span>
-                                <span className="text-slate-400 text-[10px]">&lt; 1</span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-0.5">
-                              <span className="text-slate-600 font-medium">Agglutination</span>
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="text"
-                                  value={agglutination}
-                                  disabled={sampleState === 'Frozen'}
-                                  onChange={(e) => setAgglutination(e.target.value)}
-                                  className={`h-6 w-16 rounded border border-slate-300 px-1 text-right text-xs ${
-                                    sampleState === 'Frozen' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
-                                  }`}
-                                />
-                                <span className="text-slate-400 text-[10px]">None</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* AFTER PROCESSING / POST-THAW SECTION */}
-                      {intendedUse === 'Semen Analysis' && (semenAnalysisType === 'HSA' || flow.afterProcessing === 'disabled') ? (
-                        /* HSA MODE: After Processing is DISABLED (As per SMART HSASummary protocol) */
-                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-slate-600">
-                          <div className="flex items-center gap-2 font-bold text-slate-700 mb-1">
-                            <span>ℹ️</span>
-                            <span>HSA Protocol: After-Processing &amp; Survival Motility are Disabled</span>
-                          </div>
-                          <p className="text-[11px] text-slate-500 leading-relaxed">
-                            Husband Semen Analysis (HSA) is a diagnostic baseline assessment. As per SMART application architecture and standard andrology protocol, sample washing and 24-hr survival tests are only performed in SQA or cycle preparation.
-                          </p>
-                        </div>
-                      ) : (
-                        /* SQA, IUI, or IVF/ICSI MODE: After Processing / Post-Thaw is ACTIVE */
-                        <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <h4 className="text-[11px] font-bold text-blue-900 uppercase tracking-tight flex items-center gap-1.5">
-                              <span>{sampleState === 'Frozen' ? '❄️ Post-Thaw Evaluation (Active)' : '🧬 After Processing / Washed Sperm Parameters'}</span>
-                            </h4>
-                            <span className="text-[10px] font-bold text-blue-700 bg-blue-100 border border-blue-300 px-2 py-0.5 rounded">
-                              {sampleState === 'Frozen' ? 'Thaw Assessment' : prepMethod}
-                            </span>
-                          </div>
-
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                            <div>
-                              <label className="block text-[10px] font-bold text-slate-600 mb-0.5">
-                                {sampleState === 'Frozen' ? 'Post-Thaw Volume' : 'Post-Wash Volume'}
-                              </label>
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="text"
-                                  value={postVolume}
-                                  onChange={(e) => setPostVolume(e.target.value)}
-                                  className="h-7 w-full rounded border border-slate-300 px-2 font-bold text-xs"
-                                />
-                                <span className="text-slate-400 text-[10px]">ml</span>
-                              </div>
-                            </div>
-                            <div>
-                              <label className="block text-[10px] font-bold text-slate-600 mb-0.5">
-                                {sampleState === 'Frozen' ? 'Post-Thaw Count' : 'Post-Wash Count'}
-                              </label>
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="text"
-                                  value={postCount}
-                                  onChange={(e) => setPostCount(e.target.value)}
-                                  className="h-7 w-full rounded border border-slate-300 px-2 font-bold text-xs"
-                                />
-                                <span className="text-slate-400 text-[10px]">M/ml</span>
-                              </div>
-                            </div>
-                            <div>
-                              <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Progressive Motility</label>
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="text"
-                                  value={postProgMotility}
-                                  onChange={(e) => setPostProgMotility(e.target.value)}
-                                  className="h-7 w-full rounded border border-slate-300 px-2 font-bold text-xs text-blue-700"
-                                />
-                                <span className="text-slate-400 text-[10px]">%</span>
-                              </div>
-                            </div>
-                            <div>
-                              <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Total Motility</label>
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="text"
-                                  value={postTotalMotility}
-                                  onChange={(e) => setPostTotalMotility(e.target.value)}
-                                  className="h-7 w-full rounded border border-slate-300 px-2 font-bold text-xs text-blue-700"
-                                />
-                                <span className="text-slate-400 text-[10px]">%</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* SQA ONLY: 24-HOUR & 12-HOUR SURVIVAL MOTILITY ROW (txtIUIAPAS24Hr in SMART) */}
-                          {((intendedUse === 'Semen Analysis' && semenAnalysisType === 'SQA') || flow.afterProcessing === 'survival24') && (
-                            <div className="pt-2 border-t border-blue-200/80 grid grid-cols-2 sm:grid-cols-3 gap-3">
-                              <div className="bg-white p-2 rounded border border-blue-200 shadow-2xs">
-                                <label className="block text-[10px] font-bold text-purple-900 mb-0.5">
-                                  24-Hour Survival Motility (%)
-                                </label>
-                                <div className="flex items-center gap-1">
-                                  <input
-                                    type="text"
-                                    value={survival24Hr}
-                                    onChange={(e) => setSurvival24Hr(e.target.value)}
-                                    className="h-7 w-full rounded border border-purple-300 px-2 font-black text-xs text-purple-800"
-                                  />
-                                  <span className="text-purple-600 text-[10px] font-bold">%</span>
-                                </div>
-                                <span className="text-[9px] text-slate-400">SMART txtIUIAPAS24Hr</span>
-                              </div>
-
-                              <div className="bg-white p-2 rounded border border-blue-200 shadow-2xs">
-                                <label className="block text-[10px] font-bold text-purple-900 mb-0.5">
-                                  12-Hour Survival Motility (%)
-                                </label>
-                                <div className="flex items-center gap-1">
-                                  <input
-                                    type="text"
-                                    value={survival12Hr}
-                                    onChange={(e) => setSurvival12Hr(e.target.value)}
-                                    className="h-7 w-full rounded border border-purple-300 px-2 font-black text-xs text-purple-800"
-                                  />
-                                  <span className="text-purple-600 text-[10px] font-bold">%</span>
-                                </div>
-                                <span className="text-[9px] text-slate-400">SMART txtIUIAPAS12Hr</span>
-                              </div>
-
-                              <div className="bg-white p-2 rounded border border-blue-200 shadow-2xs">
-                                <label className="block text-[10px] font-bold text-slate-700 mb-0.5">Linearity</label>
-                                <select
-                                  value={linearity}
-                                  onChange={(e) => setLinearity(e.target.value)}
-                                  className="h-7 w-full rounded border border-slate-300 px-1.5 text-xs font-bold text-slate-800"
-                                >
-                                  <option>Rapid Linear</option>
-                                  <option>Slow Linear</option>
-                                  <option>Non-Linear</option>
-                                </select>
-                                <span className="text-[9px] text-slate-400">Progression Velocity</span>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Inventory Audit Note for Thawed Samples */}
-                          {sampleState === 'Frozen' && (
-                            <p className="text-[10px] text-amber-800 italic">
-                              * Database action on save: Stored procedure <code>updateIUIThawIDToSelfAndDonor</code> connects straw <strong>{frozenStrawId}</strong> to <strong>{cycleVisitId}</strong> and marks it consumed (InUse=0).
-                            </p>
-                          )}
+                      {flow.reportPages === 2 && (
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setAnalysisPage(1)}
+                            className={`rounded px-3 py-1 text-[11px] font-bold ${
+                              analysisPage === 1 ? 'bg-[#0b4a8b] text-white' : 'border border-slate-300 bg-white text-slate-700'
+                            }`}
+                          >
+                            Basic Details - Single I.U.I
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAnalysisPage(2)}
+                            className={`rounded px-3 py-1 text-[11px] font-bold ${
+                              analysisPage === 2 ? 'bg-[#0b4a8b] text-white' : 'border border-slate-300 bg-white text-slate-700'
+                            }`}
+                          >
+                            Basic Details - Double I.U.I
+                          </button>
                         </div>
                       )}
+                      <SmartAnalysisForm
+                        values={analysisPage === 2 ? analysis2 : analysis}
+                        onChange={analysisPage === 2 ? setAnalysis2 : setAnalysis}
+                        token={token}
+                        patientName={patientName}
+                        lockedBefore={sampleState === 'Frozen' || flow.beforeProcessing === 'disabled' || flow.preFreezing === 'readonly'}
+                        afterMode={flow.afterProcessing}
+                        showCycleAfterGrades={flowSel.module === 'CYCLE'}
+                        showWhereToUse={flowSel.module === 'CYCLE' ? 'CYCLE' : undefined}
+                        whereToUse={flow.whereToUse}
+                        onWhereToUse={(v) =>
+                          patchFlow({ cycleIndication: v === 'ICSI' ? 'ICSI' : 'IVF' })
+                        }
+                        showValidTill={intendedUse === 'Cryopreservation'}
+                        idOptions={frozenStrawId ? [frozenStrawId] : undefined}
+                      />
 
-                      <div>
-                        <label className="block text-[10px] text-slate-500 mb-1">Remarks &amp; Recommendations</label>
-                        <input
-                          type="text"
-                          value={analysisRemarks}
-                          onChange={(e) => setAnalysisRemarks(e.target.value)}
-                          placeholder="e.g. Normal liquefaction, good progression, sample suitable for planned procedure."
-                          className="h-7 w-full rounded border border-slate-300 px-2 text-xs"
-                        />
-                      </div>
                     </div>
                   </div>
 
@@ -1709,13 +1391,6 @@ export function SpermWitnessingClient() {
 
               </div>
 
-              {/* BOTTOM SAFETY ALERT BANNER */}
-              <div className="rounded-xl border border-amber-300 bg-amber-50/90 px-4 py-3 flex items-center justify-center gap-2 text-center text-xs font-semibold text-amber-900 shadow-xs">
-                <span className="text-amber-600 text-sm">⚠️</span>
-                <span>
-                  <strong>NOTE:</strong> All samples are uniquely identified. Mismatch at any step <strong>WILL BLOCK</strong> the process and raise an alert.
-                </span>
-              </div>
             </>
           )}
         </div>

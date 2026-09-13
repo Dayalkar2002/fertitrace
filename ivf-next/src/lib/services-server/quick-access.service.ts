@@ -177,7 +177,7 @@ export const CATALOG_MODULES: QuickAccessItem[] = [
   {
     moduleKey: 'communication',
     title: 'Patient Messaging',
-    description: 'Automated SMS & WhatsApp Alerts',
+    description: 'SMS, WhatsApp, Email and internal alarms',
     route: '/communication',
     icon: 'communication',
     badgeText: 'Alerts',

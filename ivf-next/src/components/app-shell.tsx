@@ -31,6 +31,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [leftMenus, setLeftMenus] = useState<LeftMenuItem[]>(DEFAULT_LEFT_MENUS);
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({
     patient_management: true,
+    communication: true,
   });
 
   useEffect(() => {
@@ -39,7 +40,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         const res = await fetch('/api/menus');
         const json = await res.json();
         if (json.success && json.leftMenu && json.leftMenu.length > 0) {
-          setLeftMenus(json.leftMenu);
+          setLeftMenus(
+            json.leftMenu.filter(
+              (item: LeftMenuItem) =>
+                item.nodeName !== 'cryopreservation' && item.label !== 'Cryopreservation'
+            )
+          );
         }
       } catch {
         // use default fallback

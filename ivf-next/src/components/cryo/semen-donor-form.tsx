@@ -1,152 +1,318 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { useAuth } from '@/contexts/auth-context';
+import {
+  deleteSemenDonor,
+  getSemenDonor,
+  listDonorLabs,
+  listSemenDonors,
+  saveSemenDonor,
+  searchSemenDonorByAadhar,
+  type SemenDonorDetail,
+  type SemenDonorLab,
+  type SemenDonorListRow,
+} from '@/lib/services/semen-donor';
 
-export interface DonorRecord {
-  srNo: number;
-  donorId: string;
-  donorLab: string;
-  date: string;
-  bloodGroup: string;
-  thawId: string;
-  count: string;
-  motility: string;
-  location: string;
-  aadhar: string;
-  quarantineStatus: string;
+function todayInputDate() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
 }
 
 export function SemenDonorForm({ onBack }: { onBack?: () => void }) {
-  // Donor Identification & Lab
-  const [donorId, setDonorId] = useState('2026/012');
-  const [date, setDate] = useState('2026-09-11');
-  const [donorLab, setDonorLab] = useState('CryoLife Donor Registry');
-
-  // Semen Wash Report (FSS)
-  const [qty, setQty] = useState('0.5');
-  const [countMl, setCountMl] = useState('80');
-  const [motility, setMotility] = useState('70');
-  const [progMotility, setProgMotility] = useState('60');
-  const [wbc, setWbc] = useState('0-1');
-  const [rbc, setRbc] = useState('0');
-  const [g1, setG1] = useState('40');
-  const [g2, setG2] = useState('20');
-  const [g3, setG3] = useState('10');
+  const { token } = useAuth();
+  const [donorIdSrNo, setDonorIdSrNo] = useState(0);
+  const [donorId, setDonorId] = useState('');
+  const [date, setDate] = useState(todayInputDate);
+  const [donorLabId, setDonorLabId] = useState(0);
+  const [qty, setQty] = useState('');
+  const [countMl, setCountMl] = useState('');
+  const [motility, setMotility] = useState('');
+  const [progMotility, setProgMotility] = useState('');
+  const [wbc, setWbc] = useState('');
+  const [rbc, setRbc] = useState('');
+  const [g1, setG1] = useState('0');
+  const [g2, setG2] = useState('0');
+  const [g3, setG3] = useState('0');
   const [g4, setG4] = useState('0');
-
-  // Donor Information
-  const [bloodGroup, setBloodGroup] = useState('O+');
-  const [age, setAge] = useState('27');
-  const [healthLooks, setHealthLooks] = useState('Good / Athletic');
-  const [weight, setWeight] = useState('72');
-  const [height, setHeight] = useState('175');
-
-  // Facial Features
-  const [facialFeature, setFacialFeature] = useState('Sharp / Oval');
-  const [colorHair, setColorHair] = useState('Black');
-  const [colorEyes, setColorEyes] = useState('Dark Brown');
-  const [skinTone, setSkinTone] = useState('Wheatish Fair');
-
-  // Health & Genetics History
+  const [bloodGroup, setBloodGroup] = useState('');
+  const [age, setAge] = useState('');
+  const [healthLooks, setHealthLooks] = useState('');
+  const [weight, setWeight] = useState('');
+  const [height, setHeight] = useState('');
+  const [facialFeature, setFacialFeature] = useState('');
+  const [colorHair, setColorHair] = useState('');
+  const [colorEyes, setColorEyes] = useState('');
+  const [skinTone, setSkinTone] = useState('');
   const [congenitalDef, setCongenitalDef] = useState('NO');
   const [geneticDisease, setGeneticDisease] = useState('NO');
   const [chronicIllness, setChronicIllness] = useState('NO');
   const [relativeDisease, setRelativeDisease] = useState('NO');
   const [familyDisease, setFamilyDisease] = useState('NO');
-  const [habits, setHabits] = useState('Non-Smoker / Social');
-
-  // Abilities
-  const [education, setEducation] = useState('Post Graduate');
-  const [maritalStatus, setMaritalStatus] = useState('Unmarried');
-  const [workingStatus, setWorkingStatus] = useState('Employed / Professional');
-  const [remarks, setRemarks] = useState('Physically fit, normozoospermic donor.');
-
-  // Screening Investigations (Image 3)
+  const [habits, setHabits] = useState('NO');
+  const [education, setEducation] = useState('');
+  const [maritalStatus, setMaritalStatus] = useState('');
+  const [workingStatus, setWorkingStatus] = useState('');
+  const [remarks, setRemarks] = useState('');
   const [bloodChem, setBloodChem] = useState('WNL');
   const [cbc, setCbc] = useState('WNL');
   const [urineAnalysis, setUrineAnalysis] = useState('WNL');
-  const [karyotyping, setKaryotyping] = useState('Normal Chromosome Complements (46, XY)');
+  const [karyotyping, setKaryotyping] = useState('Normal Chromosome Complements');
   const [hiv, setHiv] = useState('Negative');
   const [hbsag, setHbsag] = useState('Negative');
   const [vdrl, setVdrl] = useState('Negative');
   const [hcv, setHcv] = useState('Negative');
-  const [thalassemia, setThalassemia] = useState('Negative (Normal HbA2)');
-  const [quarantinePeriod, setQuarantinePeriod] = useState('> 6 Months (Quarantine Cleared)');
-
-  // Aadhar & Storage Location
-  const [aadhar, setAadhar] = useState('7721 9904 1822');
-  const [location, setLocation] = useState('Tank 2 > Canister 4 > Goblet A > Straw D-01-D-06');
-  const [thawId, setThawId] = useState('THAW-26-000412');
-
-  // Donor Search input
+  const [thalassemia, setThalassemia] = useState('Negative');
+  const [quarantinePeriod, setQuarantinePeriod] = useState('> 6 Months');
+  const [aadhar, setAadhar] = useState('');
+  const [location, setLocation] = useState('');
+  const [thawId, setThawId] = useState('');
   const [searchAadhar, setSearchAadhar] = useState('');
-
-  // Records list (Image 3)
-  const [records, setRecords] = useState<DonorRecord[]>([
-    {
-      srNo: 1,
-      donorId: '2026/001',
-      donorLab: 'LifeCell ART Bank',
-      date: '11/Aug/2026',
-      bloodGroup: 'B+',
-      thawId: 'THAW-26-000301',
-      count: '85 M/ml',
-      motility: '75%',
-      location: 'Tank 2 > Canister 1',
-      aadhar: '9921 4451 0021',
-      quarantineStatus: 'Cleared',
-    },
-    {
-      srNo: 2,
-      donorId: '2026/002',
-      donorLab: 'CryoLife Donor Registry',
-      date: '11/Aug/2026',
-      bloodGroup: 'O+',
-      thawId: 'THAW-26-000302',
-      count: '78 M/ml',
-      motility: '70%',
-      location: 'Tank 2 > Canister 2',
-      aadhar: '9921 4451 0022',
-      quarantineStatus: 'Cleared',
-    },
-    {
-      srNo: 3,
-      donorId: '2026/003',
-      donorLab: 'Mumbai Andrology Bank',
-      date: '11/Aug/2026',
-      bloodGroup: 'A+',
-      thawId: 'THAW-26-000303',
-      count: '90 M/ml',
-      motility: '80%',
-      location: 'Tank 2 > Canister 3',
-      aadhar: '9921 4451 0023',
-      quarantineStatus: 'Cleared',
-    },
-  ]);
-
+  const [records, setRecords] = useState<SemenDonorListRow[]>([]);
+  const [labs, setLabs] = useState<SemenDonorLab[]>([]);
+  const [selectedSrNo, setSelectedSrNo] = useState(0);
+  const [aadharLocked, setAadharLocked] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
   function showToast(msg: string) {
     setToast(msg);
     setTimeout(() => setToast(null), 3500);
   }
 
-  function handleSave(e: React.FormEvent) {
+  const resetForm = useCallback((preserveScreening = false) => {
+    setDonorIdSrNo(0);
+    setSelectedSrNo(0);
+    setDonorId('');
+    setDate(todayInputDate());
+    setDonorLabId(0);
+    setQty('');
+    setCountMl('');
+    setMotility('');
+    setProgMotility('');
+    setWbc('');
+    setRbc('');
+    setG1('0');
+    setG2('0');
+    setG3('0');
+    setG4('0');
+    setBloodGroup('');
+    setAge('');
+    setHealthLooks('');
+    setWeight('');
+    setHeight('');
+    setFacialFeature('');
+    setColorHair('');
+    setColorEyes('');
+    setSkinTone('');
+    setCongenitalDef('NO');
+    setGeneticDisease('NO');
+    setChronicIllness('NO');
+    setRelativeDisease('NO');
+    setFamilyDisease('NO');
+    setHabits('NO');
+    setEducation('');
+    setMaritalStatus('');
+    setWorkingStatus('');
+    setRemarks('');
+    if (!preserveScreening) {
+      setBloodChem('WNL');
+      setCbc('WNL');
+      setUrineAnalysis('WNL');
+      setKaryotyping('Normal Chromosome Complements');
+      setHiv('Negative');
+      setHbsag('Negative');
+      setVdrl('Negative');
+      setHcv('Negative');
+      setThalassemia('Negative');
+      setQuarantinePeriod('> 6 Months');
+    }
+    setAadhar('');
+    setLocation('');
+    setThawId('');
+    setAadharLocked(false);
+  }, []);
+
+  const applyDetail = useCallback((detail: SemenDonorDetail) => {
+    setDonorIdSrNo(detail.donorIdSrNo);
+    setSelectedSrNo(detail.donorIdSrNo);
+    setDonorId(detail.donorId);
+    setDate(detail.date || todayInputDate());
+    setDonorLabId(detail.donorLabId || 0);
+    setQty(detail.semenQty);
+    setCountMl(detail.semenCount);
+    setMotility(detail.semenMotility);
+    setProgMotility(detail.semenProgMotility);
+    setWbc(detail.semenWbc);
+    setRbc(detail.semenRbc);
+    setG1(detail.grade1 || '0');
+    setG2(detail.grade2 || '0');
+    setG3(detail.grade3 || '0');
+    setG4(detail.grade4 || '0');
+    setBloodGroup(detail.bloodGroup);
+    setAge(detail.age);
+    setHealthLooks(detail.looks);
+    setWeight(detail.weight);
+    setHeight(detail.height);
+    setFacialFeature(detail.facialFeature);
+    setColorHair(detail.hairColor);
+    setColorEyes(detail.eyesColor);
+    setSkinTone(detail.skinTone);
+    setCongenitalDef(detail.congenitalDeformities || 'NO');
+    setGeneticDisease(detail.geneticallyAcquiredDisease || 'NO');
+    setChronicIllness(detail.chronicIllness || 'NO');
+    setRelativeDisease(detail.diseaseRelative || 'NO');
+    setFamilyDisease(detail.diseaseFamily || 'NO');
+    setHabits(detail.habits || 'NO');
+    setEducation(detail.qualification);
+    setMaritalStatus(detail.maritalStatus);
+    setWorkingStatus(detail.workingStatus);
+    setRemarks(detail.remarks);
+    setBloodChem(detail.bloodChemistryPanel);
+    setCbc(detail.cbc);
+    setUrineAnalysis(detail.urinalysis);
+    setKaryotyping(detail.karytyping);
+    setHiv(detail.hiv);
+    setHbsag(detail.hbsAg);
+    setVdrl(detail.vdrl);
+    setHcv(detail.hcv);
+    setThalassemia(detail.thalesemia);
+    setQuarantinePeriod(detail.quarantinedPeriod);
+    setAadhar(detail.aadhar);
+    setLocation(detail.location);
+    setThawId(detail.thawId);
+    setAadharLocked(true);
+  }, []);
+
+  const loadList = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const [rows, labRows] = await Promise.all([listSemenDonors(token), listDonorLabs(token)]);
+      setRecords(rows);
+      setLabs(labRows);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to load donor semen records.');
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    void loadList();
+  }, [loadList]);
+
+  async function handleSelect(srNo: number) {
+    if (!token || !srNo) return;
+    try {
+      const detail = await getSemenDonor(token, srNo);
+      applyDetail(detail);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to load donor.');
+    }
+  }
+
+  async function handleFind() {
+    if (!token) return;
+    if (!searchAadhar.trim()) {
+      showToast('Enter Donor Aadhar to search.');
+      return;
+    }
+    try {
+      const detail = await searchSemenDonorByAadhar(token, searchAadhar.trim());
+      if (!detail) {
+        showToast('No donor found for this Aadhar.');
+        return;
+      }
+      applyDetail(detail);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Search failed.');
+    }
+  }
+
+  async function handleDelete(srNo: number) {
+    if (!token || !srNo) return;
+    try {
+      const rows = await deleteSemenDonor(token, srNo);
+      setRecords(rows);
+      if (selectedSrNo === srNo) resetForm();
+      showToast('Donor deleted.');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Delete failed.');
+    }
+  }
+
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    const newRec: DonorRecord = {
-      srNo: records.length + 1,
-      donorId,
-      donorLab,
-      date: new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-      bloodGroup,
-      thawId,
-      count: `${countMl} M/ml`,
-      motility: `${motility}%`,
-      location,
-      aadhar,
-      quarantineStatus: 'Cleared',
-    };
-    setRecords([newRec, ...records]);
-    showToast(`Donor ${donorId} registered successfully in cryo quarantine bank!`);
+    if (!token) return;
+    if (!aadhar.trim()) {
+      showToast('Enter Donor Aadhar first.');
+      return;
+    }
+    if (!location.trim()) {
+      showToast('Please enter Location.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const result = await saveSemenDonor(token, {
+        donorIdSrNo,
+        donorId,
+        date,
+        semenQty: qty,
+        semenCount: countMl,
+        semenMotility: motility,
+        semenProgMotility: progMotility,
+        grade1: g1,
+        grade2: g2,
+        grade3: g3,
+        grade4: g4,
+        semenWbc: wbc,
+        semenRbc: rbc,
+        bloodGroup,
+        age,
+        looks: healthLooks,
+        weight,
+        height,
+        facialFeature,
+        hairColor: colorHair,
+        eyesColor: colorEyes,
+        skinTone,
+        congenitalDeformities: congenitalDef,
+        geneticallyAcquiredDisease: geneticDisease,
+        chronicIllness,
+        diseaseRelative: relativeDisease,
+        diseaseFamily: familyDisease,
+        habits,
+        qualification: education,
+        maritalStatus,
+        workingStatus,
+        bloodChemistryPanel: bloodChem,
+        cbc,
+        urinalysis: urineAnalysis,
+        karytyping: karyotyping,
+        hiv,
+        vdrl,
+        hcv,
+        thalesemia: thalassemia,
+        quarantinedPeriod: quarantinePeriod,
+        remarks,
+        location,
+        hbsAg: hbsag,
+        donorLabId,
+        aadhar: aadhar.trim(),
+      });
+      setRecords(result.list);
+      if (result.detail) applyDetail(result.detail);
+      showToast(result.message);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Save failed.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -198,11 +364,20 @@ export function SemenDonorForm({ onBack }: { onBack?: () => void }) {
           />
           <button
             type="button"
-            onClick={() => showToast(`Searching donor registry for Aadhar: ${searchAadhar}`)}
+            onClick={() => void handleFind()}
             className="h-7 rounded bg-[#1f5f38] hover:bg-emerald-800 px-2.5 text-[11px] font-bold text-white"
           >
             Find
           </button>
+          {selectedSrNo > 0 && (
+            <button
+              type="button"
+              onClick={() => resetForm(true)}
+              className="h-7 rounded border border-slate-300 bg-white px-2.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50"
+            >
+              New
+            </button>
+          )}
         </div>
       </div>
 
@@ -242,14 +417,16 @@ export function SemenDonorForm({ onBack }: { onBack?: () => void }) {
             <div>
               <label className="block text-[10px] font-bold text-slate-700 mb-0.5">Select Donor Lab *</label>
               <select
-                value={donorLab}
-                onChange={(e) => setDonorLab(e.target.value)}
+                value={donorLabId}
+                onChange={(e) => setDonorLabId(Number(e.target.value))}
                 className="h-7 w-full rounded border border-slate-300 px-2 text-xs font-semibold"
               >
-                <option>CryoLife Donor Registry</option>
-                <option>LifeCell ART Bank</option>
-                <option>Mumbai Andrology Bank</option>
-                <option>ART Approved Donor Lab 01</option>
+                <option value={0}>Select Donor Lab</option>
+                {labs.map((lab) => (
+                  <option key={lab.id} value={lab.id}>
+                    {lab.name}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -630,7 +807,11 @@ export function SemenDonorForm({ onBack }: { onBack?: () => void }) {
                 type="text"
                 value={aadhar}
                 onChange={(e) => setAadhar(e.target.value)}
-                className="h-7 w-full rounded border border-slate-300 px-2 font-mono font-bold text-xs"
+                readOnly={aadharLocked}
+                title={aadharLocked ? 'Donor Aadhar cannot be changed once saved.' : undefined}
+                className={`h-7 w-full rounded border border-slate-300 px-2 font-mono font-bold text-xs ${
+                  aadharLocked ? 'bg-slate-100 text-slate-600' : ''
+                }`}
               />
             </div>
             <div>
@@ -647,8 +828,8 @@ export function SemenDonorForm({ onBack }: { onBack?: () => void }) {
               <input
                 type="text"
                 value={thawId}
-                onChange={(e) => setThawId(e.target.value)}
-                className="h-7 w-full rounded border border-slate-300 px-2 font-mono font-bold text-xs text-emerald-700"
+                readOnly
+                className="h-7 w-full rounded border border-slate-300 bg-slate-50 px-2 font-mono font-bold text-xs text-emerald-700"
               />
             </div>
           </div>
@@ -663,22 +844,22 @@ export function SemenDonorForm({ onBack }: { onBack?: () => void }) {
             </button>
             <button
               type="submit"
-              className="rounded-lg bg-[#1f5f38] hover:bg-emerald-800 px-6 py-2 text-xs font-bold text-white shadow-xs"
+              disabled={saving}
+              className="rounded-lg bg-[#1f5f38] hover:bg-emerald-800 px-6 py-2 text-xs font-bold text-white shadow-xs disabled:opacity-60"
             >
-              Submit &amp; Quarantine Donor Straws
+              {saving ? 'Saving…' : donorIdSrNo > 0 ? 'Update' : 'Submit'}
             </button>
           </div>
         </div>
       </form>
 
-      {/* BOTTOM GRID: DONOR INVENTORY (Image 3) */}
       <div className="rounded-xl border border-slate-300/80 bg-white shadow-xs overflow-hidden">
         <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
           <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-            Donor Semen Master Bank Inventory
+            Donor Semen Master
           </h4>
           <span className="text-[11px] font-semibold text-slate-500">
-            Available Vials: {records.length}
+            {loading ? 'Loading…' : `${records.length} record${records.length === 1 ? '' : 's'}`}
           </span>
         </div>
 
@@ -687,53 +868,45 @@ export function SemenDonorForm({ onBack }: { onBack?: () => void }) {
             <thead className="bg-slate-50 text-slate-600 font-bold">
               <tr>
                 <th className="px-3 py-2 text-center">Select</th>
-                <th className="px-3 py-2 text-left">Sr No</th>
+                <th className="px-3 py-2 text-left">Donor Id SrNo</th>
                 <th className="px-3 py-2 text-left">Donor ID</th>
-                <th className="px-3 py-2 text-left">Donor Lab</th>
                 <th className="px-3 py-2 text-left">Date</th>
-                <th className="px-3 py-2 text-center">Blood Group</th>
-                <th className="px-3 py-2 text-left">Thaw ID</th>
-                <th className="px-3 py-2 text-left">Quarantine</th>
-                <th className="px-3 py-2 text-center">Actions</th>
+                <th className="px-3 py-2 text-left">Thaw Id</th>
+                <th className="px-3 py-2 text-center">Delete</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
-              {records.map((r, idx) => (
-                <tr key={idx} className="hover:bg-slate-50 transition">
+              {records.length === 0 && !loading && (
+                <tr>
+                  <td colSpan={6} className="px-3 py-4 text-center text-amber-800">
+                    No Records Found...
+                  </td>
+                </tr>
+              )}
+              {records.map((r) => (
+                <tr
+                  key={r.donorIdSrNo}
+                  className={`hover:bg-slate-50 transition ${
+                    selectedSrNo === r.donorIdSrNo ? 'bg-emerald-50' : ''
+                  }`}
+                >
                   <td className="px-3 py-2 text-center">
                     <button
                       type="button"
-                      onClick={() => showToast(`Selected Donor ${r.donorId} for clinical cycle assignment`)}
+                      onClick={() => void handleSelect(r.donorIdSrNo)}
                       className="rounded bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-bold text-blue-700 hover:bg-blue-100"
                     >
                       Select
                     </button>
                   </td>
-                  <td className="px-3 py-2 text-slate-400">{r.srNo}</td>
+                  <td className="px-3 py-2 text-slate-600">{r.donorIdSrNo}</td>
                   <td className="px-3 py-2 font-mono font-bold text-blue-800">{r.donorId}</td>
-                  <td className="px-3 py-2 text-slate-600">{r.donorLab}</td>
                   <td className="px-3 py-2 text-slate-600">{r.date}</td>
-                  <td className="px-3 py-2 text-center font-bold text-red-700">{r.bloodGroup}</td>
                   <td className="px-3 py-2 font-mono font-bold text-emerald-700">{r.thawId}</td>
-                  <td className="px-3 py-2">
-                    <span className="rounded bg-emerald-100 border border-emerald-300 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                      {r.quarantineStatus}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-center space-x-2">
+                  <td className="px-3 py-2 text-center">
                     <button
                       type="button"
-                      onClick={() => showToast(`Dispatched straw barcode for Donor ${r.donorId}`)}
-                      className="text-blue-600 font-bold hover:underline"
-                    >
-                      Print Label
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setRecords(records.filter((item) => item.donorId !== r.donorId));
-                        showToast(`Removed Donor ${r.donorId}`);
-                      }}
+                      onClick={() => void handleDelete(r.donorIdSrNo)}
                       className="text-rose-600 font-bold hover:underline"
                     >
                       Delete

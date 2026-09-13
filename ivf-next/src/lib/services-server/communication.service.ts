@@ -1,11 +1,13 @@
 import { executeDRL } from '@/lib/db/spExecutor';
 import { isDbConfigured } from '@/lib/db/pool';
 
+export type CommunicationChannel = 'WhatsApp' | 'SMS' | 'Email';
+
 export interface SendMessagePayload {
   patientId: string | number;
   patientName: string;
   recipient: string;
-  channel: 'WhatsApp' | 'SMS';
+  channel: CommunicationChannel;
   messageType: string;
   messageText: string;
   templateId?: string;
@@ -17,7 +19,7 @@ export interface CommunicationLogItem {
   id: string;
   dateTime: string;
   messageType: string;
-  channel: 'WhatsApp' | 'SMS';
+  channel: CommunicationChannel;
   recipient: string;
   sentBy: string;
   status: 'Delivered' | 'Failed' | 'Pending';
@@ -61,45 +63,106 @@ const inMemoryHistory: CommunicationLogItem[] = [
   },
 ];
 
-export async function sendMessage(payload: SendMessagePayload): Promise<CommunicationLogItem> {
-  const provider = process.env.SMS_PROVIDER || 'stpl';
+function gatewayConfigured(): boolean {
+  const provider = (process.env.SMS_PROVIDER || 'stpl').toLowerCase();
+  if (provider === 'smartping') {
+    return Boolean(process.env.SMARTPING_API_URL && process.env.SMARTPING_USERNAME && process.env.SMARTPING_PASSWORD);
+  }
+  return Boolean(process.env.SMS_GATEWAY_URL?.trim() && process.env.SMS_API_KEY?.trim());
+}
+
+async function dispatchSmartping(payload: SendMessagePayload, dltTemplateId: string): Promise<void> {
+  const endpoint = process.env.SMARTPING_API_URL!.trim();
+  const username = process.env.SMARTPING_USERNAME!.trim();
+  const password = process.env.SMARTPING_PASSWORD!.trim();
   const senderId = process.env.SMS_SENDER_ID || 'IVCRFT';
   const entityId = process.env.DLT_PE_ID || '1701161718998728035';
-  const gatewayUrl = process.env.SMS_GATEWAY_URL?.trim();
-  const apiKey = process.env.SMS_API_KEY?.trim();
-  const dltTemplateId = payload.templateId?.trim() || process.env.STPL_TEMPLATE_ID?.trim();
+  const rawDigits = payload.recipient.replace(/\D/g, '').slice(-10);
+  const url = new URL(endpoint);
+  url.searchParams.set('username', username);
+  url.searchParams.set('password', password);
+  url.searchParams.set('from', senderId);
+  url.searchParams.set('to', `91${rawDigits}`);
+  url.searchParams.set('text', payload.messageText);
+  url.searchParams.set('entity_id', entityId);
+  if (dltTemplateId) url.searchParams.set('template_id', dltTemplateId);
+  if (payload.channel === 'WhatsApp') url.searchParams.set('channel', 'whatsapp');
+
+  const res = await fetch(url.toString(), { method: 'GET' });
+  const data = (await res.json().catch(() => ({}))) as { status?: string; error?: string; message?: string };
+  if (!res.ok || data.status === 'failed' || data.error) {
+    throw new Error(data.message || data.error || 'Smartping dispatch failed.');
+  }
+}
+
+async function dispatchGenericGateway(payload: SendMessagePayload, dltTemplateId: string): Promise<void> {
+  const gatewayUrl = process.env.SMS_GATEWAY_URL!.trim();
+  const apiKey = process.env.SMS_API_KEY!.trim();
+  const senderId = process.env.SMS_SENDER_ID || 'IVCRFT';
+  const entityId = process.env.DLT_PE_ID || '1701161718998728035';
+  const rawDigits = payload.recipient.replace(/\D/g, '').slice(-10);
+  const res = await fetch(gatewayUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      entity_id: entityId,
+      sender: senderId,
+      template_id: dltTemplateId || '',
+      mobile: rawDigits,
+      message: payload.messageText,
+      channel: payload.channel,
+    }),
+  });
+  const data = (await res.json().catch(() => ({}))) as { status?: string; error?: string; message?: string };
+  if (!res.ok || data.status === 'failed' || data.error) {
+    throw new Error(data.message || data.error || 'Gateway dispatch failed.');
+  }
+}
+
+async function dispatchEmail(payload: SendMessagePayload): Promise<void> {
+  const emailUrl = process.env.EMAIL_GATEWAY_URL?.trim();
+  if (!emailUrl) return;
+  const res = await fetch(emailUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: process.env.EMAIL_API_KEY ? `Bearer ${process.env.EMAIL_API_KEY}` : '',
+    },
+    body: JSON.stringify({
+      to: payload.recipient,
+      subject: payload.messageType,
+      text: payload.messageText,
+      patientName: payload.patientName,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error('Email gateway dispatch failed.');
+  }
+}
+
+export async function sendMessage(payload: SendMessagePayload): Promise<CommunicationLogItem> {
+  const provider = (process.env.SMS_PROVIDER || 'stpl').toLowerCase();
+  const senderId = process.env.SMS_SENDER_ID || 'IVCRFT';
+  const dltTemplateId = payload.templateId?.trim() || process.env.STPL_TEMPLATE_ID?.trim() || '';
 
   let status: 'Delivered' | 'Failed' | 'Pending' = 'Delivered';
   let dispatchError: string | null = null;
 
-  // 1. External Gateway Integration Logic (STPL / DLT Gateway)
-  if (gatewayUrl && apiKey) {
-    try {
-      const rawDigits = payload.recipient.replace(/\D/g, '').slice(-10);
-      const res = await fetch(gatewayUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          entity_id: entityId,
-          sender: senderId,
-          template_id: dltTemplateId || '',
-          mobile: rawDigits,
-          message: payload.messageText,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.status === 'failed' || data.error) {
-        status = 'Failed';
-        dispatchError = data.message || data.error || 'Gateway dispatch failed.';
-      }
-    } catch (gatewayErr) {
-      console.error('STPL Gateway dispatch error:', gatewayErr);
-      status = 'Failed';
-      dispatchError = gatewayErr instanceof Error ? gatewayErr.message : 'Gateway error';
+  try {
+    if (payload.channel === 'Email') {
+      await dispatchEmail(payload);
+    } else if (provider === 'smartping' && gatewayConfigured()) {
+      await dispatchSmartping(payload, dltTemplateId);
+    } else if (gatewayConfigured()) {
+      await dispatchGenericGateway(payload, dltTemplateId);
     }
+  } catch (gatewayErr) {
+    console.error('Communication dispatch error:', gatewayErr);
+    status = 'Failed';
+    dispatchError = gatewayErr instanceof Error ? gatewayErr.message : 'Gateway error';
   }
 
   // 2. Prepare Log Record

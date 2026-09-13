@@ -1,10 +1,12 @@
 import { apiFetch } from '@/lib/api';
 
+export type CommunicationChannel = 'WhatsApp' | 'SMS' | 'Email';
+
 export interface CommunicationMessagePayload {
   patientId: string | number;
   patientName: string;
   recipient: string;
-  channel: 'WhatsApp' | 'SMS';
+  channel: CommunicationChannel;
   messageType: string;
   messageText: string;
   templateId?: string;
@@ -15,7 +17,7 @@ export interface CommunicationLogItem {
   id: string;
   dateTime: string;
   messageType: string;
-  channel: 'WhatsApp' | 'SMS';
+  channel: CommunicationChannel;
   recipient: string;
   sentBy: string;
   status: 'Delivered' | 'Failed' | 'Pending';

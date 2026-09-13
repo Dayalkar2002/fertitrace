@@ -1,27 +1,43 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { usePatient } from '@/contexts/patient-context';
 import { useAuth } from '@/contexts/auth-context';
-
-export interface SemenSelfRecord {
-  srNo: number;
-  id: string;
-  frozenDate: string;
-  validTill: string;
-  location: string;
-  straws: number;
-  volume: string;
-  count: string;
-  motility: string;
-  progMotility: string;
-  husbandAadhar: string;
-  status: 'Stored' | 'Thawed' | 'Discarded';
-}
+import { listCommonMaster } from '@/lib/services/masters';
+import { deleteSemenSelf, listSemenSelf, type SemenSelfRecord } from '@/lib/services/semen-self';
+import type { CommonMasterRow } from '@/lib/types/master';
+import { SMART_MASTER_CATS } from '@/lib/sperm-analysis';
 
 export function SemenSelfForm({ onBack, cryoType = 'Fresh' }: { onBack?: () => void; cryoType?: 'Fresh' | 'Frozen' }) {
   const { selectedPatient } = usePatient();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
+  const [masters, setMasters] = useState<Record<string, CommonMasterRow[]>>({});
+
+  useEffect(() => {
+    if (!token) return;
+    void Promise.all(
+      (Object.entries(SMART_MASTER_CATS) as [string, number][]).map(async ([key, catId]) => {
+        try {
+          return [key, await listCommonMaster(token, catId)] as const;
+        } catch {
+          return [key, []] as const;
+        }
+      })
+    ).then((pairs) => setMasters(Object.fromEntries(pairs)));
+  }, [token]);
+
+  function masterOptions(key: keyof typeof SMART_MASTER_CATS) {
+    return (masters[key] || []).map((row) => (
+      <option key={row.id} value={row.name}>
+        {row.name}
+      </option>
+    ));
+  }
+
+  function masterName(key: keyof typeof SMART_MASTER_CATS, id: number) {
+    if (!id) return '';
+    return (masters[key] || []).find((row) => row.id === id)?.name || '';
+  }
 
   const patientName = selectedPatient?.name || 'Select a patient';
   const partnerName = selectedPatient?.partner || '—';
@@ -74,8 +90,9 @@ export function SemenSelfForm({ onBack, cryoType = 'Fresh' }: { onBack?: () => v
   const [strawCount, setStrawCount] = useState('6');
   const [strawColor, setStrawColor] = useState('Yellow');
 
-  // Mock list of frozen samples for this patient
   const [records, setRecords] = useState<SemenSelfRecord[]>([]);
+  const [selectedFreezingId, setSelectedFreezingId] = useState('');
+  const [listLoading, setListLoading] = useState(false);
 
   const [toast, setToast] = useState<string | null>(null);
   function showToast(msg: string) {
@@ -83,24 +100,92 @@ export function SemenSelfForm({ onBack, cryoType = 'Fresh' }: { onBack?: () => v
     setTimeout(() => setToast(null), 3500);
   }
 
+  useEffect(() => {
+    if (!token || !selectedPatient?.id) {
+      setRecords([]);
+      return;
+    }
+    let cancelled = false;
+    setListLoading(true);
+    void listSemenSelf(token, selectedPatient.id, selectedPatient.satelliteId || 0)
+      .then((rows) => {
+        if (cancelled) return;
+        setRecords(rows);
+        if (rows[0]?.husbandAadhar) setHusbandAadhar(rows[0].husbandAadhar);
+      })
+      .catch((err) => {
+        if (!cancelled) showToast(err instanceof Error ? err.message : 'Failed to load frozen semen records.');
+      })
+      .finally(() => {
+        if (!cancelled) setListLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, selectedPatient?.id, selectedPatient?.satelliteId]);
+
+  function applyRecord(r: SemenSelfRecord) {
+    setSelectedFreezingId(r.freezingId);
+    setVol(r.vol);
+    setTotalSperm(r.sperms);
+    setTotalMotility(r.motility);
+    setProgMotility(r.progMotility);
+    setGrade1(r.grade1);
+    setGrade2(r.grade2);
+    setGrade3(r.grade3);
+    setGrade4(r.grade4);
+    setWbc(r.wbc);
+    setRbc(r.rbc);
+    setEpithCell(r.epithCell);
+    setRoundCell(r.roundCell);
+    setRecovery(r.recovery);
+    setIsHam(r.hams);
+    setLocation(r.location);
+    setThawCount(r.thawId);
+    setFrozenDate(r.frozenDateInput);
+    setValidTill(r.validTillInput);
+    setHusbandAadhar(r.husbandAadhar);
+    setAbstinence(r.abstinence);
+    setLabOperator(masterName('labOperator', r.labOptId));
+    setMethod(masterName('method', r.methodId));
+    setCollProblem(masterName('collProblem', r.collProbId));
+    setContamination(masterName('contamination', r.contaminationId));
+    setAppearance(masterName('appearance', r.appearanceId));
+    setColour(masterName('colour', r.colourId));
+    setViscosity(masterName('viscosity', r.viscosityId));
+    setNormomorphs1(r.nmph1);
+    setNormomorphs2(r.nmph2);
+    setLiquefaction(masterName('liquefaction', r.liqId));
+    setTimeOfLiq(r.timeOfLiq);
+    setAgglutination(r.agglutination);
+    setAntibodies(r.antibodies);
+    setFructose(masterName('fructose', r.fructoseId));
+    setLinearity(masterName('linearity', r.linearityId));
+    setVelocity(r.velocity);
+    setPh(r.ph);
+    setImpression(r.impression);
+  }
+
+  async function handleDeleteRecord(r: SemenSelfRecord) {
+    if (!token || !selectedPatient?.id) return;
+    try {
+      const rows = await deleteSemenSelf(token, {
+        patientId: selectedPatient.id,
+        satId: selectedPatient.satelliteId || 0,
+        cycSSID: r.cycSSID,
+        freezingId: r.freezingId,
+      });
+      setRecords(rows);
+      if (selectedFreezingId === r.freezingId) setSelectedFreezingId('');
+      showToast('Record deleted.');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Delete failed.');
+    }
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const newRec: SemenSelfRecord = {
-      srNo: records.length + 1,
-      id: `FROZ-26-000${Math.floor(100 + Math.random() * 900)}`,
-      frozenDate: new Date(frozenDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-      validTill: new Date(validTill).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-      location,
-      straws: Number(strawCount) || 6,
-      volume: `${vol} ml`,
-      count: `${totalSperm} M/ml`,
-      motility: `${totalMotility}%`,
-      progMotility: `${progMotility}%`,
-      husbandAadhar,
-      status: 'Stored',
-    };
-    setRecords([newRec, ...records]);
-    showToast('Pre-freezing details saved! Straws locked in Liquid Nitrogen inventory.');
+    showToast('Select a saved row below to view existing cryo details.');
   }
 
   return (
@@ -316,10 +401,8 @@ export function SemenSelfForm({ onBack, cryoType = 'Fresh' }: { onBack?: () => v
                 onChange={(e) => setAppearance(e.target.value)}
                 className="h-7 w-full rounded border border-slate-300 px-2 text-xs"
               >
-                <option>Normal</option>
-                <option>Shaggy</option>
-                <option>Turbid</option>
-                <option>Viscous</option>
+                <option value="">Select</option>
+                {masterOptions('appearance')}
               </select>
             </div>
             <div>
@@ -329,10 +412,8 @@ export function SemenSelfForm({ onBack, cryoType = 'Fresh' }: { onBack?: () => v
                 onChange={(e) => setColour(e.target.value)}
                 className="h-7 w-full rounded border border-slate-300 px-2 text-xs"
               >
-                <option>Normal</option>
-                <option>Pale Yellow</option>
-                <option>Brownish</option>
-                <option>Grey White</option>
+                <option value="">Select</option>
+                {masterOptions('colour')}
               </select>
             </div>
             <div>
@@ -342,9 +423,8 @@ export function SemenSelfForm({ onBack, cryoType = 'Fresh' }: { onBack?: () => v
                 onChange={(e) => setViscosity(e.target.value)}
                 className="h-7 w-full rounded border border-slate-300 px-2 text-xs"
               >
-                <option>Normal</option>
-                <option>High</option>
-                <option>Low</option>
+                <option value="">Select</option>
+                {masterOptions('viscosity')}
               </select>
             </div>
             <div>
@@ -373,9 +453,8 @@ export function SemenSelfForm({ onBack, cryoType = 'Fresh' }: { onBack?: () => v
                 onChange={(e) => setLiquefaction(e.target.value)}
                 className="h-7 w-full rounded border border-slate-300 px-2 text-xs"
               >
-                <option>Normal</option>
-                <option>Delayed</option>
-                <option>Incomplete</option>
+                <option value="">Select</option>
+                {masterOptions('liquefaction')}
               </select>
             </div>
             <div>
@@ -419,8 +498,8 @@ export function SemenSelfForm({ onBack, cryoType = 'Fresh' }: { onBack?: () => v
                 onChange={(e) => setFructose(e.target.value)}
                 className="h-7 w-full rounded border border-slate-300 px-2 text-xs"
               >
-                <option>+Ve</option>
-                <option>-Ve</option>
+                <option value="">Select</option>
+                {masterOptions('fructose')}
               </select>
             </div>
             <div>
@@ -430,9 +509,8 @@ export function SemenSelfForm({ onBack, cryoType = 'Fresh' }: { onBack?: () => v
                 onChange={(e) => setLinearity(e.target.value)}
                 className="h-7 w-full rounded border border-slate-300 px-2 text-xs"
               >
-                <option>A</option>
-                <option>B</option>
-                <option>C</option>
+                <option value="">Select</option>
+                {masterOptions('linearity')}
               </select>
             </div>
             <div>
@@ -499,15 +577,59 @@ export function SemenSelfForm({ onBack, cryoType = 'Fresh' }: { onBack?: () => v
               />
             </div>
             <div>
-              <label className="block text-[10px] text-slate-500 mb-0.5">Lab Operator</label>
+              <label className="block text-[10px] text-slate-500 mb-0.5">Lab Operator :</label>
               <select
                 value={labOperator}
                 onChange={(e) => setLabOperator(e.target.value)}
                 className="h-7 w-full rounded border border-slate-300 px-2 text-xs"
               >
-                <option>Dr. Satish (EMB-01)</option>
-                <option>Dr. Amit Verma (EMB-02)</option>
-                <option>Mrs. Treesa Fernandes</option>
+                <option value="">Select</option>
+                {masterOptions('labOperator')}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] text-slate-500 mb-0.5">Coll.Problem :</label>
+              <select
+                value={collProblem}
+                onChange={(e) => setCollProblem(e.target.value)}
+                className="h-7 w-full rounded border border-slate-300 px-2 text-xs"
+              >
+                <option value="">Select</option>
+                {masterOptions('collProblem')}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] text-slate-500 mb-0.5">Contamination :</label>
+              <select
+                value={contamination}
+                onChange={(e) => setContamination(e.target.value)}
+                className="h-7 w-full rounded border border-slate-300 px-2 text-xs"
+              >
+                <option value="">Select</option>
+                {masterOptions('contamination')}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] text-slate-500 mb-0.5">Abstinence :</label>
+              <div className="flex items-center gap-1">
+                <input
+                  type="text"
+                  value={abstinence}
+                  onChange={(e) => setAbstinence(e.target.value)}
+                  className="h-7 w-full rounded border border-slate-300 px-2 text-xs"
+                />
+                <span className="text-slate-500 text-[10px]">Days</span>
+              </div>
+            </div>
+            <div>
+              <label className="block text-[10px] text-slate-500 mb-0.5">Method :</label>
+              <select
+                value={method}
+                onChange={(e) => setMethod(e.target.value)}
+                className="h-7 w-full rounded border border-slate-300 px-2 text-xs"
+              >
+                <option value="">Select</option>
+                {masterOptions('method')}
               </select>
             </div>
           </div>
@@ -540,63 +662,101 @@ export function SemenSelfForm({ onBack, cryoType = 'Fresh' }: { onBack?: () => v
         </div>
       </form>
 
-      {/* BOTTOM GRID: FROZEN SAMPLES RECORD (Image 2 table) */}
       <div className="rounded-xl border border-slate-300/80 bg-white shadow-xs overflow-hidden">
         <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
           <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
             Patient Frozen Semen History
           </h4>
           <span className="text-[11px] font-semibold text-slate-500">
-            Total Frozen Records: {records.length}
+            {!selectedPatient?.id
+              ? 'Select a patient'
+              : listLoading
+                ? 'Loading…'
+                : `${records.length} record${records.length === 1 ? '' : 's'}`}
           </span>
         </div>
 
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-xs">
-            <thead className="bg-slate-50 text-slate-600 font-bold">
+            <thead className="bg-slate-50 text-slate-600 font-bold whitespace-nowrap">
               <tr>
-                <th className="px-3 py-2 text-left">#</th>
-                <th className="px-3 py-2 text-left">Sample ID</th>
-                <th className="px-3 py-2 text-left">Frozen Date</th>
-                <th className="px-3 py-2 text-left">Valid Till</th>
-                <th className="px-3 py-2 text-left">Straws</th>
-                <th className="px-3 py-2 text-left">Storage Location</th>
-                <th className="px-3 py-2 text-left">Motility (Prog)</th>
-                <th className="px-3 py-2 text-left">Aadhar</th>
-                <th className="px-3 py-2 text-center">Status</th>
-                <th className="px-3 py-2 text-center">Actions</th>
+                <th className="px-2 py-2 text-center">Select</th>
+                <th className="px-2 py-2 text-left">Freezing ID</th>
+                <th className="px-2 py-2 text-left">ID</th>
+                <th className="px-2 py-2 text-left">Vol</th>
+                <th className="px-2 py-2 text-left">Sperms</th>
+                <th className="px-2 py-2 text-left">Motility</th>
+                <th className="px-2 py-2 text-left">Prog. Motility</th>
+                <th className="px-2 py-2 text-left">G1</th>
+                <th className="px-2 py-2 text-left">G2</th>
+                <th className="px-2 py-2 text-left">G3</th>
+                <th className="px-2 py-2 text-left">G4</th>
+                <th className="px-2 py-2 text-left">WBC</th>
+                <th className="px-2 py-2 text-left">RBC</th>
+                <th className="px-2 py-2 text-left">Epith Cell</th>
+                <th className="px-2 py-2 text-left">Round Cell</th>
+                <th className="px-2 py-2 text-left">Location</th>
+                <th className="px-2 py-2 text-left">Frozen Date</th>
+                <th className="px-2 py-2 text-left">Thaw Date</th>
+                <th className="px-2 py-2 text-left">Thaw ID</th>
+                <th className="px-2 py-2 text-left">Discard Date</th>
+                <th className="px-2 py-2 text-left">Valid Till Date</th>
+                <th className="px-2 py-2 text-left">Aadhar No.</th>
+                <th className="px-2 py-2 text-center">Delete</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
-              {records.map((r, idx) => (
-                <tr key={idx} className="hover:bg-slate-50 transition">
-                  <td className="px-3 py-2 text-slate-400">{r.srNo}</td>
-                  <td className="px-3 py-2 font-mono font-bold text-blue-700">{r.id}</td>
-                  <td className="px-3 py-2 text-slate-600">{r.frozenDate}</td>
-                  <td className="px-3 py-2 text-slate-600">{r.validTill}</td>
-                  <td className="px-3 py-2 font-bold text-slate-700">{r.straws}</td>
-                  <td className="px-3 py-2 font-mono text-[11px] text-slate-600">{r.location}</td>
-                  <td className="px-3 py-2 font-bold text-emerald-700">{r.progMotility}</td>
-                  <td className="px-3 py-2 font-mono text-slate-500">{r.husbandAadhar}</td>
-                  <td className="px-3 py-2 text-center">
-                    <span className="rounded bg-emerald-100 border border-emerald-300 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                      {r.status}
-                    </span>
+              {records.length === 0 && !listLoading && (
+                <tr>
+                  <td colSpan={23} className="px-3 py-4 text-center text-amber-800">
+                    {selectedPatient?.id ? 'No Records Found...' : 'Select a patient to view saved semen cryo records.'}
                   </td>
-                  <td className="px-3 py-2 text-center space-x-2">
+                </tr>
+              )}
+              {records.map((r) => (
+                <tr
+                  key={`${r.freezingId}-${r.cycSSID}`}
+                  className={`hover:bg-slate-50 transition ${
+                    selectedFreezingId === r.freezingId ? 'bg-emerald-50' : ''
+                  }`}
+                >
+                  <td className="px-2 py-2 text-center">
                     <button
                       type="button"
-                      onClick={() => showToast(`Printed cryo barcode label for ${r.id}`)}
-                      className="text-blue-600 font-bold hover:underline"
+                      onClick={() => applyRecord(r)}
+                      className="rounded bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-bold text-blue-700 hover:bg-blue-100"
                     >
-                      Print Label
+                      Select
                     </button>
+                  </td>
+                  <td className="px-2 py-2 font-mono font-bold text-blue-700">{r.freezingId}</td>
+                  <td className="px-2 py-2 text-slate-600">{r.cycSSID}</td>
+                  <td className="px-2 py-2">{r.vol}</td>
+                  <td className="px-2 py-2">{r.sperms}</td>
+                  <td className="px-2 py-2">{r.motility}</td>
+                  <td className="px-2 py-2 font-bold text-emerald-700">{r.progMotility}</td>
+                  <td className="px-2 py-2">{r.grade1}</td>
+                  <td className="px-2 py-2">{r.grade2}</td>
+                  <td className="px-2 py-2">{r.grade3}</td>
+                  <td className="px-2 py-2">{r.grade4}</td>
+                  <td className="px-2 py-2">{r.wbc}</td>
+                  <td className="px-2 py-2">{r.rbc}</td>
+                  <td className="px-2 py-2">{r.epithCell}</td>
+                  <td className="px-2 py-2">{r.roundCell}</td>
+                  <td className="px-2 py-2 font-mono text-[11px]">{r.location}</td>
+                  <td className="px-2 py-2 whitespace-nowrap">{r.frozenDate}</td>
+                  <td className="px-2 py-2 whitespace-nowrap">{r.thawDate}</td>
+                  <td className="px-2 py-2 font-mono">{r.thawId}</td>
+                  <td className="px-2 py-2 whitespace-nowrap">{r.discardDate}</td>
+                  <td className="px-2 py-2 whitespace-nowrap">{r.validTill}</td>
+                  <td className="px-2 py-2 font-mono">{r.husbandAadhar}</td>
+                  <td className="px-2 py-2 text-center">
                     <button
                       type="button"
-                      onClick={() => showToast(`Selected ${r.id} for thawing verification`)}
-                      className="text-emerald-700 font-bold hover:underline"
+                      onClick={() => void handleDeleteRecord(r)}
+                      className="text-rose-600 font-bold hover:underline"
                     >
-                      Thaw
+                      Delete
                     </button>
                   </td>
                 </tr>

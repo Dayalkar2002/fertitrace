@@ -18,7 +18,7 @@ export async function getLeftMenuItems(): Promise<LeftMenuItem[]> {
       if (rows.recordset && rows.recordset.length > 0) {
         const all = rows.recordset;
         const parents = all.filter((r) => !r.ParentNodeId);
-        return parents.map((p) => {
+        const mapped = parents.map((p) => {
           const subs = all
             .filter((s) => Number(s.ParentNodeId) === Number(p.NodeId))
             .map((s) => ({
@@ -43,6 +43,15 @@ export async function getLeftMenuItems(): Promise<LeftMenuItem[]> {
             subModules: subs.length > 0 ? subs : undefined,
           };
         });
+        return mapped
+          .filter((item) => item.nodeName !== 'cryopreservation')
+          .map((item) => {
+            if (item.nodeName !== 'communication' || (item.subModules && item.subModules.length > 0)) {
+              return item;
+            }
+            const fallback = DEFAULT_LEFT_MENUS.find((row) => row.nodeName === 'communication');
+            return fallback?.subModules ? { ...item, subModules: fallback.subModules } : item;
+          });
       }
     } catch (err) {
       console.warn('[MenuService] DB fetch failed for Left Menu, using fallback:', err);

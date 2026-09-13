@@ -8,7 +8,9 @@ import {
   sendCommunicationMessage,
   fetchCommunicationHistory,
   CommunicationLogItem,
+  CommunicationChannel,
 } from '@/lib/services/communication';
+import { DEFAULT_TEMPLATE_LABEL, SMS_TEMPLATES } from '@/lib/communication/sms-templates';
 
 type CommunicationRecord = CommunicationLogItem;
 
@@ -42,7 +44,7 @@ const INITIAL_HISTORY: CommunicationRecord[] = [
     channel: 'SMS',
     recipient: '+91 98765 43210',
     sentBy: 'IVCRFT',
-    status: 'Delivered',
+    status: 'Failed',
     messageText:
       'Dear Farah Mohammed Shaikh, Your IUI Appointment is scheduled on 29 Aug 2026 at 10:30 AM at IVF Craft Clinic at Andheri. Team IVF Craft.',
   },
@@ -58,116 +60,20 @@ export interface DltTemplateItem {
   variables: string[];
 }
 
-export const DLT_TEMPLATES: Record<string, DltTemplateItem> = {
-  'BHCG Blood Test (STPL Approved)': {
-    id: 'bhcg',
-    name: 'BHCG',
-    templateId: '1707162832465411194',
-    refNo: '11-OVDKS1IGG7Z',
-    category: 'Health (Service Implicit)',
-    content: 'Dear [Patient Name] , Your appointment has been booked for B.HCG. Blood Test at IVF Craft Clinic at Andheri On [Date & Time]. Please bring 1st Urine Sample with you. Team IVF Craft.',
-    variables: ['[Patient Name]', '[Date & Time]'],
-  },
-  'Appointment (STPL Approved)': {
-    id: 'appointment',
-    name: 'Appointment',
-    templateId: '1707161788735690119',
-    refNo: '07-HH4KN8WCY5H',
-    category: 'Health (Service Implicit)',
-    content: 'Dear [Patient Name], Your appointment has been booked with [Doctor Name] for [Procedure] at IVF Craft Clinic at Andheri on [Date & Time]. Team IVF Craft.',
-    variables: ['[Patient Name]', '[Doctor Name]', '[Procedure]', '[Date & Time]'],
-  },
-  'Reschedule Appointment (STPL Approved)': {
-    id: 'reschedule',
-    name: 'Reschedule',
-    templateId: '1707161788748638612',
-    refNo: '07-HH4KN8WFQ2B',
-    category: 'Health (Service Implicit)',
-    content: 'Dear [Patient Name],Your appointment with [Doctor Name] has been rescheduled for [Procedure] at IVF Craft Clinic at Andheri on [Date & Time]. Team IVF Craft',
-    variables: ['[Patient Name]', '[Doctor Name]', '[Procedure]', '[Date & Time]'],
-  },
-  'Follow Up (STPL Approved)': {
-    id: 'followup',
-    name: 'Follow Up',
-    templateId: '1707161788759596007',
-    refNo: '07-HH4KN8WI2M0',
-    category: 'Health (Service Implicit)',
-    content: 'Dear [Patient Name] Your appointment has been booked with [Doctor Name] for [Procedure] at IVF Craft Clinic at Andheri on [Date & Time]. Team IVF Craft',
-    variables: ['[Patient Name]', '[Doctor Name]', '[Procedure]', '[Date & Time]'],
-  },
-  'Cancellation (STPL Approved)': {
-    id: 'cancellation',
-    name: 'Cancellation',
-    templateId: '1707161788771098630',
-    refNo: '07-HH4KN8WKJD6',
-    category: 'Health (Service Implicit)',
-    content: 'Dear [Patient Name] Your appointment  with [Doctor Name] at IVF Craft Clinic at Andheri on [Date & Time] has been cancelled. Team IVF Craft.',
-    variables: ['[Patient Name]', '[Doctor Name]', '[Date & Time]'],
-  },
-  'Injection Appointment (STPL Approved)': {
-    id: 'injection',
-    name: 'Injection',
-    templateId: '1707161788783460834',
-    refNo: '07-HH4KN8WN6R4',
-    category: 'Health (Service Implicit)',
-    content: 'Dear [Patient Name], Your appointment has been booked for [Procedure] on [Date & Time]. Team IVF Craft.',
-    variables: ['[Patient Name]', '[Procedure]', '[Date & Time]'],
-  },
-  'IUI Appointment (STPL Approved)': {
-    id: 'iui',
-    name: 'IUI Appointment',
-    templateId: '1707161788814128413',
-    refNo: '07-HH4KN8WTRDZ',
-    category: 'Health (Service Implicit)',
-    content: 'Dear [Patient Name], Your appointment has been booked for [Procedure] at IVF Craft Clinic at Andheri on [Date & Time]. Team IVF Craft.',
-    variables: ['[Patient Name]', '[Procedure]', '[Date & Time]'],
-  },
-  'HCG Injection (STPL Approved)': {
-    id: 'hcg_injection',
-    name: 'HCG INJECTION',
-    templateId: '1707161788923896459',
-    refNo: '07-HH4KN8XHAD0',
-    category: 'Health (Service Implicit)',
-    content: 'Dear [Patient Name], Your HCG Injection is due on [Date & Time]. Team IVF Craft.',
-    variables: ['[Patient Name]', '[Date & Time]'],
-  },
-  'Pre-Operative Instruction (STPL Approved)': {
-    id: 'pre_op',
-    name: 'Pre Operative Instruction',
-    templateId: '1707161788940100865',
-    refNo: '07-HH4KN8XKRE8',
-    category: 'Health (Service Implicit)',
-    content: 'Dear [Patient Name], Pre-Operative Instructios--You are instructed to get admitted on [Date & Time] for [Procedure]  at IVF Craft Clinic at Andheri. ( For Ovum Pickup please come  fasting overnight, inform regarding any ongoing medications for any other conditions to the nursing staff). Team IVF Craft.',
-    variables: ['[Patient Name]', '[Date & Time]', '[Procedure]'],
-  },
-  'Post-Operative Instruction (STPL Approved)': {
-    id: 'post_op',
-    name: 'Post Operative Instruction',
-    templateId: '1707161788954009948',
-    refNo: '07-HH4KN8XNQPV',
-    category: 'Health (Service Implicit)',
-    content: 'Dear [Patient Name], Post-Operative Instrcutions---Your OPU has been  done at IVF Craft Clinic at Andheri on [Date & Time], If you feel any discomfort like nausea/vomitting, fever, abdominal distension, giddiness, bleeding PV etc please feel free to contact us. Team IVF Craft.',
-    variables: ['[Patient Name]', '[Date & Time]'],
-  },
-  'ET Procedure (STPL Approved)': {
-    id: 'et_procedure',
-    name: 'ET Procedure',
-    templateId: '1707161788976103020',
-    refNo: '07-HH4KN8XSH6V',
-    category: 'Health (Service Implicit)',
-    content: 'Dear [Patient Name], Your [Procedure] is scheduled at  IVF Craft Clinic at Andheri on [Date & Time]. Team IVF Craft.',
-    variables: ['[Patient Name]', '[Procedure]', '[Date & Time]'],
-  },
-  'IVF Summary (STPL Approved)': {
-    id: 'ivf_summary',
-    name: 'IVF SUMMARY',
-    templateId: '1707161788987451572',
-    refNo: '07-HH4KN8XUWR7',
-    category: 'Health (Service Implicit)',
-    content: 'Dear [Patient Name] Your IVF Summary for the month of [Date] is attached herewith.',
-    variables: ['[Patient Name]', '[Date]'],
-  },
-};
+export const DLT_TEMPLATES: Record<string, DltTemplateItem> = Object.fromEntries(
+  SMS_TEMPLATES.map((item) => [
+    item.label,
+    {
+      id: item.id,
+      name: item.messageType,
+      templateId: item.dltTemplateId || '',
+      refNo: item.dltRef || '',
+      category: item.activity,
+      content: item.content,
+      variables: item.variables,
+    },
+  ])
+);
 
 const TEMPLATES: Record<string, string> = Object.fromEntries(
   Object.entries(DLT_TEMPLATES).map(([key, item]) => [key, item.content])
@@ -263,11 +169,11 @@ export function PatientCommunication() {
 
   const mobileNo = formatMobileDisplay(rawMobile);
 
-  const [messageType, setMessageType] = useState('BHCG');
-  const [channel, setChannel] = useState<'WhatsApp' | 'SMS'>('SMS');
-  const [templateKey, setTemplateKey] = useState('BHCG Blood Test (STPL Approved)');
+  const [messageType, setMessageType] = useState('Appointment');
+  const [channel, setChannel] = useState<CommunicationChannel>('WhatsApp');
+  const [templateKey, setTemplateKey] = useState(DEFAULT_TEMPLATE_LABEL);
   const [language, setLanguage] = useState('English');
-  const [message, setMessage] = useState(DLT_TEMPLATES['BHCG Blood Test (STPL Approved)'].content);
+  const [message, setMessage] = useState(DLT_TEMPLATES[DEFAULT_TEMPLATE_LABEL].content);
   const [history, setHistory] = useState<CommunicationRecord[]>(INITIAL_HISTORY);
   const [sending, setSending] = useState(false);
   const [showVariablesDropdown, setShowVariablesDropdown] = useState(false);
@@ -389,7 +295,7 @@ export function PatientCommunication() {
         </h1>
         <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 py-1 text-xs font-semibold text-slate-700 shadow-2xs">
           <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-xs" />
-          <span>STPL DLT Header: <strong className="text-slate-900">IVCRFT</strong> (Active)</span>
+          <span>API Status: Connected · Header <strong className="text-slate-900">IVCRFT</strong></span>
         </div>
       </div>
 
@@ -472,18 +378,11 @@ export function PatientCommunication() {
               }}
               className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-800 outline-none transition focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10"
             >
-              <option value="BHCG">BHCG Blood Test</option>
-              <option value="Appointment">Appointment</option>
-              <option value="Reschedule">Reschedule Appointment</option>
-              <option value="Follow Up">Follow Up</option>
-              <option value="Cancellation">Cancellation</option>
-              <option value="Injection">Injection Appointment</option>
-              <option value="IUI Appointment">IUI Appointment</option>
-              <option value="HCG INJECTION">HCG Injection</option>
-              <option value="Pre Operative Instruction">Pre-Operative Instruction</option>
-              <option value="Post Operative Instruction">Post-Operative Instruction</option>
-              <option value="ET Procedure">ET Procedure</option>
-              <option value="IVF SUMMARY">IVF Summary</option>
+              {Array.from(new Map(SMS_TEMPLATES.map((t) => [t.messageType, t])).values()).map((t) => (
+                <option key={t.id} value={t.messageType}>
+                  {t.activity}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -515,6 +414,18 @@ export function PatientCommunication() {
                   className="h-4 w-4 text-pink-600 border-slate-300 focus:ring-pink-500"
                 />
                 <span className="text-xs font-medium text-slate-700">WhatsApp</span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="radio"
+                  name="channel"
+                  value="Email"
+                  checked={channel === 'Email'}
+                  onChange={() => setChannel('Email')}
+                  className="h-4 w-4 text-pink-600 border-slate-300 focus:ring-pink-500"
+                />
+                <span className="text-xs font-medium text-slate-700">Email</span>
               </label>
             </div>
           </div>
@@ -581,21 +492,29 @@ export function PatientCommunication() {
 
             {/* STPL DLT Template Badge */}
             {DLT_TEMPLATES[templateKey] && (
-              <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-xl bg-emerald-50/70 border border-emerald-200/80 px-3 py-1.5 text-[11px] text-emerald-900">
-                <span className="inline-flex items-center gap-1 font-semibold text-emerald-700">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                  STPL DLT Approved
+              <div className={`mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-xl border px-3 py-1.5 text-[11px] ${
+                DLT_TEMPLATES[templateKey].templateId
+                  ? 'bg-emerald-50/70 border-emerald-200/80 text-emerald-900'
+                  : 'bg-amber-50/70 border-amber-200/80 text-amber-900'
+              }`}>
+                <span className="inline-flex items-center gap-1 font-semibold">
+                  <span className={`h-2 w-2 rounded-full ${DLT_TEMPLATES[templateKey].templateId ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                  {DLT_TEMPLATES[templateKey].templateId ? 'STPL DLT Approved' : 'Pending DLT approval'}
                 </span>
-                <span>
-                  Template ID: <strong className="font-mono text-emerald-950 font-bold">{DLT_TEMPLATES[templateKey].templateId}</strong>
-                </span>
+                {DLT_TEMPLATES[templateKey].templateId && (
+                  <>
+                    <span>
+                      Template ID: <strong className="font-mono font-bold">{DLT_TEMPLATES[templateKey].templateId}</strong>
+                    </span>
+                    <span>•</span>
+                    <span>
+                      Ref: <strong className="font-mono">{DLT_TEMPLATES[templateKey].refNo}</strong>
+                    </span>
+                  </>
+                )}
                 <span>•</span>
                 <span>
-                  Ref: <strong className="font-mono text-emerald-900">{DLT_TEMPLATES[templateKey].refNo}</strong>
-                </span>
-                <span>•</span>
-                <span>
-                  Header: <strong className="font-semibold text-emerald-950">IVCRFT</strong>
+                  Screen: <strong>{SMS_TEMPLATES.find((t) => t.label === templateKey)?.captureScreen}</strong>
                 </span>
               </div>
             )}
@@ -746,7 +665,14 @@ export function PatientCommunication() {
                   {/* Channel */}
                   <td className="px-4 py-3.5">
                     <div className="flex items-center gap-1.5 font-semibold text-slate-700">
-                      {rec.channel === 'WhatsApp' ? (
+                      {rec.channel === 'Email' ? (
+                        <>
+                          <span className="flex h-4.5 w-4.5 items-center justify-center rounded-full bg-violet-500 text-white text-[9px]">
+                            @
+                          </span>
+                          <span>Email</span>
+                        </>
+                      ) : rec.channel === 'WhatsApp' ? (
                         <>
                           <span className="flex h-4.5 w-4.5 items-center justify-center rounded-full bg-emerald-500 text-white text-[9px]">
                             <svg className="h-3 w-3 fill-current" viewBox="0 0 24 24">

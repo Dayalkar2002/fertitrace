@@ -4,6 +4,8 @@ import { FormEvent, useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { usePatient } from '@/contexts/patient-context';
+import { useAppDispatch } from '@/store/hooks';
+import { setShowPatientModal } from '@/store/slices/uiSlice';
 import {
   computeCycleType,
   showDonorOocyteDetails,
@@ -108,6 +110,7 @@ const emptyForm = {
 
 export function CycleEntryForm() {
   const router = useRouter();
+  const dispatch = useAppDispatch();
   const { token, user } = useAuth();
   const { selectedPatient, selectedSatellite } = usePatient();
 
@@ -305,7 +308,7 @@ export function CycleEntryForm() {
         {/* Change / Select Patient Action */}
         <button
           type="button"
-          onClick={() => router.push('/dashboard?selectPatient=1')}
+          onClick={() => dispatch(setShowPatientModal(true))}
           className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs transition ${
             hasPatient ? 'bg-[#1d4ed8] hover:bg-[#1e40af]' : 'bg-amber-600 hover:bg-amber-700'
           }`}
@@ -314,23 +317,9 @@ export function CycleEntryForm() {
         </button>
       </div>
 
-      {/* No Patient Warning Alert Banner */}
       {!hasPatient && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50/90 px-4 py-3 text-xs text-amber-900 shadow-2xs animate-fadeIn">
-          <div className="flex items-center gap-2.5">
-            <span className="text-lg">⚠️</span>
-            <div>
-              <span className="font-bold">No Patient Selected: </span>
-              <span>Please select a patient before saving or proceeding with cycle registration.</span>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => router.push('/dashboard?selectPatient=1')}
-            className="rounded-lg bg-amber-600 hover:bg-amber-700 px-3.5 py-1.5 font-bold text-white shadow-xs transition"
-          >
-            Select Patient
-          </button>
+        <div className="rounded-xl border border-amber-300 bg-amber-50/90 px-4 py-3 text-xs text-amber-900">
+          Please select a patient in the bar above before saving or proceeding with cycle registration.
         </div>
       )}
 

@@ -1,5 +1,5 @@
-import { PatientCommunication } from '@/components/patient-communication';
+import { CommunicationHub } from '@/components/communication-hub';
 
 export default function CommunicationPage() {
-  return <PatientCommunication />;
+  return <CommunicationHub />;
 }
