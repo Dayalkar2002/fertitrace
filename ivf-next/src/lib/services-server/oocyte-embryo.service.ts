@@ -1,21 +1,15 @@
-import { executeDRL } from '@/lib/db/spExecutor';
+import { executeDRL, executeText } from '@/lib/db/spExecutor';
 import { isDbConfigured } from '@/lib/db/pool';
+import { formatSmartDate, rowNum, rowVal } from '@/lib/db/row';
+import type {
+  EtEmbryoRow,
+  LabSource,
+  OocyteEmbryoOverview,
+  OocyteItem,
+  SourceSummary,
+} from '@/lib/types/oocyte-embryo';
 
-export interface OocyteItem {
-  id: string;
-  oocyteId: string;
-  collectionDateTime: string;
-  maturity: 'MII' | 'MI' | 'GV' | 'Degenerated';
-  morphologyGrade: 'A' | 'B' | 'C' | '-';
-  linkedSpermId: string;
-  status: 'Retrieved' | 'Fertilized' | 'Immature' | 'Degenerated' | 'Discarded';
-  fertilizationResult?: '2PN' | '1PN' | '3PN' | '0PN' | 'Degenerate';
-  embryoId?: string;
-  day3Grade?: string;
-  day5Grade?: string;
-  cryoStrawNo?: string;
-  transferStatus?: 'Transferred' | 'Cryopreserved' | 'Culturing' | 'Discarded';
-}
+export type { EtEmbryoRow, LabSource, OocyteEmbryoOverview, OocyteItem, SourceSummary };
 
 export interface OocyteEmbryoData {
   patientId: string;
@@ -248,4 +242,191 @@ export async function updateOocyteEmbryoData(data: Partial<OocyteEmbryoData>): P
     },
   };
   return cycleStore;
+}
+
+function emptySummary(source: LabSource): SourceSummary {
+  return {
+    source,
+    hasRecord: false,
+    recordId: '',
+    cycleId: '',
+    cycleDate: '',
+    retrieved: 0,
+    matureMII: 0,
+    immature: 0,
+    degenerated: 0,
+    fertilized2PN: 0,
+    abnormalPn: 0,
+    unfertilized: 0,
+    cleavage: 0,
+    blastocyst: 0,
+    cryopreserved: 0,
+    transferred: 0,
+    stuck: 0,
+    discard: 0,
+    donated: 0,
+    donatedForResearch: 0,
+  };
+}
+
+function field(row: Record<string, unknown>, prefix: string, suffix: string): number {
+  return rowNum(row, `${prefix}${suffix}`);
+}
+
+function summarizeLabRow(row: Record<string, unknown>, source: LabSource): SourceSummary {
+  const prefix = source;
+  const matureMII = field(row, prefix, 'OIMetaII');
+  const metaI = field(row, prefix, 'OIMetaI');
+  const gv = field(row, prefix, 'OIGV');
+  const degenerated = field(row, prefix, 'OIDEG');
+  return {
+    source,
+    hasRecord: true,
+    recordId: rowVal(row, source === 'IVF' ? 'IVFID' : 'ICSIID'),
+    cycleId: rowVal(row, 'CycID'),
+    cycleDate: formatSmartDate(rowVal(row, source === 'IVF' ? 'IVFCycleDate' : 'ICSICycleDate')),
+    retrieved: matureMII + metaI + gv + degenerated,
+    matureMII,
+    immature: metaI + gv,
+    degenerated,
+    fertilized2PN: field(row, prefix, 'FMetaII2PN') + field(row, prefix, 'FMetaI2PN') + field(row, prefix, 'FGV2PN'),
+    abnormalPn:
+      field(row, prefix, 'FMetaII1PN') +
+      field(row, prefix, 'FMetaII3PN') +
+      field(row, prefix, 'FMetaI1PN') +
+      field(row, prefix, 'FMetaI3PN') +
+      field(row, prefix, 'FGV1PN') +
+      field(row, prefix, 'FGV3PN'),
+    unfertilized: field(row, prefix, 'FMetaII0PN') + field(row, prefix, 'FMetaI0PN') + field(row, prefix, 'FGV0PN'),
+    cleavage: field(row, prefix, 'FMetaIICleaved') + field(row, prefix, 'FMetaICleaved') + field(row, prefix, 'FGVCleaved'),
+    blastocyst: 0,
+    cryopreserved: 0,
+    transferred: 0,
+    stuck: field(row, prefix, 'FMetaIIStuck') + field(row, prefix, 'FMetaIStuck') + field(row, prefix, 'FGVStuck'),
+    discard: 0,
+    donated: 0,
+    donatedForResearch: 0,
+  };
+}
+
+const ACTION_NAMES: Record<number, string> = {
+  0: 'Select',
+  1: 'Transfer',
+  2: 'Freeze',
+  3: 'Stuck',
+  4: 'KeepForBlast',
+  5: 'Discard',
+  6: 'Donated',
+  7: 'DonatedForResearch',
+};
+
+const CELLER_NAMES: Record<number, string> = {
+  0: 'Select',
+  1: '2 Celler',
+  2: '3 Celler',
+  3: '4 Celler',
+  4: '5 Celler',
+  5: '6 Celler',
+  6: '7 Celler',
+  7: '8 Celler',
+  8: '9 Celler',
+  9: '10 Celler',
+  10: 'Multi Celler',
+};
+
+const GRADE_NAMES: Record<number, string> = {
+  0: 'Select',
+  1: 'Grade I',
+  2: 'Grade II',
+  3: 'Grade III',
+  4: 'Grade IV',
+};
+
+function applyEtActions(summary: SourceSummary, embryos: EtEmbryoRow[]): SourceSummary {
+  const rows = embryos.filter((row) => row.source === summary.source);
+  if (!rows.length) return summary;
+  const count = (id: number) => rows.filter((row) => row.action === id).length;
+  return {
+    ...summary,
+    transferred: count(1),
+    cryopreserved: count(2),
+    stuck: count(3),
+    blastocyst: count(4),
+    discard: count(5),
+    donated: count(6),
+    donatedForResearch: count(7),
+  };
+}
+
+async function latestLabRow(table: 'IVF' | 'ICSI', dateCol: string, patId: number, satId: number): Promise<Record<string, unknown> | null> {
+  const params = [
+    { name: '@PatID', value: patId },
+    { name: '@SatID', value: satId },
+  ];
+  try {
+    const result = await executeText<Record<string, unknown>>(
+      `SELECT TOP 1 * FROM ${table}
+       WHERE PatID = @PatID AND SatID = @SatID
+       ORDER BY ${dateCol} DESC`,
+      params
+    );
+    if (result.recordset?.[0]) return result.recordset[0];
+  } catch {
+    // column name can differ; fall through
+  }
+  try {
+    const result = await executeText<Record<string, unknown>>(
+      `SELECT TOP 1 * FROM ${table} WHERE PatID = @PatID AND SatID = @SatID`,
+      params
+    );
+    return result.recordset?.[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+async function loadEtEmbryos(patId: number, satId: number): Promise<EtEmbryoRow[]> {
+  try {
+    const result = await executeText<Record<string, unknown>>(
+      `SELECT ETEDID, ETEDSource, ETEDCeller, ETEDGrade, ETEDAction, ETEDRemark, ETEDLocation, CycID
+       FROM ETEmbryoDetailsGrid
+       WHERE PatID = @PatID AND SatID = @SatID
+       ORDER BY ETEDSource DESC, ETEDID`,
+      [
+        { name: '@PatID', value: patId },
+        { name: '@SatID', value: satId },
+      ]
+    );
+    return (result.recordset || []).map((row) => {
+      const sourceText = rowVal(row, 'ETEDSource').toUpperCase();
+      const source: LabSource = sourceText === 'ICSI' ? 'ICSI' : 'IVF';
+      const action = rowNum(row, 'ETEDAction');
+      return {
+        id: rowVal(row, 'ETEDID') || `${source}-${rowVal(row, 'CycID')}`,
+        source,
+        celler: CELLER_NAMES[rowNum(row, 'ETEDCeller')] || '',
+        grade: GRADE_NAMES[rowNum(row, 'ETEDGrade')] || '',
+        action,
+        actionLabel: ACTION_NAMES[action] || 'Select',
+        location: rowVal(row, 'ETEDLocation'),
+        remark: rowVal(row, 'ETEDRemark'),
+        cycleId: rowVal(row, 'CycID'),
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+export async function getIvfIcsiOverview(patId: number, satId: number): Promise<OocyteEmbryoOverview> {
+  const [ivfRow, icsiRow, embryos] = await Promise.all([
+    latestLabRow('IVF', 'IVFCycleDate', patId, satId),
+    latestLabRow('ICSI', 'ICSICycleDate', patId, satId),
+    loadEtEmbryos(patId, satId),
+  ]);
+
+  const ivf = applyEtActions(ivfRow ? summarizeLabRow(ivfRow, 'IVF') : emptySummary('IVF'), embryos);
+  const icsi = applyEtActions(icsiRow ? summarizeLabRow(icsiRow, 'ICSI') : emptySummary('ICSI'), embryos);
+
+  return { ivf, icsi, embryos };
 }

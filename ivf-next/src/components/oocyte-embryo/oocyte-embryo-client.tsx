@@ -3,7 +3,11 @@
 import React, { useState, useEffect } from 'react';
 import { usePatient } from '@/contexts/patient-context';
 import { useAuth } from '@/contexts/auth-context';
-import { OocyteItem } from '@/lib/services-server/oocyte-embryo.service';
+import { usePatientIds } from '@/components/clinical/clinical-shared';
+import { ApiError } from '@/lib/api';
+import { loadOocyteEmbryoOverview } from '@/lib/services/oocyte-embryo';
+import { ET_ACTION_OPTIONS } from '@/lib/services/iui';
+import type { EtEmbryoRow, LabSource, OocyteItem, SourceSummary } from '@/lib/types/oocyte-embryo';
 
 export type OocyteEmbryoTab =
   | 'oocytes'
@@ -174,15 +178,46 @@ const INITIAL_OOCYTES: OocyteItem[] = [
   },
 ];
 
+const EMPTY_SUMMARY: SourceSummary = {
+  source: 'IVF',
+  hasRecord: false,
+  recordId: '',
+  cycleId: '',
+  cycleDate: '',
+  retrieved: 0,
+  matureMII: 0,
+  immature: 0,
+  degenerated: 0,
+  fertilized2PN: 0,
+  abnormalPn: 0,
+  unfertilized: 0,
+  cleavage: 0,
+  blastocyst: 0,
+  cryopreserved: 0,
+  transferred: 0,
+  stuck: 0,
+  discard: 0,
+  donated: 0,
+  donatedForResearch: 0,
+};
+
+const SMART_ACTIONS = ET_ACTION_OPTIONS.filter((item) => item.id !== 0);
+
 export function OocyteEmbryoClient() {
   const { selectedPatient } = usePatient();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
+  const { patId, satId, ready } = usePatientIds();
 
   const [activeTab, setActiveTab] = useState<OocyteEmbryoTab>('oocytes');
+  const [sourceTab, setSourceTab] = useState<LabSource>('IVF');
   const [oocytes, setOocytes] = useState<OocyteItem[]>(INITIAL_OOCYTES);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [selectedOocyte, setSelectedOocyte] = useState<OocyteItem | null>(null);
+  const [ivfSummary, setIvfSummary] = useState<SourceSummary>({ ...EMPTY_SUMMARY, source: 'IVF' });
+  const [icsiSummary, setIcsiSummary] = useState<SourceSummary>({ ...EMPTY_SUMMARY, source: 'ICSI' });
+  const [embryos, setEmbryos] = useState<EtEmbryoRow[]>([]);
+  const [summaryError, setSummaryError] = useState('');
 
   // Modals for Quick Actions
   const [showAddOocyteModal, setShowAddOocyteModal] = useState(false);
@@ -212,26 +247,45 @@ export function OocyteEmbryoClient() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!token || !ready) return;
+    let cancelled = false;
+    setSummaryError('');
+    loadOocyteEmbryoOverview(token, patId, satId)
+      .then((data) => {
+        if (cancelled) return;
+        setIvfSummary(data.ivf);
+        setIcsiSummary(data.icsi);
+        setEmbryos(data.embryos || []);
+        if (!data.ivf.hasRecord && data.icsi.hasRecord) setSourceTab('ICSI');
+      })
+      .catch((err) => {
+        if (!cancelled) setSummaryError(err instanceof ApiError ? err.message : 'Could not load IVF/ICSI summary.');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, ready, patId, satId]);
+
   // Demographic details
   const patientId = selectedPatient?.uhid || (selectedPatient?.id ? `P-2026-00${selectedPatient.id}` : 'P-2026-00125');
   const patientName = selectedPatient?.name || 'Mrs. Anjali Sharma';
-  const cycleId = selectedPatient?.id ? `C-2026-00${selectedPatient.id}` : 'C-2026-00158';
-  const cycleType = 'IVF / ICSI';
+  const summary = sourceTab === 'ICSI' ? icsiSummary : ivfSummary;
+  const cycleId = summary.cycleId || (selectedPatient?.id ? `C-2026-00${selectedPatient.id}` : 'C-2026-00158');
+  const cycleType = sourceTab;
   const cycleDay = 16;
-  const lmp = '02-Aug-2026';
   const operator = user?.userName || 'Dr. Satish Sharma (EMB-01)';
+  const sourceEmbryos = embryos.filter((row) => row.source === sourceTab);
 
-  // Calculate dynamic metrics
-  const retrievedCount = oocytes.length;
-  const matureCount = oocytes.filter((o) => o.maturity === 'MII').length;
-  const immatureCount = oocytes.filter((o) => o.maturity === 'MI' || o.maturity === 'GV').length;
-  const degeneratedCount = oocytes.filter((o) => o.maturity === 'Degenerated').length;
-
-  const fertilized2PN = oocytes.filter((o) => o.fertilizationResult === '2PN').length;
-  const cleavageCount = oocytes.filter((o) => o.day3Grade).length;
-  const blastocystCount = oocytes.filter((o) => o.day5Grade && !['Early Blast', 'Morula'].includes(o.day5Grade)).length;
-  const cryopreservedCount = oocytes.filter((o) => o.transferStatus === 'Cryopreserved').length;
-  const transferredCount = oocytes.filter((o) => o.transferStatus === 'Transferred').length;
+  const retrievedCount = summary.retrieved;
+  const matureCount = summary.matureMII;
+  const immatureCount = summary.immature;
+  const degeneratedCount = summary.degenerated;
+  const fertilized2PN = summary.fertilized2PN;
+  const cleavageCount = summary.cleavage;
+  const blastocystCount = summary.blastocyst;
+  const cryopreservedCount = summary.cryopreserved;
+  const transferredCount = summary.transferred;
 
   // Add new oocyte handler
   function handleAddOocyte() {
@@ -295,7 +349,14 @@ export function OocyteEmbryoClient() {
                 </span>
               </div>
               <div className="text-[11px] text-slate-500 mt-0.5">
-                Cycle ID: <strong className="text-slate-700 font-mono">{cycleId}</strong> • LMP: <strong className="text-slate-700">{lmp}</strong> • Operator: <strong className="text-slate-700">{operator}</strong>
+                Cycle ID: <strong className="text-slate-700 font-mono">{cycleId || '—'}</strong>
+                {summary.cycleDate ? (
+                  <>
+                    {' '}
+                    • Cycle date: <strong className="text-slate-700">{summary.cycleDate}</strong>
+                  </>
+                ) : null}{' '}
+                • Operator: <strong className="text-slate-700">{operator}</strong>
               </div>
             </div>
           </div>
@@ -318,6 +379,35 @@ export function OocyteEmbryoClient() {
               <span className="font-bold text-slate-800 text-sm">{transferredCount}</span>
             </div>
           </div>
+        </div>
+
+        {/* IVF / ICSI SOURCE TABS */}
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+          {(['IVF', 'ICSI'] as LabSource[]).map((source) => {
+            const data = source === 'IVF' ? ivfSummary : icsiSummary;
+            const active = sourceTab === source;
+            return (
+              <button
+                key={source}
+                type="button"
+                onClick={() => setSourceTab(source)}
+                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+                  active
+                    ? 'bg-purple-700 text-white shadow-sm'
+                    : 'bg-purple-50 text-purple-800 hover:bg-purple-100 border border-purple-200'
+                }`}
+              >
+                {source}
+                <span className={`rounded-md px-1.5 py-0.5 text-[10px] ${active ? 'bg-white/20' : 'bg-white text-purple-700'}`}>
+                  {data.retrieved}
+                </span>
+              </button>
+            );
+          })}
+          <span className="text-[11px] text-slate-500">
+            Counts come from the {sourceTab} screen
+            {summary.hasRecord ? '' : ' — no saved record yet'}
+          </span>
         </div>
 
         {/* 7 MODULE TABS */}
@@ -351,14 +441,19 @@ export function OocyteEmbryoClient() {
       </div>
 
       {/* SUMMARY STAT METRICS CARDS */}
+      {summaryError && (
+        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{summaryError}</p>
+      )}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {/* OOCYTE SUMMARY */}
         <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-3">
           <div className="flex items-center justify-between border-b border-slate-100 pb-2">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              Oocyte Summary
+              Oocyte Summary · {sourceTab}
             </h3>
-            <span className="text-[11px] font-semibold text-purple-600">Retrieval Day 16</span>
+            <span className="text-[11px] font-semibold text-purple-600">
+              {summary.cycleDate ? `Cycle ${summary.cycleDate}` : 'From IVF / ICSI screen'}
+            </span>
           </div>
           <div className="grid grid-cols-4 gap-3 text-center">
             <div className="rounded-xl bg-purple-50/60 border border-purple-100 p-2.5">
@@ -384,9 +479,11 @@ export function OocyteEmbryoClient() {
         <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-3">
           <div className="flex items-center justify-between border-b border-slate-100 pb-2">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              Embryo Summary
+              Embryo Summary · {sourceTab}
             </h3>
-            <span className="text-[11px] font-semibold text-emerald-600">Culture Day 5</span>
+            <span className="text-[11px] font-semibold text-emerald-600">
+              2PN / cleaved from {sourceTab}; blastocyst &amp; freeze from ET Action
+            </span>
           </div>
           <div className="grid grid-cols-4 gap-3 text-center">
             <div className="rounded-xl bg-emerald-50/60 border border-emerald-100 p-2.5">
@@ -531,18 +628,20 @@ export function OocyteEmbryoClient() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 text-xs">
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 text-center">
                   <span className="text-[11px] text-emerald-800 font-medium">Normal Fertilization (2PN)</span>
-                  <div className="text-2xl font-black text-emerald-950 mt-1">{fertilized2PN} / {matureCount}</div>
-                  <div className="text-[10px] text-emerald-700 mt-0.5">80.0% Fertilization Rate</div>
+                  <div className="text-2xl font-black text-emerald-950 mt-1">{fertilized2PN} / {matureCount || 0}</div>
+                  <div className="text-[10px] text-emerald-700 mt-0.5">
+                    {matureCount ? `${((fertilized2PN / matureCount) * 100).toFixed(1)}% Fertilization Rate` : 'No MII oocytes'}
+                  </div>
                 </div>
                 <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-center">
                   <span className="text-[11px] text-amber-800 font-medium">Abnormal (1PN / 3PN)</span>
-                  <div className="text-2xl font-black text-amber-950 mt-1">0</div>
-                  <div className="text-[10px] text-amber-700 mt-0.5">Polyspermy / Parthenogenesis</div>
+                  <div className="text-2xl font-black text-amber-950 mt-1">{summary.abnormalPn}</div>
+                  <div className="text-[10px] text-amber-700 mt-0.5">From {sourceTab} fertilization grid</div>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center">
                   <span className="text-[11px] text-slate-600 font-medium">Unfertilized (0PN)</span>
-                  <div className="text-2xl font-black text-slate-800 mt-1">2</div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">Failed Activation</div>
+                  <div className="text-2xl font-black text-slate-800 mt-1">{summary.unfertilized}</div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">From {sourceTab} fertilization grid</div>
                 </div>
               </div>
 
@@ -563,7 +662,7 @@ export function OocyteEmbryoClient() {
                     {oocytes.filter((o) => o.maturity === 'MII').map((o) => (
                       <tr key={o.id} className="hover:bg-slate-50">
                         <td className="px-3 py-2 font-mono font-bold text-purple-700">{o.oocyteId}</td>
-                        <td className="px-3 py-2 text-slate-700">ICSI (Direct Injection)</td>
+                        <td className="px-3 py-2 text-slate-700">{sourceTab}</td>
                         <td className="px-3 py-2 font-bold text-emerald-700">{o.fertilizationResult || '2PN'}</td>
                         <td className="px-3 py-2 text-slate-600">2 PB Extruded</td>
                         <td className="px-3 py-2">
@@ -629,52 +728,55 @@ export function OocyteEmbryoClient() {
             <div className="space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Embryo Transfer (ET) Procedure Protocol
+                  ET Entry · {sourceTab} embryos
                 </h3>
-                <button
-                  type="button"
-                  onClick={() => setShowTransferModal(true)}
-                  className="rounded-xl bg-purple-600 hover:bg-purple-700 px-3.5 py-1.5 text-xs font-bold text-white uppercase"
-                >
-                  + Record Transfer
-                </button>
+                <span className="text-[11px] text-slate-500">Action list matches SMART ET Entry</span>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 p-4 space-y-3 text-xs">
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                  <div>
-                    <span className="block text-[10px] text-slate-400 uppercase font-bold">Transfer Date &amp; Time</span>
-                    <strong className="text-slate-800">23-Aug-2026 11:30 AM</strong>
-                  </div>
-                  <div>
-                    <span className="block text-[10px] text-slate-400 uppercase font-bold">Clinician</span>
-                    <strong className="text-slate-800">Dr. Sanjay Kumar Pagare</strong>
-                  </div>
-                  <div>
-                    <span className="block text-[10px] text-slate-400 uppercase font-bold">Embryologist</span>
-                    <strong className="text-slate-800">Dr. Satish Sharma</strong>
-                  </div>
-                  <div>
-                    <span className="block text-[10px] text-slate-400 uppercase font-bold">Catheter Type</span>
-                    <strong className="text-slate-800">Cook Soft-Pass Echogenic</strong>
-                  </div>
+              {sourceEmbryos.length === 0 ? (
+                <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                  No {sourceTab} embryo rows in ET yet. Add embryos on the ET screen; Action options are Transfer, Freeze, Stuck, KeepForBlast, Discard, Donated, DonatedForResearch.
+                </p>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="min-w-full divide-y divide-slate-200 text-xs">
+                    <thead className="bg-slate-50 text-slate-600">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-bold uppercase">Source</th>
+                        <th className="px-3 py-2 text-left font-bold uppercase">Celler</th>
+                        <th className="px-3 py-2 text-left font-bold uppercase">Grade</th>
+                        <th className="px-3 py-2 text-left font-bold uppercase">Action</th>
+                        <th className="px-3 py-2 text-left font-bold uppercase">Location</th>
+                        <th className="px-3 py-2 text-left font-bold uppercase">Remark</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {sourceEmbryos.map((row) => (
+                        <tr key={row.id} className="hover:bg-slate-50">
+                          <td className="px-3 py-2 font-bold text-slate-800">{row.source}</td>
+                          <td className="px-3 py-2 text-slate-700">{row.celler || '—'}</td>
+                          <td className="px-3 py-2 text-slate-700">{row.grade || '—'}</td>
+                          <td className="px-3 py-2">
+                            <select
+                              value={row.action}
+                              disabled
+                              className="h-8 min-w-[160px] rounded-lg border border-slate-200 bg-white px-2 text-xs"
+                            >
+                              {ET_ACTION_OPTIONS.map((opt) => (
+                                <option key={opt.id} value={opt.id}>
+                                  {opt.name}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="px-3 py-2 text-slate-600">{row.location || '—'}</td>
+                          <td className="px-3 py-2 text-slate-600">{row.remark || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-
-                <div className="rounded-xl bg-purple-50 border border-purple-100 p-3">
-                  <span className="text-[11px] font-bold text-purple-900 block mb-1">
-                    Embryos Loaded &amp; Transferred (2 Blastocysts):
-                  </span>
-                  <div className="flex items-center gap-3 text-xs">
-                    <span className="rounded-md bg-white px-2.5 py-1 font-mono font-bold text-purple-700 border border-purple-200">
-                      EMB-26-01 (4AA)
-                    </span>
-                    <span className="rounded-md bg-white px-2.5 py-1 font-mono font-bold text-purple-700 border border-purple-200">
-                      EMB-26-02 (4AA)
-                    </span>
-                    <span className="text-emerald-700 font-bold ml-2">✓ Flush Clear: No Retained Embryos</span>
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -762,93 +864,36 @@ export function OocyteEmbryoClient() {
         {/* QUICK ACTIONS SIDEBAR (COL 3) */}
         <div className="lg:col-span-3 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 border-b border-slate-100 pb-2.5">
-            Quick Actions
+            SMART ET Actions
           </h3>
+          <p className="text-[11px] text-slate-500">Same Action list as SMART ET Entry. Counts are for {sourceTab}.</p>
 
           <div className="space-y-2">
-            <button
-              type="button"
-              onClick={() => setShowAddOocyteModal(true)}
-              className="flex w-full items-center gap-2.5 rounded-xl border border-purple-200 bg-purple-50/70 px-3.5 py-2.5 text-xs font-bold text-purple-900 hover:bg-purple-100 transition text-left"
-            >
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-600 text-white text-xs">
-                +
-              </span>
-              <div>
-                <div>Add Oocyte</div>
-                <div className="text-[10px] font-normal text-purple-700">Add new retrieved oocyte</div>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => showToast('Sperm SEM-26-00018472 linked to all MII oocytes')}
-              className="flex w-full items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-bold text-slate-800 hover:bg-slate-50 transition text-left"
-            >
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-slate-700 text-xs">
-                🔗
-              </span>
-              <div>
-                <div>Link Sperm</div>
-                <div className="text-[10px] font-normal text-slate-500">Link selected sperm for ICSI</div>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowFertilizationModal(true)}
-              className="flex w-full items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-bold text-slate-800 hover:bg-slate-50 transition text-left"
-            >
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-xs">
-                ✓
-              </span>
-              <div>
-                <div>Record Fertilization</div>
-                <div className="text-[10px] font-normal text-slate-500">Record 2PN / Fertilization result</div>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => showToast('Embryo culture records updated')}
-              className="flex w-full items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-bold text-slate-800 hover:bg-slate-50 transition text-left"
-            >
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-blue-700 text-xs">
-                🧬
-              </span>
-              <div>
-                <div>Add Embryo</div>
-                <div className="text-[10px] font-normal text-slate-500">Add new embryo culture record</div>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowFreezeModal(true)}
-              className="flex w-full items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-bold text-slate-800 hover:bg-slate-50 transition text-left"
-            >
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-teal-100 text-teal-700 text-xs">
-                ❄️
-              </span>
-              <div>
-                <div>Freeze (Cryo)</div>
-                <div className="text-[10px] font-normal text-slate-500">Cryopreserve oocyte/embryo</div>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowTransferModal(true)}
-              className="flex w-full items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-bold text-slate-800 hover:bg-slate-50 transition text-left"
-            >
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-pink-100 text-pink-700 text-xs">
-                🚀
-              </span>
-              <div>
-                <div>Transfer</div>
-                <div className="text-[10px] font-normal text-slate-500">Record embryo transfer (ET)</div>
-              </div>
-            </button>
+            {SMART_ACTIONS.map((action) => {
+              const count =
+                action.id === 1
+                  ? summary.transferred
+                  : action.id === 2
+                    ? summary.cryopreserved
+                    : action.id === 3
+                      ? summary.stuck
+                      : action.id === 4
+                        ? summary.blastocyst
+                        : action.id === 5
+                          ? summary.discard
+                          : action.id === 6
+                            ? summary.donated
+                            : summary.donatedForResearch;
+              return (
+                <div
+                  key={action.id}
+                  className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-bold text-slate-800"
+                >
+                  <span>{action.name}</span>
+                  <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{count}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
 

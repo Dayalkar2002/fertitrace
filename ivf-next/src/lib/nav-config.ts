@@ -159,7 +159,7 @@ export const REPORT_MENU_GROUPS: NavMenuGroup[] = [
   {
     label: 'Andrology',
     items: [
-      { label: 'IUI Summary', route: '/reports/andrology/iui' },
+      { label: 'IUI', route: '/reports/andrology/iui' },
       { label: 'Semen Self Freeze', route: '/reports/andrology/semen-self-freeze' },
       { label: 'Semen Self – Valid Till', route: '/reports/andrology/semen-valid-till' },
     ],
@@ -174,7 +174,7 @@ export const REPORT_MENU_GROUPS: NavMenuGroup[] = [
   },
 ];
 
-/** Top navigation focused strictly on: Dashboard, Master (barcode preparation masters), Barcode Label, and Cryo section */
+/** Top navigation: Dashboard, Master, Barcode Label, Cryo, Reports (ART Cycle + IUI as in SMART). */
 export const TOP_NAV_MENUS: TopNavMenu[] = [
   { label: 'Dashboard', route: '/dashboard', icon: 'dashboard' },
   { label: 'Master', icon: 'masters', columns: getMasterColumns() },
@@ -185,6 +185,15 @@ export const TOP_NAV_MENUS: TopNavMenu[] = [
     items: [
       { label: 'Oocytes Cryopreservation', route: '/oocyte-embryo?tab=cryopreservation' },
       { label: 'Embryos Cryopreservation', route: '/oocyte-embryo?tab=cryopreservation' },
+    ],
+  },
+  {
+    label: 'Reports',
+    route: '/reports',
+    icon: 'reports',
+    items: [
+      { label: 'ART Cycle', route: '/reports/art-cycle' },
+      { label: 'IUI', route: '/reports/andrology/iui' },
     ],
   },
 ];
@@ -198,8 +207,7 @@ export const SIDE_NAV_SECTIONS: SideNavSection[] = [
       { label: 'Patient Management', route: '/masters/patient', icon: 'patient' },
       { label: 'Cycle Management', route: '/cycle/entry', icon: 'cycle' },
       { label: 'Sperm Management', route: '/sperm', icon: 'sperm' },
-      { label: 'Oocyte Management', route: '/oocyte-embryo', icon: 'oocyte' },
-      { label: 'Embryo Management', route: '/oocyte-embryo', icon: 'embryo' },
+      { label: 'Oocyte & Embryo', route: '/oocyte-embryo', icon: 'oocyte' },
       { label: 'Witness System', route: '/witness', icon: 'witness' },
       { label: 'Lab Inventory', route: '/inventory', icon: 'inventory' },
       { label: 'Reports & Analytics', route: '/reports', icon: 'reports' },
@@ -281,19 +289,10 @@ export const DEFAULT_LEFT_MENUS: LeftMenuItem[] = [
   {
     nodeId: 5,
     nodeName: 'oocyte_management',
-    label: 'Oocyte Management',
-    route: '/oocyte-embryo?tab=oocytes',
+    label: 'Oocyte & Embryo',
+    route: '/oocyte-embryo',
     icon: 'oocyte',
     orderIndex: 5,
-    isActive: true,
-  },
-  {
-    nodeId: 6,
-    nodeName: 'embryo_management',
-    label: 'Embryo Management',
-    route: '/oocyte-embryo?tab=embryo-culture',
-    icon: 'embryo',
-    orderIndex: 6,
     isActive: true,
   },
   { nodeId: 8, nodeName: 'witness_system', label: 'Witness System', route: '/witness', icon: 'witness', orderIndex: 8, isActive: true },

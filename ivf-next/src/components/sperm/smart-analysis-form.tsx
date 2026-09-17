@@ -84,6 +84,13 @@ function TextField({
   );
 }
 
+function resolvedMasterValue(value: string, options: CommonMasterRow[]) {
+  if (!value) return '';
+  if (options.some((row) => row.name === value)) return value;
+  const needle = value.toLowerCase();
+  return options.find((row) => row.name.toLowerCase().includes(needle))?.name || value;
+}
+
 export function SmartAnalysisForm({
   values,
   onChange,
@@ -97,6 +104,11 @@ export function SmartAnalysisForm({
   onWhereToUse,
   showValidTill,
   idOptions,
+  idLoading,
+  showIdSelect,
+  showSemenType,
+  spermIdLocked,
+  semenTypeLocked,
 }: {
   values: SmartAnalysisValues;
   onChange: (next: SmartAnalysisValues) => void;
@@ -109,7 +121,12 @@ export function SmartAnalysisForm({
   whereToUse?: string | null;
   onWhereToUse?: (v: string) => void;
   showValidTill?: boolean;
-  idOptions?: string[];
+  idOptions?: Array<string | { id: string; label: string }>;
+  idLoading?: boolean;
+  showIdSelect?: boolean;
+  showSemenType?: boolean;
+  spermIdLocked?: boolean;
+  semenTypeLocked?: boolean;
 }) {
   const [masters, setMasters] = useState<MasterMap>(EMPTY_MASTERS);
 
@@ -145,6 +162,12 @@ export function SmartAnalysisForm({
   const afterHidden = afterMode === 'disabled' || afterMode === 'na';
   const showSurvival = afterMode === 'survival24' || afterMode === 'enabled';
 
+  const useIdSelect = showIdSelect ?? idOptions !== undefined;
+  const idChoices = (idOptions || []).map((opt) =>
+    typeof opt === 'string' ? { id: opt, label: opt } : opt
+  );
+  const spermIdValue = resolvedMasterValue(values.spermId, masters.spermId);
+
   return (
     <div className="space-y-4 text-xs">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
@@ -152,19 +175,43 @@ export function SmartAnalysisForm({
           <span className="mb-0.5 block font-semibold">Name :</span>
           <input readOnly value={patientName} className="h-7 w-full rounded border border-slate-200 bg-slate-50 px-1.5 text-xs" />
         </label>
-        <MasterSelect label="Sperm ID :" value={values.spermId} options={masters.spermId} onChange={(v) => patch({ spermId: v })} />
+        <MasterSelect
+          label="Sperm ID :"
+          value={spermIdValue}
+          options={masters.spermId}
+          disabled={spermIdLocked}
+          onChange={(v) => patch({ spermId: v, idLocation: '' })}
+        />
+        {showSemenType !== false && (
+          <label className="block text-[10px] text-slate-600">
+            <span className="mb-0.5 block font-semibold">Type :</span>
+            <select
+              value={values.semenType}
+              disabled={semenTypeLocked}
+              onChange={(e) =>
+                patch({ semenType: e.target.value === 'Frozen' ? 'Frozen' : 'Fresh', idLocation: '' })
+              }
+              className="h-7 w-full rounded border border-slate-300 bg-white px-1.5 text-xs disabled:bg-slate-100"
+            >
+              <option value="Fresh">Fresh</option>
+              <option value="Frozen">Frozen</option>
+            </select>
+          </label>
+        )}
         <label className="block text-[10px] text-slate-600">
           <span className="mb-0.5 block font-semibold">Id :</span>
-          {idOptions && idOptions.length > 0 ? (
+          {useIdSelect ? (
             <select
               value={values.idLocation}
               onChange={(e) => patch({ idLocation: e.target.value })}
               className="h-7 w-full rounded border border-slate-300 px-1.5 text-xs"
             >
-              <option value="">Select</option>
-              {idOptions.map((id) => (
-                <option key={id} value={id}>
-                  {id}
+              <option value="">
+                {idLoading ? 'Loading IDs…' : idChoices.length ? 'Select' : 'No frozen IDs'}
+              </option>
+              {idChoices.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
                 </option>
               ))}
             </select>
@@ -172,8 +219,9 @@ export function SmartAnalysisForm({
             <input
               type="text"
               value={values.idLocation}
-              onChange={(e) => patch({ idLocation: e.target.value })}
-              className="h-7 w-full rounded border border-slate-300 px-1.5 text-xs"
+              disabled
+              placeholder="Select"
+              className="h-7 w-full rounded border border-slate-200 bg-slate-100 px-1.5 text-xs text-slate-400"
             />
           )}
         </label>

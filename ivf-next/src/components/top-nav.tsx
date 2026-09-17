@@ -36,7 +36,18 @@ export function TopNav() {
     if (menu.items?.some((i) => pathname === i.route || pathname.startsWith(`${i.route}/`))) return true;
     if (menu.groups?.some((g) => g.items.some((i) => pathname.startsWith(i.route)))) return true;
     if (menu.label === 'Master' && (pathname.startsWith('/masters') || pathname === '/dashboard?selectPatient=1')) return true;
+    if (menu.label === 'Reports' && pathname.startsWith('/reports')) return true;
     return false;
+  }
+
+  function isItemActive(route: string) {
+    if (pathname === route) return true;
+    if (route === '/reports/andrology/iui' && pathname === '/reports/iui') return true;
+    return pathname.startsWith(`${route}/`);
+  }
+
+  function activeChildLabel(menu: TopNavMenu) {
+    return menu.items?.find((item) => isItemActive(item.route))?.label;
   }
 
   function hasDropdown(menu: TopNavMenu): boolean {
@@ -66,7 +77,9 @@ export function TopNav() {
 
   return (
     <nav ref={navRef} className="hidden flex-1 items-center gap-1.5 xl:flex">
-      {TOP_NAV_MENUS.map((menu) => (
+      {TOP_NAV_MENUS.map((menu) => {
+        const currentChild = activeChildLabel(menu);
+        return (
         <div key={menu.label} className="relative">
           {menu.route && !hasDropdown(menu) ? (
             <Link
@@ -91,6 +104,11 @@ export function TopNav() {
                 }`}
               >
                 <span>{menu.label}</span>
+                {currentChild && (
+                  <span className="rounded-md bg-[#6345A6] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+                    {currentChild}
+                  </span>
+                )}
                 <span
                   className={`text-[10px] transition-transform duration-200 ${
                     openMenu === menu.label ? 'rotate-180 text-[#6345A6]' : 'opacity-60'
@@ -289,17 +307,30 @@ export function TopNav() {
                       <div className="px-3 py-1.5 border-b border-slate-100 mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                         {menu.label} Navigation
                       </div>
-                      {menu.items?.map((item) => (
-                        <Link
-                          key={item.route + item.label}
-                          href={item.route}
-                          onClick={() => setOpenMenu(null)}
-                          className="flex items-center justify-between px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-purple-50 hover:text-[#6345A6] transition"
-                        >
-                          <span>{item.label}</span>
-                          <span className="text-[10px] opacity-40">→</span>
-                        </Link>
-                      ))}
+                      {menu.items?.map((item) => {
+                        const itemActive = isItemActive(item.route);
+                        return (
+                          <Link
+                            key={item.route + item.label}
+                            href={item.route}
+                            onClick={() => setOpenMenu(null)}
+                            className={`flex items-center justify-between px-3.5 py-2 text-xs transition ${
+                              itemActive
+                                ? 'bg-purple-50 font-extrabold text-[#6345A6]'
+                                : 'font-semibold text-slate-700 hover:bg-purple-50 hover:text-[#6345A6]'
+                            }`}
+                          >
+                            <span>{item.label}</span>
+                            {itemActive ? (
+                              <span className="rounded bg-[#6345A6] px-1.5 py-0.5 text-[8px] font-bold uppercase text-white">
+                                Current
+                              </span>
+                            ) : (
+                              <span className="text-[10px] opacity-40">→</span>
+                            )}
+                          </Link>
+                        );
+                      })}
                     </div>
                   )}
                 </>
@@ -307,7 +338,8 @@ export function TopNav() {
             </>
           )}
         </div>
-      ))}
+        );
+      })}
     </nav>
   );
 }

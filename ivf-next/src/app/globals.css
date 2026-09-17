@@ -84,3 +84,26 @@ body {
 .kpi-ring {
   background: conic-gradient(from 180deg, #14b8a6, #99f6e4, #fb7185, #14b8a6);
 }
+
+@media print {
+  @page {
+    margin: 12mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  aside,
+  header,
+  .print-hide {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+    background: #fff !important;
+    overflow: visible !important;
+  }
+}

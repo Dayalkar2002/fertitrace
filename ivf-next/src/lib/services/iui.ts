@@ -77,6 +77,7 @@ export const ET_GRADE_OPTIONS = [
   { id: 4, name: 'Grade IV' },
 ];
 
+/** SMART ET.aspx Action list (ET Entry + ICSI location grid). */
 export const ET_ACTION_OPTIONS = [
   { id: 0, name: 'Select' },
   { id: 1, name: 'Transfer' },
@@ -84,6 +85,7 @@ export const ET_ACTION_OPTIONS = [
   { id: 3, name: 'Stuck' },
   { id: 4, name: 'KeepForBlast' },
   { id: 5, name: 'Discard' },
+  { id: 6, name: 'Donated' },
   { id: 7, name: 'DonatedForResearch' },
 ];
 

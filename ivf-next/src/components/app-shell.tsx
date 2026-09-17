@@ -117,7 +117,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <aside
           className={`${
             sidebarOpen ? 'w-[250px]' : 'w-0'
-          } shrink-0 overflow-hidden transition-all duration-200 z-30`}
+          } shrink-0 overflow-hidden transition-all duration-200 z-30 print:hidden`}
         >
           <div className="flex h-full w-[250px] flex-col bg-[#181d38] text-white">
             {/* Sidebar Brand Header */}
@@ -252,7 +252,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {/* Main Content Workspace */}
         <div className="flex min-w-0 flex-1 flex-col">
           {/* Top Navbar */}
-          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
+          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm print:hidden">
             <div className="flex items-center justify-between px-4 py-2.5 md:px-5">
               {/* Left Side: Logo & Menu Toggle */}
               <div className="flex items-center gap-3 md:gap-4">
@@ -384,7 +384,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           {/* Patient Context Bar if active */}
           {selectedPatient && (
-            <div className="border-b border-slate-200/80 bg-white px-5 py-2">
+            <div className="border-b border-slate-200/80 bg-white px-5 py-2 print:hidden">
               <PatientContextBar
                 patient={selectedPatient}
                 onSelectPatient={() => dispatch(setShowPatientModal(true))}
@@ -393,7 +393,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           )}
 
           {/* Main Workspace */}
-          <main className="flex-1 p-5 md:p-6 bg-[#f4f6fa]">{children}</main>
+          <main className="flex-1 p-5 md:p-6 bg-[#f4f6fa] print:bg-white print:p-0">{children}</main>
         </div>
       </div>
 

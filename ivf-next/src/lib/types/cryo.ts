@@ -3,6 +3,7 @@ export interface SemenDonorListRow {
   donorId: string;
   date: string;
   thawId: string;
+  location: string;
 }
 
 export interface SemenDonorLab {

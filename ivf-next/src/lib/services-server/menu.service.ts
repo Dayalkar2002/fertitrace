@@ -44,8 +44,11 @@ export async function getLeftMenuItems(): Promise<LeftMenuItem[]> {
           };
         });
         return mapped
-          .filter((item) => item.nodeName !== 'cryopreservation')
+          .filter((item) => item.nodeName !== 'cryopreservation' && item.nodeName !== 'embryo_management')
           .map((item) => {
+            if (item.nodeName === 'oocyte_management') {
+              return { ...item, label: 'Oocyte & Embryo', route: '/oocyte-embryo' };
+            }
             if (item.nodeName !== 'communication' || (item.subModules && item.subModules.length > 0)) {
               return item;
             }

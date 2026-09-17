@@ -108,6 +108,7 @@ function mapListRow(row: Record<string, unknown>): SemenDonorListRow {
     donorId: rowVal(row, 'sdDonorID', 'DonorID'),
     date: formatSmartDate(dateRaw),
     thawId: rowVal(row, 'IUIThawID', 'iuiThawID'),
+    location: rowVal(row, 'sdLocation', 'Location', 'sdlocation'),
   };
 }
 

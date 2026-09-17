@@ -26,7 +26,9 @@ export type IuiIndication =
   | 'HUSBAND THAW SINGLE'
   | 'HUSBAND THAW DOUBLE'
   | 'DONOR SINGLE IUI'
-  | 'DONOR DOUBLE IUI';
+  | 'DONOR DOUBLE IUI'
+  | 'DONOR THAW SINGLE'
+  | 'DONOR THAW DOUBLE';
 
 export const IUI_INDICATIONS: { value: IuiIndication; label: string }[] = [
   { value: 'HSA', label: 'HSA — Husband Semen Analysis' },
@@ -38,6 +40,8 @@ export const IUI_INDICATIONS: { value: IuiIndication; label: string }[] = [
   { value: 'HUSBAND THAW DOUBLE', label: 'HUSBAND THAW DOUBLE' },
   { value: 'DONOR SINGLE IUI', label: 'DONOR SINGLE IUI' },
   { value: 'DONOR DOUBLE IUI', label: 'DONOR DOUBLE IUI' },
+  { value: 'DONOR THAW SINGLE', label: 'DONOR THAW SINGLE' },
+  { value: 'DONOR THAW DOUBLE', label: 'DONOR THAW DOUBLE' },
 ];
 
 export const SPERM_MODULES: { value: SpermModule; label: string; hint: string }[] = [
@@ -177,7 +181,7 @@ const IUI_MAP: Record<IuiIndication, Partial<SpermFlowDerived> & { spermSource: 
   },
   'HUSBAND THAW SINGLE': {
     spermSource: 'Husband / Partner',
-    sampleState: 'Frozen',
+    sampleState: 'Thawed / Prepared',
     intendedUse: 'IUI',
     strawMode: 'husband_frozen',
     beforeProcessing: 'na',
@@ -194,7 +198,7 @@ const IUI_MAP: Record<IuiIndication, Partial<SpermFlowDerived> & { spermSource: 
   },
   'HUSBAND THAW DOUBLE': {
     spermSource: 'Husband / Partner',
-    sampleState: 'Frozen',
+    sampleState: 'Thawed / Prepared',
     intendedUse: 'IUI',
     strawMode: 'husband_frozen',
     beforeProcessing: 'na',
@@ -240,6 +244,40 @@ const IUI_MAP: Record<IuiIndication, Partial<SpermFlowDerived> & { spermSource: 
     iuiInscription: 'DOUBLE',
     reportPages: 2,
     summaryTitle: 'DONOR DOUBLE IUI',
+    collectionRequired: false,
+    whereToUse: 'IUI',
+  },
+  'DONOR THAW SINGLE': {
+    spermSource: 'Donor',
+    sampleState: 'Thawed / Prepared',
+    intendedUse: 'IUI',
+    strawMode: 'donor_frozen',
+    beforeProcessing: 'na',
+    afterProcessing: 'na',
+    preFreezing: 'readonly',
+    postThaw: 'edit',
+    follicularStudy: 'compulsory',
+    radioLocked: true,
+    iuiInscription: 'SINGLE',
+    reportPages: 1,
+    summaryTitle: 'DONOR THAW SINGLE',
+    collectionRequired: false,
+    whereToUse: 'IUI',
+  },
+  'DONOR THAW DOUBLE': {
+    spermSource: 'Donor',
+    sampleState: 'Thawed / Prepared',
+    intendedUse: 'IUI',
+    strawMode: 'donor_frozen',
+    beforeProcessing: 'na',
+    afterProcessing: 'na',
+    preFreezing: 'readonly',
+    postThaw: 'edit',
+    follicularStudy: 'compulsory',
+    radioLocked: true,
+    iuiInscription: 'DOUBLE',
+    reportPages: 2,
+    summaryTitle: 'DONOR THAW DOUBLE',
     collectionRequired: false,
     whereToUse: 'IUI',
   },
@@ -332,7 +370,7 @@ export function deriveSpermFlow(sel: SpermFlowSelection): SpermFlowDerived {
       sampleStateLocked: true,
       allowDonor: row.spermSource === 'Donor',
       allowFresh: row.sampleState === 'Fresh',
-      allowFrozen: row.sampleState === 'Frozen',
+      allowFrozen: row.sampleState !== 'Fresh',
       semenAnalysisType: row.semenAnalysisType ?? (sel.iuiIndication === 'HSA' ? 'HSA' : sel.iuiIndication === 'SQA' ? 'SQA' : null),
     };
   }

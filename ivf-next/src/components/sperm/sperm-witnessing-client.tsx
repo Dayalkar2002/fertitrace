@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { usePatient } from '@/contexts/patient-context';
 import { useAuth } from '@/contexts/auth-context';
 import { raiseAlarmEvent } from '@/lib/services/alarms';
@@ -20,12 +21,42 @@ import {
 } from '@/lib/sperm-flow';
 import { emptySmartAnalysis, type SmartAnalysisValues } from '@/lib/sperm-analysis';
 import { SmartAnalysisForm } from '@/components/sperm/smart-analysis-form';
+import {
+  applyLocationDetails,
+  idLocationQueryType,
+  isDonorSperm,
+  isHusbandSperm,
+  listSpermIdLocations,
+  loadSpermLocationDetails,
+  needsFrozenIdList,
+  type SpermIdOption,
+} from '@/lib/services/sperm-id-location';
+
+type FrozenIdOption = SpermIdOption;
+
+function iuiIndicationForRadios(
+  source: SpermSource,
+  state: SampleState,
+  preferDouble: boolean
+): IuiIndication {
+  const double = preferDouble;
+  if (source === 'Donor') {
+    if (state === 'Thawed / Prepared') return double ? 'DONOR THAW DOUBLE' : 'DONOR THAW SINGLE';
+    return double ? 'DONOR DOUBLE IUI' : 'DONOR SINGLE IUI';
+  }
+  if (state === 'Thawed / Prepared' || state === 'Frozen') {
+    return double ? 'HUSBAND THAW DOUBLE' : 'HUSBAND THAW SINGLE';
+  }
+  return double ? 'HUSBAND DOUBLE IUI' : 'HUSBAND SINGLE IUI';
+}
 
 export type { SpermSource, SampleState, IntendedUse, SemenAnalysisType, IuiIndication };
 
 export function SpermWitnessingClient() {
-  const { selectedPatient } = usePatient();
+  const router = useRouter();
+  const { selectedPatient, selectedSatellite } = usePatient();
   const { user, token } = useAuth();
+  const satId = selectedPatient?.satelliteId || selectedSatellite?.id || 0;
 
   // Workflow View State: 'registration' (Default initial view) | 'workflow' (Downstream view after Accept & Continue)
   const [currentView, setCurrentView] = useState<'registration' | 'workflow'>('registration');
@@ -63,10 +94,10 @@ export function SpermWitnessingClient() {
 
   function applyRadios(next: { source?: SpermSource; state?: SampleState; use?: IntendedUse }) {
     const source = next.source ?? spermSource;
-    const rawState = next.state ?? sampleState;
-    const state: 'Fresh' | 'Frozen' = rawState === 'Frozen' || rawState === 'Thawed / Prepared' ? 'Frozen' : 'Fresh';
+    const state = next.state ?? sampleState;
     const use = next.use ?? intendedUse;
     const preferDouble = flow.iuiInscription === 'DOUBLE';
+    const frozenLike = state === 'Frozen' || state === 'Thawed / Prepared';
 
     if (use === 'Semen Analysis') {
       patchFlow({
@@ -79,7 +110,7 @@ export function SpermWitnessingClient() {
     if (use === 'Cryopreservation') {
       patchFlow({
         module: 'CRYOPRESERVATION',
-        cryoType: state === 'Frozen' ? 'Frozen' : 'Fresh',
+        cryoType: frozenLike ? 'Frozen' : 'Fresh',
         cryoSource: source,
       });
       return;
@@ -87,15 +118,12 @@ export function SpermWitnessingClient() {
     if (use === 'IVF / ICSI') {
       patchFlow({
         module: 'CYCLE',
-        cycleSpermId: source === 'Donor' ? 'donor_frozen' : state === 'Frozen' ? 'husband_frozen' : 'husband_fresh',
+        cycleSpermId: source === 'Donor' ? 'donor_frozen' : frozenLike ? 'husband_frozen' : 'husband_fresh',
       });
       return;
     }
 
-    let indication: IuiIndication;
-    if (source === 'Donor') indication = preferDouble ? 'DONOR DOUBLE IUI' : 'DONOR SINGLE IUI';
-    else if (state === 'Frozen') indication = preferDouble ? 'HUSBAND THAW DOUBLE' : 'HUSBAND THAW SINGLE';
-    else indication = preferDouble ? 'HUSBAND DOUBLE IUI' : 'HUSBAND SINGLE IUI';
+    const indication = iuiIndicationForRadios(source, state, preferDouble);
     patchFlow({ module: 'IUI', iuiIndication: indication });
   }
 
@@ -158,6 +186,8 @@ export function SpermWitnessingClient() {
   const [partnerDobAge, setPartnerDobAge] = useState('');
   const [partnerPhone, setPartnerPhone] = useState('');
   const [frozenStrawId, setFrozenStrawId] = useState('');
+  const [frozenIdOptions, setFrozenIdOptions] = useState<FrozenIdOption[]>([]);
+  const [frozenIdsLoading, setFrozenIdsLoading] = useState(false);
   const [storageLocation, setStorageLocation] = useState('');
   const [donorType, setDonorType] = useState('Select');
   const [consentVerified, setConsentVerified] = useState(false);
@@ -204,25 +234,152 @@ export function SpermWitnessingClient() {
         : intendedUse === 'Semen Analysis'
           ? semenAnalysisType
           : iuiIndication;
-    const synced = {
-      indication,
-      semenType: (sampleState === 'Frozen' ? 'Frozen' : 'Fresh') as 'Fresh' | 'Frozen',
-      abstinence: String(abstinenceDays || '0'),
-      date: collectionDateTime,
-      idLocation: frozenStrawId,
+    const semenType = (sampleState === 'Fresh' ? 'Fresh' : 'Frozen') as 'Fresh' | 'Frozen';
+    const spermId = spermSource === 'Donor' ? 'Donor' : 'Husband';
+    setAnalysis((prev) => ({ ...prev, indication, semenType, spermId, idLocation: '' }));
+    setAnalysis2((prev) => ({ ...prev, indication, semenType, spermId, idLocation: '' }));
+    setFrozenStrawId('');
+  }, [intendedUse, flowSel.cycleIndication, semenAnalysisType, iuiIndication, sampleState, spermSource]);
+
+  useEffect(() => {
+    const abstinence = String(abstinenceDays || '0');
+    const date = collectionDateTime;
+    setAnalysis((prev) => ({
+      ...prev,
+      abstinence: abstinence || prev.abstinence,
+      date: date || prev.date,
+    }));
+    setAnalysis2((prev) => ({
+      ...prev,
+      abstinence: abstinence || prev.abstinence,
+      date: date || prev.date,
+    }));
+  }, [abstinenceDays, collectionDateTime]);
+
+  const activeAnalysis = analysisPage === 2 ? analysis2 : analysis;
+  const analysisSpermId = activeAnalysis.spermId || (spermSource === 'Donor' ? 'Donor' : 'Husband');
+  const analysisSemenType = activeAnalysis.semenType;
+  const showFrozenIds = needsFrozenIdList(analysisSpermId, analysisSemenType);
+
+  useEffect(() => {
+    if (!token || !showFrozenIds) {
+      setFrozenIdOptions([]);
+      setFrozenIdsLoading(false);
+      return;
+    }
+    if (isHusbandSperm(analysisSpermId) && !selectedPatient?.id) {
+      setFrozenIdOptions([]);
+      setFrozenIdsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setFrozenIdsLoading(true);
+    listSpermIdLocations(token, {
+      spermId: analysisSpermId,
+      semenType: analysisSemenType,
+      patId: selectedPatient?.id || 0,
+      satId,
+      thawId: 'New',
+    })
+      .then((rows) => {
+        if (!cancelled) setFrozenIdOptions(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setFrozenIdOptions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setFrozenIdsLoading(false);
+      });
+    return () => {
+      cancelled = true;
     };
-    setAnalysis((prev) => ({ ...prev, ...synced, abstinence: synced.abstinence || prev.abstinence, date: synced.date || prev.date, idLocation: synced.idLocation || prev.idLocation }));
-    setAnalysis2((prev) => ({ ...prev, ...synced, abstinence: synced.abstinence || prev.abstinence, date: synced.date || prev.date, idLocation: synced.idLocation || prev.idLocation }));
-  }, [
-    intendedUse,
-    flowSel.cycleIndication,
-    semenAnalysisType,
-    iuiIndication,
-    sampleState,
-    abstinenceDays,
-    collectionDateTime,
-    frozenStrawId,
-  ]);
+  }, [token, showFrozenIds, analysisSpermId, analysisSemenType, selectedPatient?.id, satId]);
+
+  useEffect(() => {
+    if (!frozenIdOptions.length) return;
+    if (frozenStrawId && !frozenIdOptions.some((opt) => opt.id === frozenStrawId)) {
+      setFrozenStrawId('');
+    }
+  }, [frozenIdOptions, frozenStrawId]);
+
+  async function fillFromSelectedId(id: string, spermId: string, semenType: string, page: 1 | 2) {
+    if (!token || !id) return;
+    try {
+      const details = await loadSpermLocationDetails(token, id, idLocationQueryType(spermId, semenType));
+      if (!details) return;
+      const apply = (prev: SmartAnalysisValues) =>
+        applyLocationDetails({ ...prev, idLocation: id }, details, isDonorSperm(spermId));
+      if (page === 2) setAnalysis2(apply);
+      else setAnalysis(apply);
+    } catch {
+      /* keep the selected id even if pre-freeze details fail */
+    }
+  }
+
+  function selectFrozenStraw(id: string) {
+    setFrozenStrawId(id);
+    const match = frozenIdOptions.find((opt) => opt.id === id);
+    if (match?.location) setStorageLocation(match.location);
+    setAnalysis((prev) => (prev.idLocation === id ? prev : { ...prev, idLocation: id }));
+    if (id) void fillFromSelectedId(id, analysisSpermId, analysisSemenType, analysisPage);
+  }
+
+  const isFrozenLike = sampleState !== 'Fresh';
+
+  function summaryReportMeta() {
+    if (intendedUse === 'Semen Analysis') {
+      return {
+        label: semenAnalysisType === 'HSA' ? 'HSASummary (1 Page)' : 'SQASummary (1 Page)',
+        printLabel: `Print ${semenAnalysisType} Summary`,
+        href: '/reports/andrology/iui',
+      };
+    }
+    if (intendedUse === 'IVF / ICSI') {
+      return {
+        label: 'ART Cycle Summary',
+        printLabel: 'Print ART Cycle Summary',
+        href: '/reports/art-cycle',
+      };
+    }
+    if (iuiIndication === 'TIC / FM') {
+      return {
+        label: 'TIC / Follicle Report',
+        printLabel: 'Print TIC Summary',
+        href: '/reports/andrology/iui',
+      };
+    }
+    if (/THAW/i.test(iuiIndication)) {
+      return {
+        label: 'IUI Thaw Summary',
+        printLabel: 'Print Thaw Summary',
+        href: '/reports/andrology/iui',
+      };
+    }
+    return {
+      label: flow.reportPages === 2 ? 'IUI Summary (2 Page)' : 'IUI Summary (1 Page)',
+      printLabel: 'Print IUI Summary',
+      href: '/reports/andrology/iui',
+    };
+  }
+
+  function handleSaveSummary() {
+    if (!hasPatient) {
+      showToast('Select a patient first.');
+      return;
+    }
+    setAnalysisSaved(true);
+    showToast(`${flow.summaryTitle || intendedUse} summary saved.`);
+  }
+
+  function handlePrintSummary() {
+    if (!hasPatient) {
+      showToast('Select a patient first.');
+      return;
+    }
+    const meta = summaryReportMeta();
+    showToast(`Opening ${meta.label}.`);
+    router.push(meta.href);
+  }
 
   // Pre-IUI Authorization (Box 6)
   const [authBy, setAuthBy] = useState('');
@@ -391,7 +548,7 @@ export function SpermWitnessingClient() {
                                     applyRadios({
                                       source: src,
                                       state:
-                                        src === 'Donor' && intendedUse !== 'Cryopreservation'
+                                        src === 'Donor' && intendedUse !== 'Cryopreservation' && sampleState === 'Fresh'
                                           ? 'Frozen'
                                           : sampleState,
                                     })
@@ -487,12 +644,9 @@ export function SpermWitnessingClient() {
                                   name="iuiInscription"
                                   checked={(flow.iuiInscription || 'SINGLE') === n}
                                   onChange={() => {
-                                    const double = n === 'DOUBLE';
-                                    let indication: IuiIndication;
-                                    if (spermSource === 'Donor') indication = double ? 'DONOR DOUBLE IUI' : 'DONOR SINGLE IUI';
-                                    else if (sampleState === 'Frozen') indication = double ? 'HUSBAND THAW DOUBLE' : 'HUSBAND THAW SINGLE';
-                                    else indication = double ? 'HUSBAND DOUBLE IUI' : 'HUSBAND SINGLE IUI';
-                                    patchFlow({ iuiIndication: indication });
+                                    patchFlow({
+                                      iuiIndication: iuiIndicationForRadios(spermSource, sampleState, n === 'DOUBLE'),
+                                    });
                                   }}
                                   className="h-3.5 w-3.5 text-blue-600"
                                 />
@@ -697,8 +851,8 @@ export function SpermWitnessingClient() {
                         {sampleState === 'Fresh'
                           ? 'Frozen Straw ID'
                           : spermSource === 'Donor'
-                          ? 'Donor Frozen Straw (Drop Down)'
-                          : 'Husband Frozen Straw (Drop Down)'}
+                          ? 'Donor Frozen ID (thaw)'
+                          : 'Husband Frozen ID (thaw)'}
                       </label>
                       {sampleState === 'Fresh' ? (
                         <input
@@ -707,28 +861,28 @@ export function SpermWitnessingClient() {
                           disabled
                           className="h-7 w-full rounded border border-slate-200 bg-slate-100 px-2 font-mono text-[11px] text-slate-400 font-bold"
                         />
-                      ) : spermSource === 'Donor' ? (
-                        <select
-                          value={frozenStrawId}
-                          onChange={(e) => {
-                            setFrozenStrawId(e.target.value);
-                          }}
-                          className="h-7 w-full rounded border border-blue-400 bg-blue-50/50 px-2 font-mono text-[11px] font-bold text-blue-800"
-                        >
-                          <option value="DON-2026/001">DON-2026/001 (CryoLife / B+)</option>
-                          <option value="DON-2026/002">DON-2026/002 (LifeCell / O+)</option>
-                          <option value="DON-2026/003">DON-2026/003 (Mumbai Bank / A+)</option>
-                        </select>
                       ) : (
                         <select
                           value={frozenStrawId}
-                          onChange={(e) => {
-                            setFrozenStrawId(e.target.value);
-                          }}
+                          onChange={(e) => selectFrozenStraw(e.target.value)}
                           className="h-7 w-full rounded border border-blue-400 bg-blue-50/50 px-2 font-mono text-[11px] font-bold text-blue-800"
                         >
-                          <option value="FROZ-26-000554">FROZ-26-000554 (Tank 1 / Can 2)</option>
-                          <option value="FROZ-26-000412">FROZ-26-000412 (Tank 2 / Can 1)</option>
+                          <option value="">
+                            {frozenIdsLoading
+                              ? 'Loading frozen IDs…'
+                              : frozenIdOptions.length
+                                ? 'Select'
+                                : spermSource === 'Donor'
+                                  ? 'No donor frozen IDs'
+                                  : hasPatient
+                                    ? 'No husband frozen IDs'
+                                    : 'Select a patient'}
+                          </option>
+                          {frozenIdOptions.map((opt) => (
+                            <option key={opt.id} value={opt.id}>
+                              {opt.label}
+                            </option>
+                          ))}
                         </select>
                       )}
                     </div>
@@ -744,9 +898,19 @@ export function SpermWitnessingClient() {
                             : 'border-slate-300'
                         }`}
                       >
-                        <option>Tank 1 - Canister 2</option>
-                        <option>Tank 2 - Canister 1</option>
-                        <option>Tank 3 - Canister 4</option>
+                        <option value="">Select</option>
+                        {Array.from(
+                          new Set(
+                            frozenIdOptions
+                              .map((opt) => opt.location)
+                              .filter(Boolean)
+                              .concat(storageLocation ? [storageLocation] : [])
+                          )
+                        ).map((loc) => (
+                          <option key={loc} value={loc}>
+                            {loc}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div>
@@ -916,7 +1080,7 @@ export function SpermWitnessingClient() {
                     ] : intendedUse === 'IVF / ICSI' ? [
                       { label: 'Sample Received', icon: '🧪', status: 'completed' },
                       { label: 'Sample Validation', icon: '🛡️', status: 'active' },
-                      { label: sampleState === 'Frozen' ? 'Thaw Straw' : 'Density Gradient', icon: '🧬', status: 'ready' },
+                      { label: isFrozenLike ? 'Thaw Straw' : 'Density Gradient', icon: '🧬', status: 'ready' },
                       { label: 'Post-Prep Eval', icon: '🔬', status: 'ready' },
                       { label: 'Fertilization Dish', icon: '🧫', status: 'ready' },
                       { label: 'Witness Cohort Match', icon: '🔒', status: 'ready' },
@@ -925,8 +1089,8 @@ export function SpermWitnessingClient() {
                     ] : [
                       { label: 'Sample Collection', icon: '🧪', status: 'completed' },
                       { label: 'Sample Validation', icon: '🛡️', status: 'active' },
-                      { label: sampleState === 'Frozen' ? 'Thaw Straw' : 'Sperm Wash', icon: sampleState === 'Frozen' ? '❄️' : '🧬', status: 'ready' },
-                      { label: sampleState === 'Frozen' ? 'Post-Thaw Eval' : 'Post-Wash Eval', icon: '🧪', status: 'ready' },
+                      { label: isFrozenLike ? 'Thaw Straw' : 'Sperm Wash', icon: isFrozenLike ? '❄️' : '🧬', status: 'ready' },
+                      { label: isFrozenLike ? 'Post-Thaw Eval' : 'Post-Wash Eval', icon: '🧪', status: 'ready' },
                       { label: 'Final Syringe (IUI)', icon: '💉', status: 'ready' },
                       { label: 'Double Witnessing', icon: '👥', status: 'ready' },
                       { label: 'Pre-IUI Authorization', icon: '🔒', status: 'ready' },
@@ -991,18 +1155,10 @@ export function SpermWitnessingClient() {
                     <span className="text-slate-400 font-bold text-lg font-sans">➔</span>
                     <div className="text-center">
                       <span className="block text-[10px] uppercase font-sans font-bold text-slate-500">
-                        {intendedUse === 'Semen Analysis'
-                          ? 'Summary Report'
-                          : intendedUse === 'IVF / ICSI'
-                          ? 'Fertilization Dish ID'
-                          : 'Final Syringe ID'}
+                        Summary Report
                       </span>
                       <strong className="text-emerald-700 text-sm">
-                        {intendedUse === 'Semen Analysis'
-                          ? (semenAnalysisType === 'HSA' ? 'HSASummary.rdlc (1 Page)' : 'SQASummary.rdlc (1 Page)')
-                          : intendedUse === 'IVF / ICSI'
-                          ? 'ICSI-DISH-00158'
-                          : finalSyringeId}
+                        {summaryReportMeta().label}
                       </strong>
                     </div>
                   </div>
@@ -1040,14 +1196,14 @@ export function SpermWitnessingClient() {
                         ] : intendedUse === 'IVF / ICSI' ? [
                           { step: 'Sample Received', id: sampleId, time: '18-Aug-2026 09:42', operator: 'EMB-01', status: '✓' },
                           { step: 'Sample Validated', id: sampleId, time: '18-Aug-2026 09:55', operator: 'EMB-01', status: '✓' },
-                          { step: sampleState === 'Frozen' ? 'Straw Thaw Event' : 'Density Gradient Wash', id: sampleState === 'Frozen' ? frozenStrawId : prepSampleId, time: '18-Aug-2026 10:15', operator: 'EMB-02', status: '✓' },
+                          { step: isFrozenLike ? 'Straw Thaw Event' : 'Density Gradient Wash', id: isFrozenLike ? frozenStrawId : prepSampleId, time: '18-Aug-2026 10:15', operator: 'EMB-02', status: '✓' },
                           { step: 'Post-Prep Assessment', id: `${postCount} M/ml (${postProgMotility}% PR)`, time: '18-Aug-2026 10:25', operator: 'EMB-02', status: '✓' },
                           { step: 'Dish Loading & Cohort Match', id: 'ICSI-DISH-00158', time: '18-Aug-2026 10:45', operator: 'DR-01', status: '✓' },
                           { step: 'Insemination / ICSI Done', id: 'ICSI-DISH-00158', time: '18-Aug-2026 11:00', operator: 'DR-01', status: '✓' },
                         ] : [
                           { step: 'Sample Received', id: sampleId, time: '18-Aug-2026 09:42', operator: 'EMB-01', status: '✓' },
                           { step: 'Sample Validated', id: sampleId, time: '18-Aug-2026 09:55', operator: 'EMB-01', status: '✓' },
-                          { step: 'Thaw Event', id: sampleState === 'Frozen' ? frozenStrawId : 'N/A (Fresh)', time: sampleState === 'Frozen' ? '18-Aug-2026 10:05' : 'N/A', operator: sampleState === 'Frozen' ? 'EMB-02' : 'N/A', status: '✓' },
+                          { step: 'Thaw Event', id: isFrozenLike ? frozenStrawId : 'N/A (Fresh)', time: isFrozenLike ? '18-Aug-2026 10:05' : 'N/A', operator: isFrozenLike ? 'EMB-02' : 'N/A', status: '✓' },
                           { step: 'Preparation Completed', id: prepSampleId, time: '18-Aug-2026 10:18', operator: 'EMB-02', status: '✓' },
                           { step: 'Final Syringe Witnessed', id: finalSyringeId, time: '18-Aug-2026 10:25', operator: 'DR-01', status: '✓' },
                           { step: 'Pre-IUI Authorization', id: finalSyringeId, time: '18-Aug-2026 10:30', operator: 'DR-01', status: '✓' },
@@ -1078,7 +1234,7 @@ export function SpermWitnessingClient() {
                         {intendedUse === 'Semen Analysis'
                           ? `5. SEMEN ANALYSIS (${semenAnalysisType === 'HSA' ? 'HSA - HUSBAND SEMEN ANALYSIS' : 'SQA - SEMEN QUALITATIVE ANALYSIS'})`
                           : intendedUse === 'IUI'
-                          ? `5. IUI SEMEN PREPARATION (${sampleState === 'Frozen' ? 'THAWED SAMPLE' : 'FRESH SAMPLE'} • ${iuiIndication})`
+                          ? `5. IUI SEMEN PREPARATION (${isFrozenLike ? 'THAWED SAMPLE' : 'FRESH SAMPLE'} • ${iuiIndication})`
                           : '5. SPERM PREPARATION FOR IVF / ICSI'}
                       </h2>
                       {intendedUse === 'Semen Analysis' && (
@@ -1130,10 +1286,26 @@ export function SpermWitnessingClient() {
                       )}
                       <SmartAnalysisForm
                         values={analysisPage === 2 ? analysis2 : analysis}
-                        onChange={analysisPage === 2 ? setAnalysis2 : setAnalysis}
+                        onChange={(vals) => {
+                          if (analysisPage === 2) setAnalysis2(vals);
+                          else setAnalysis(vals);
+                          if (vals.idLocation !== frozenStrawId) {
+                            setFrozenStrawId(vals.idLocation);
+                            const match = frozenIdOptions.find((opt) => opt.id === vals.idLocation);
+                            if (match?.location) setStorageLocation(match.location);
+                            if (vals.idLocation) {
+                              void fillFromSelectedId(vals.idLocation, vals.spermId, vals.semenType, analysisPage);
+                            }
+                          }
+                        }}
                         token={token}
                         patientName={patientName}
-                        lockedBefore={sampleState === 'Frozen' || flow.beforeProcessing === 'disabled' || flow.preFreezing === 'readonly'}
+                        lockedBefore={
+                          isFrozenLike ||
+                          analysisSemenType === 'Frozen' ||
+                          flow.beforeProcessing === 'disabled' ||
+                          flow.preFreezing === 'readonly'
+                        }
                         afterMode={flow.afterProcessing}
                         showCycleAfterGrades={flowSel.module === 'CYCLE'}
                         showWhereToUse={flowSel.module === 'CYCLE' ? 'CYCLE' : undefined}
@@ -1142,7 +1314,12 @@ export function SpermWitnessingClient() {
                           patchFlow({ cycleIndication: v === 'ICSI' ? 'ICSI' : 'IVF' })
                         }
                         showValidTill={flowSel.module === 'CRYOPRESERVATION'}
-                        idOptions={frozenStrawId ? [frozenStrawId] : undefined}
+                        showSemenType={spermSource !== 'Donor'}
+                        showIdSelect={showFrozenIds}
+                        idOptions={showFrozenIds ? frozenIdOptions : undefined}
+                        idLoading={frozenIdsLoading}
+                        spermIdLocked={flow.sourceLocked}
+                        semenTypeLocked={flow.sampleStateLocked}
                       />
 
                     </div>
@@ -1158,20 +1335,21 @@ export function SpermWitnessingClient() {
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      {intendedUse === 'Semen Analysis' && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            showToast(`Opening ${semenAnalysisType === 'HSA' ? 'HSASummary.rdlc' : 'SQASummary.rdlc'} 1-page summary report preview.`);
-                          }}
-                          className="rounded-lg border border-blue-400 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 text-xs font-bold text-blue-800 transition flex items-center gap-1"
-                        >
-                          <span>📄</span>
-                          <span>Print {semenAnalysisType} Summary</span>
-                        </button>
-                      )}
-
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleSaveSummary}
+                        className="rounded-lg border border-slate-300 bg-white hover:bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700 transition"
+                      >
+                        Save Summary
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handlePrintSummary}
+                        className="rounded-lg border border-blue-400 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 text-xs font-bold text-blue-800 transition"
+                      >
+                        {summaryReportMeta().printLabel}
+                      </button>
                       <button
                         type="button"
                         onClick={() => {
