@@ -43,14 +43,26 @@ export const CATALOG_MODULES: QuickAccessItem[] = [
     isActive: true,
   },
   {
+    moduleKey: 'cycle_creation',
+    title: 'Cycle Creation',
+    description: 'Start a new ART cycle',
+    route: '/cycle/creation',
+    icon: 'cycle',
+    badgeText: 'New',
+    colorTheme: 'blue',
+    orderIndex: 3,
+    isPinned: true,
+    isActive: true,
+  },
+  {
     moduleKey: 'cycle_management',
-    title: 'Cycle Entry',
-    description: 'Clinical Witnessing Setup',
+    title: 'Cycle Retrieval Screen',
+    description: 'Oocyte & semen source',
     route: '/cycle/entry',
     icon: 'cycle',
     badgeText: 'Active',
-    colorTheme: 'blue',
-    orderIndex: 3,
+    colorTheme: 'indigo',
+    orderIndex: 4,
     isPinned: true,
     isActive: true,
   },
@@ -189,14 +201,16 @@ export const CATALOG_MODULES: QuickAccessItem[] = [
 ];
 
 function mapRow(r: Record<string, unknown>): QuickAccessItem {
+  const moduleKey = String(r.ModuleKey);
+  const isRetrieval = moduleKey === 'cycle_management' || String(r.Route) === '/cycle/entry';
   return {
     quickAccessId: Number(r.QuickAccessId),
     userId: Number(r.UserId ?? 0),
     userLoginName: r.UserLoginName ? String(r.UserLoginName) : undefined,
-    moduleKey: String(r.ModuleKey),
-    title: String(r.Title),
+    moduleKey,
+    title: isRetrieval ? 'Cycle Retrieval Screen' : String(r.Title),
     description: r.Description ? String(r.Description) : undefined,
-    route: String(r.Route),
+    route: isRetrieval ? '/cycle/entry' : String(r.Route),
     icon: String(r.Icon || 'dashboard'),
     badgeText: r.BadgeText ? String(r.BadgeText) : undefined,
     colorTheme: r.ColorTheme ? String(r.ColorTheme) : 'purple',
@@ -230,7 +244,7 @@ export async function getQuickAccessForUser(
         ]);
 
         if (userRows.recordset && userRows.recordset.length > 0) {
-          return userRows.recordset.map(mapRow);
+          return ensureCycleCreationQuickAccess(userRows.recordset.map(mapRow));
         }
       }
 
@@ -243,14 +257,32 @@ export async function getQuickAccessForUser(
       `;
       const defRows = await executeText<Record<string, unknown>>(defaultQuery);
       if (defRows.recordset && defRows.recordset.length > 0) {
-        return defRows.recordset.map(mapRow);
+        return ensureCycleCreationQuickAccess(defRows.recordset.map(mapRow));
       }
     } catch (err) {
       console.warn('[QuickAccessService] DB fetch failed, using catalog default:', err);
     }
   }
 
-  return CATALOG_MODULES.slice(0, 8);
+  return CATALOG_MODULES.filter((item) => item.isPinned);
+}
+
+function ensureCycleCreationQuickAccess(items: QuickAccessItem[]): QuickAccessItem[] {
+  const patched = items.map((item) =>
+    item.moduleKey === 'cycle_management' || item.route === '/cycle/entry'
+      ? { ...item, title: 'Cycle Retrieval Screen', route: '/cycle/entry' }
+      : item
+  );
+  if (patched.some((item) => item.moduleKey === 'cycle_creation' || item.route === '/cycle/creation')) {
+    return patched;
+  }
+  const creation = CATALOG_MODULES.find((item) => item.moduleKey === 'cycle_creation');
+  if (!creation) return patched;
+  const retrievalIndex = patched.findIndex(
+    (item) => item.moduleKey === 'cycle_management' || item.route === '/cycle/entry'
+  );
+  if (retrievalIndex < 0) return [creation, ...patched];
+  return [...patched.slice(0, retrievalIndex), creation, ...patched.slice(retrievalIndex)];
 }
 
 /**

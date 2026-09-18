@@ -92,6 +92,58 @@ export const CYCLE_TYPE_MAP: Record<string, Record<string, string>> = {
   },
 };
 
+export const MONITORING_SHEET_OPTIONS = [
+  { value: 'Agonist', label: 'Agonist Cycle' },
+  { value: 'Antagonist', label: 'Antagonist Cycle' },
+  { value: 'HRT', label: 'HRT Cycle' },
+  { value: 'ModifiedHRT', label: 'Modified Natural Cycle' },
+] as const;
+
+export type MonitoringSheetOption = (typeof MONITORING_SHEET_OPTIONS)[number]['value'];
+
+export const CYCLE_CREATION_TYPES = [
+  { value: 'Fresh', label: 'Fresh cycle (FR)' },
+  { value: 'FET', label: 'Frozen Thaw Embryo Transfer (FET)' },
+  { value: 'FrozenOocytes', label: 'Frozen Oocyte (FZO)' },
+  { value: 'ThawOocytes', label: 'Thaw Oocyte (THO)' },
+  { value: 'ER', label: 'Embryo Recipient (ER)' },
+  { value: 'OD', label: 'Oocyte Donor (OD)' },
+  { value: 'OR', label: 'Oocyte Recipient (OR)' },
+] as const;
+
+export type SmartCycleType = (typeof CYCLE_CREATION_TYPES)[number]['value'];
+
+export const SMART_SEMEN_IDS = ['husband_fresh', 'husband_cryo', 'donor_fresh', 'donor_cryo'] as const;
+
+export const TREATMENT_TYPES = [
+  { value: 'Fresh', label: 'Fresh' },
+  { value: 'Frozen', label: 'Frozen' },
+] as const;
+
+export const FALLBACK_PROTOCOLS = [
+  'Long Protocol',
+  'Short Protocol',
+  'Ultra Long Protocol',
+  'Mild Stimulation',
+];
+
+export const CYCLE_CREATION_STORAGE_KEY = 'fertitrace.cycleCreation';
+
+export function parseMonitoringSheet(comments: string, fallback = ''): string {
+  const match = comments.match(/\[\[MSO:([^\]]+)\]\]/i);
+  return match?.[1]?.trim() || fallback;
+}
+
+export function stripMonitoringSheetMarker(comments: string): string {
+  return comments.replace(/\s*\[\[MSO:[^\]]+\]\]\s*/gi, ' ').trim();
+}
+
+export function embedMonitoringSheetMarker(comments: string, option: string): string {
+  const cleaned = stripMonitoringSheetMarker(comments);
+  if (!option) return cleaned;
+  return cleaned ? `${cleaned} [[MSO:${option}]]` : `[[MSO:${option}]]`;
+}
+
 export function computeCycleType(oocyteSource: string, semenSource: string): string {
   return (
     CYCLE_TYPE_MAP[oocyteSource]?.[semenSource] ??
@@ -114,4 +166,161 @@ export function showEmbryoRecipientDetails(oocyteSource: string): boolean {
 
 export function showSemenDonorDetails(semenSource: string): boolean {
   return ['husband_cryo', 'donor_fresh', 'donor_cryo', 'surgical_frozen'].includes(semenSource);
+}
+
+export function normalizeCycleType(value: string | undefined | null): SmartCycleType {
+  const v = (value || '').trim();
+  if (!v) return 'Fresh';
+  if (v === 'IVF' || v === 'ICSI' || v === 'self_oocyte') return 'Fresh';
+  if (v === 'donor_oocyte') return 'OD';
+  if (v === 'oocyte_recipient') return 'OR';
+  if (v === 'embryo_recipient') return 'ER';
+  if (v === 'Fresh' || v === 'FET' || v === 'FrozenOocytes' || v === 'ThawOocytes' || v === 'OD' || v === 'OR' || v === 'ER') {
+    return v;
+  }
+  const lower = v.toLowerCase();
+  if (lower.includes('embryo rec') || lower.startsWith('er ') || lower.startsWith('er(') || lower.startsWith('er -')) return 'ER';
+  if (lower.includes('oocyte rec') || lower.startsWith('or ') || lower.startsWith('or(') || lower.startsWith('or -')) return 'OR';
+  if (lower.includes('oocyte don') || lower.startsWith('od ') || lower.startsWith('od(')) return 'OD';
+  if (lower.includes('frozen thaw') || lower.includes('(fet)')) return 'FET';
+  if (lower.includes('frozen oocyte') || lower.includes('(fzo)')) return 'FrozenOocytes';
+  if (lower.includes('thaw oocyte') || lower.includes('(tho)')) return 'ThawOocytes';
+  if (lower.includes('fresh') || lower.includes('(fr)')) return 'Fresh';
+  return 'Fresh';
+}
+
+export function oocyteSourceFromCreation(cycleType: string | undefined | null): SmartCycleType {
+  return normalizeCycleType(cycleType);
+}
+
+export function getCycleTypeLabel(cycleType: string | undefined | null): string {
+  const type = normalizeCycleType(cycleType);
+  return CYCLE_CREATION_TYPES.find((item) => item.value === type)?.label ?? type;
+}
+
+export function getMonitoringSheetLabel(option: string | undefined | null): string {
+  const value = (option || '').trim();
+  return MONITORING_SHEET_OPTIONS.find((item) => item.value === value)?.label ?? value;
+}
+
+export function isFrozenCycleType(cycleType: string | undefined | null, treatmentType?: string): boolean {
+  const type = normalizeCycleType(cycleType);
+  if (treatmentType === 'Frozen') return true;
+  return type === 'FET' || type === 'FrozenOocytes' || type === 'ThawOocytes';
+}
+
+export function defaultSemenSource(cycleType: string | undefined | null, treatmentType?: string): string {
+  const type = normalizeCycleType(cycleType);
+  const frozen = isFrozenCycleType(type, treatmentType);
+  if (type === 'ER') return frozen ? 'donor_cryo' : 'donor_fresh';
+  if (type === 'OD') return '';
+  if (frozen) return 'husband_cryo';
+  return 'husband_fresh';
+}
+
+export function allowedSemenSources(cycleType: string | undefined | null, treatmentType?: string): string[] {
+  const type = normalizeCycleType(cycleType);
+  if (type === 'OD') return [];
+  if (type === 'ER') return ['donor_fresh', 'donor_cryo'];
+  if (type === 'OR') return ['husband_fresh', 'husband_cryo'];
+  if (isFrozenCycleType(type, treatmentType) && type !== 'FrozenOocytes') {
+    return ['husband_cryo', 'donor_cryo', 'husband_fresh', 'donor_fresh'];
+  }
+  return [...SMART_SEMEN_IDS];
+}
+
+export function getRetrievalLayout(cycleType: string | undefined | null) {
+  const type = normalizeCycleType(cycleType);
+  const base = {
+    type,
+    lockOocyteSource: true,
+    showOocyteRadios: true,
+    showSemenRadios: type !== 'OD',
+    retrievalChoice: 'self_to_self' as const,
+    sections: {
+      showSelfToSelf: false,
+      showSelfToRecipient: false,
+      showDonorToSelf: false,
+      showDonorToRecipient: false,
+      showEmbryoRecipient: false,
+      lockOocyteDonation: false,
+      lockSemenCryo: false,
+      showOocyteReceivedFrom: false,
+      showSemenSampleId: false,
+      showFreezeOocytes: false,
+      showFetThaw: false,
+      showThawOocytes: false,
+      showDonorEggCount: false,
+      showHusbandSperm: false,
+      showDonorSperm: false,
+      showRecipientDetails: false,
+      showDonorEggDetails: false,
+    },
+  };
+
+  if (type === 'Fresh') {
+    return {
+      ...base,
+      retrievalChoice: 'self_to_self' as const,
+      sections: { ...base.sections, showSelfToSelf: true, showHusbandSperm: true },
+    };
+  }
+  if (type === 'FrozenOocytes') {
+    return {
+      ...base,
+      retrievalChoice: 'self_to_self' as const,
+      sections: { ...base.sections, showSelfToSelf: true, showFreezeOocytes: true, showHusbandSperm: true },
+    };
+  }
+  if (type === 'FET') {
+    return {
+      ...base,
+      retrievalChoice: 'none' as const,
+      sections: { ...base.sections, showFetThaw: true, showHusbandSperm: true },
+    };
+  }
+  if (type === 'ThawOocytes') {
+    return {
+      ...base,
+      retrievalChoice: 'none' as const,
+      sections: { ...base.sections, showThawOocytes: true, showHusbandSperm: true },
+    };
+  }
+  if (type === 'OD') {
+    return {
+      ...base,
+      retrievalChoice: 'donor_to_recipient' as const,
+      sections: {
+        ...base.sections,
+        showDonorToRecipient: true,
+        showDonorEggCount: true,
+        showFreezeOocytes: true,
+        lockOocyteDonation: true,
+      },
+    };
+  }
+  if (type === 'OR') {
+    return {
+      ...base,
+      retrievalChoice: 'received_from_donor' as const,
+      sections: {
+        ...base.sections,
+        showDonorToSelf: true,
+        showOocyteReceivedFrom: true,
+        showHusbandSperm: true,
+      },
+    };
+  }
+  return {
+    ...base,
+    retrievalChoice: 'none' as const,
+    sections: {
+      ...base.sections,
+      showEmbryoRecipient: true,
+      showRecipientDetails: true,
+      showDonorEggDetails: true,
+      showDonorToSelf: true,
+      showDonorSperm: true,
+    },
+  };
 }

@@ -113,11 +113,11 @@ export function HormoneAssays({ row }: { row: ReportRow | undefined }) {
   return (
     <div className="grid grid-cols-3 gap-2 text-[12px]">
       {cols.map((col, index) => (
-        <div key={index} className="border border-slate-300 p-1.5">
-          <div>Date: {col.date}</div>
-          <div>E2: {col.e2} pg/ml</div>
-          <div>
-            {col.thirdLabel}: {col.thirdValue} {col.thirdUnit}
+        <div key={index} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Date: {dash(col.date)}</div>
+          <div className="mt-1 font-semibold text-slate-800">E2: {dash(col.e2)} pg/ml</div>
+          <div className="text-slate-700">
+            {col.thirdLabel}: {dash(col.thirdValue)} {col.thirdUnit}
           </div>
         </div>
       ))}
@@ -137,20 +137,20 @@ export function GameteTable({ row }: { row: ReportRow | undefined }) {
     ['Blastocyst Frozen', 'BTIVFFroze', 'BTICSFroze'],
   ];
   return (
-    <table className="w-full border-collapse text-[12px]">
+    <table className="w-full border-collapse text-[11px]">
       <thead>
-        <tr>
-          <th className="border border-slate-400 px-2 py-1 text-left" />
-          <th className="border border-slate-400 px-2 py-1">IVF</th>
-          <th className="border border-slate-400 px-2 py-1">ICSI</th>
+        <tr className="bg-[#123E73] text-white">
+          <th className="px-2 py-2 text-left font-bold" />
+          <th className="px-2 py-2 font-bold">IVF</th>
+          <th className="px-2 py-2 font-bold">ICSI</th>
         </tr>
       </thead>
       <tbody>
-        {lines.map(([label, ivf, icsi]) => (
-          <tr key={label}>
-            <td className="border border-slate-400 px-2 py-1 font-bold">{label}</td>
-            <td className="border border-slate-400 px-2 py-1 text-center">{num(row, ivf)}</td>
-            <td className="border border-slate-400 px-2 py-1 text-center">{num(row, icsi)}</td>
+        {lines.map(([label, ivf, icsi], index) => (
+          <tr key={label} className={index % 2 ? 'bg-slate-50' : 'bg-white'}>
+            <td className="border border-slate-200 px-2 py-1.5 font-semibold text-slate-700">{label}</td>
+            <td className="border border-slate-200 px-2 py-1.5 text-center font-bold text-slate-900">{num(row, ivf)}</td>
+            <td className="border border-slate-200 px-2 py-1.5 text-center font-bold text-slate-900">{num(row, icsi)}</td>
           </tr>
         ))}
       </tbody>
@@ -161,12 +161,12 @@ export function GameteTable({ row }: { row: ReportRow | undefined }) {
 export function TransferTable({ title, rows }: { title: string; rows: ReportRow[] }) {
   return (
     <div>
-      <div className="mb-1 font-bold">{title}</div>
-      <table className="w-full border-collapse text-[12px]">
+      {title ? <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">{title}</div> : null}
+      <table className="w-full border-collapse text-[11px]">
         <thead>
-          <tr>
+          <tr className="bg-[#123E73] text-white">
             {['No.', 'Source', 'Cellar Stage', 'Grade', 'Remarks'].map((h) => (
-              <th key={h} className="border border-slate-400 px-2 py-1 text-left font-bold">
+              <th key={h} className="px-2 py-2 text-left font-bold">
                 {h}
               </th>
             ))}
@@ -175,18 +175,18 @@ export function TransferTable({ title, rows }: { title: string; rows: ReportRow[
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td className="border border-slate-400 px-2 py-1" colSpan={5}>
-                &nbsp;
+              <td className="border border-slate-200 px-2 py-2 text-center text-slate-400" colSpan={5}>
+                No records
               </td>
             </tr>
           ) : (
             rows.map((row, index) => (
-              <tr key={index}>
-                <td className="border border-slate-400 px-2 py-1">{index + 1}</td>
-                <td className="border border-slate-400 px-2 py-1">{val(row, 'ETEDSource')}</td>
-                <td className="border border-slate-400 px-2 py-1">{val(row, 'celler')}</td>
-                <td className="border border-slate-400 px-2 py-1">{val(row, 'Grade')}</td>
-                <td className="border border-slate-400 px-2 py-1">{val(row, 'Remark', 'Remarks')}</td>
+              <tr key={index} className={index % 2 ? 'bg-slate-50' : 'bg-white'}>
+                <td className="border border-slate-200 px-2 py-1.5">{index + 1}</td>
+                <td className="border border-slate-200 px-2 py-1.5">{dash(val(row, 'ETEDSource'))}</td>
+                <td className="border border-slate-200 px-2 py-1.5">{dash(val(row, 'celler'))}</td>
+                <td className="border border-slate-200 px-2 py-1.5">{dash(val(row, 'Grade'))}</td>
+                <td className="border border-slate-200 px-2 py-1.5">{dash(val(row, 'Remark', 'Remarks'))}</td>
               </tr>
             ))
           )}

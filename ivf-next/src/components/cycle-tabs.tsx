@@ -13,6 +13,13 @@ import type {
   TabMasters,
 } from '@/lib/types/cycle-detail';
 import { emptyTabMasters } from '@/lib/types/cycle-detail';
+import {
+  CYCLE_CREATION_STORAGE_KEY,
+  embedMonitoringSheetMarker,
+  MONITORING_SHEET_OPTIONS,
+  parseMonitoringSheet,
+  stripMonitoringSheetMarker,
+} from '@/lib/cycle-utils';
 
 interface TabProps {
   cycleId: string;
@@ -31,7 +38,27 @@ export function CycleHistoryTab({ cycleId }: TabProps) {
     if (!token) return;
     void cycleDetail.loadHistory(token, cycleId).then(({ data, masters: m }) => {
       if (m) setMasters(m);
-      setForm({ ...defaultHistory(), ...data, historyAttempts: data.historyAttempts?.length ? data.historyAttempts : [defaultAttempt()] });
+      const merged: CycleHistory = {
+        ...defaultHistory(),
+        ...data,
+        comments: stripMonitoringSheetMarker(data.comments || ''),
+        historyAttempts: data.historyAttempts?.length ? data.historyAttempts : [defaultAttempt()],
+      };
+      if (!merged.monitoringSheet) {
+        merged.monitoringSheet = parseMonitoringSheet(data.comments || '');
+      }
+      if (!merged.monitoringSheet && typeof window !== 'undefined') {
+        try {
+          const stored = sessionStorage.getItem(CYCLE_CREATION_STORAGE_KEY);
+          if (stored) {
+            const created = JSON.parse(stored) as { monitoringSheet?: string };
+            if (created.monitoringSheet) merged.monitoringSheet = created.monitoringSheet;
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      setForm(merged);
       setLoading(false);
     }).catch(() => { setError('Failed to load history.'); setLoading(false); });
   }, [token, cycleId]);
@@ -46,7 +73,10 @@ export function CycleHistoryTab({ cycleId }: TabProps) {
     if (!token) return;
     setSaving(true); setError(''); setSuccess('');
     try {
-      const res = await cycleDetail.saveHistory(token, cycleId, form);
+      const res = await cycleDetail.saveHistory(token, cycleId, {
+        ...form,
+        comments: embedMonitoringSheetMarker(form.comments, form.monitoringSheet),
+      });
       setSuccess(res.message);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save history.');
@@ -74,6 +104,24 @@ export function CycleHistoryTab({ cycleId }: TabProps) {
           <TextField label="HSG" value={form.hsg} onChange={(v) => setForm((f) => ({ ...f, hsg: v }))} />
           <TextField label="Indication" value={form.indication} onChange={(v) => setForm((f) => ({ ...f, indication: v }))} />
           <SelectField label="Stim Protocol" value={form.stimProtId} options={masters.stimProtocols} onChange={(v) => setForm((f) => ({ ...f, stimProtId: v }))} />
+          <div className="sm:col-span-2 lg:col-span-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <p className="mb-2 text-sm font-semibold text-slate-700">Monitoring Sheet :</p>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {MONITORING_SHEET_OPTIONS.map((item) => (
+                <label key={item.value} className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="radio"
+                    name="historyMonitoringSheet"
+                    value={item.value}
+                    checked={form.monitoringSheet === item.value}
+                    onChange={() => setForm((f) => ({ ...f, monitoringSheet: item.value }))}
+                    className="accent-[#6345A6]"
+                  />
+                  {item.label}
+                </label>
+              ))}
+            </div>
+          </div>
           <NumField label="Attempts" value={form.attemptCount} onChange={(v) => setForm((f) => ({ ...f, attemptCount: v }))} />
           <NumField label="Prev Attempts" value={form.attemptPrev} onChange={(v) => setForm((f) => ({ ...f, attemptPrev: v }))} />
           <NumField label="EW Attempts" value={form.attemptEw} onChange={(v) => setForm((f) => ({ ...f, attemptEw: v }))} />
@@ -286,7 +334,7 @@ function defaultHistory(): CycleHistory {
     height: 0, weight: 0, bmi: 0, allergyId: 0, medSurHistory: '', isg: 0, isp: 0, isAb: 0, isEct: 0, isDuration: 0,
     findings: { idiopathic: false, if: false, mf: false, dor: false, ovu: false, tf: false, cf: false, endo: false, other: false },
     endoOpt: 0, otherTxt: '', indication: '', hlmp: '', hsg: '', stimProtId: 0, attemptCount: 0, attemptPrev: 0, attemptEw: 0,
-    currentDate: '', comments: '', historyAttempts: [defaultAttempt()],
+    currentDate: '', comments: '', monitoringSheet: '', historyAttempts: [defaultAttempt()],
   };
 }
 

@@ -33,12 +33,52 @@ export interface SemenDonorDetails {
   freezingDate: string;
 }
 
+export interface CycleCreationPayload {
+  patientId: number;
+  satelliteId: number;
+  cycleId?: string;
+  cycleType: string;
+  treatmentType: string;
+  startDate: string;
+  lmp: string;
+  expectedOpuDate: string;
+  consultantId: number;
+  protocol: string;
+  monitoringSheet: string;
+  notes: string;
+}
+
+export interface PatientCycleRow {
+  cycleId: string;
+  cycleType: string;
+  typeLabel: string;
+  cycleDate: string;
+  postTreatment: string;
+  advice: string;
+  monitoringSheet: string;
+}
+
+export interface CycleCreationResult extends CycleCreationPayload {
+  cycleId: string;
+  patientName?: string;
+  uhid?: string;
+}
+
 export interface CycleEntryPayload {
   patientId: number;
   satelliteId: number;
   oocyteSource: string;
   semenSource: string;
   cycleDate?: string;
+  cycleId?: string;
+  cycleType?: string;
+  treatmentType?: string;
+  lmp?: string;
+  expectedOpuDate?: string;
+  consultantId?: number;
+  protocol?: string;
+  monitoringSheet?: string;
+  notes?: string;
   donorOocyteDetails?: DonorOocyteDetails | null;
   oocyteRecipientDetails?: OocyteRecipientDetails | null;
   embryoRecipientDetails?: EmbryoRecipientDetails | null;
@@ -63,6 +103,14 @@ export interface RetrievalSections {
   lockSemenCryo: boolean;
   showOocyteReceivedFrom: boolean;
   showSemenSampleId: boolean;
+  showFreezeOocytes?: boolean;
+  showFetThaw?: boolean;
+  showThawOocytes?: boolean;
+  showDonorEggCount?: boolean;
+  showHusbandSperm?: boolean;
+  showDonorSperm?: boolean;
+  showRecipientDetails?: boolean;
+  showDonorEggDetails?: boolean;
 }
 
 export interface RetrievalRow {
@@ -78,9 +126,51 @@ export interface RetrievalRow {
   recipientCycleId?: string;
 }
 
+export interface FreezeOocyteRow {
+  mii?: number | null;
+  mi?: number | null;
+  gv?: number | null;
+  total?: number | null;
+}
+
+export interface FetThawDetails {
+  source: string;
+  location: string;
+  strawNo: string;
+  thawDate: string;
+  embryoCount: string;
+}
+
+export interface ThawOocyteDetails {
+  location: string;
+  strawId: string;
+  mii: string;
+  mi: string;
+  gv: string;
+  survived: string;
+}
+
+export interface EmbryoRecipientInfo {
+  recipientName: string;
+  recipientMobile: string;
+  recipientAadhar: string;
+  cycleId: string;
+  monthYear: string;
+  donorName: string;
+  donorMobile: string;
+  donorAadhar: string;
+  donorCycleId: string;
+}
+
 export interface RetrievalData {
   selfToSelf?: RetrievalRow[];
   donorToRecipient?: RetrievalRow[];
+  donorToSelf?: RetrievalRow[];
+  donorEggCount?: RetrievalRow[];
+  freezeOocytes?: FreezeOocyteRow;
+  fetThaw?: FetThawDetails;
+  thawOocytes?: ThawOocyteDetails;
+  embryoRecipient?: EmbryoRecipientInfo;
 }
 
 export interface RetrievalConfig {

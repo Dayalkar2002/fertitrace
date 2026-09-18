@@ -1,12 +1,49 @@
 import { apiFetch } from '@/lib/api';
 import type {
+  CycleCreationPayload,
+  CycleCreationResult,
   CycleEntry,
   CycleEntryPayload,
   DonorAadharCheck,
+  PatientCycleRow,
   RetrievalConfig,
   RetrievalData,
   SourceOption,
 } from '@/lib/types/cycle';
+
+export async function previewCycleId(token: string, patId: number, satId: number): Promise<string> {
+  const res = await apiFetch<{ success: boolean; data: { cycleId: string } }>(
+    `/cycles/creation?patId=${patId}&satId=${satId}`,
+    {},
+    token
+  );
+  return res.data.cycleId;
+}
+
+export async function saveCycleCreation(
+  token: string,
+  payload: CycleCreationPayload
+): Promise<CycleCreationResult> {
+  const res = await apiFetch<{ success: boolean; data: CycleCreationResult; message: string }>(
+    '/cycles/creation',
+    { method: 'POST', body: JSON.stringify(payload) },
+    token
+  );
+  return res.data;
+}
+
+export async function listPatientCycles(
+  token: string,
+  patId: number,
+  satId: number
+): Promise<PatientCycleRow[]> {
+  const res = await apiFetch<{ success: boolean; data: PatientCycleRow[] }>(
+    `/cycles/list?patId=${patId}&satId=${satId}`,
+    {},
+    token
+  );
+  return res.data || [];
+}
 
 export async function fetchCycleTypes(token: string): Promise<{
   oocyteSources: SourceOption[];

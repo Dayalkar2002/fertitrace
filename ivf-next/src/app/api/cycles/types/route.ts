@@ -62,16 +62,6 @@ export async function GET() {
           label: 'Donor - Cryopreserved (Frozen)',
           description: 'Frozen semen sample from donor',
         },
-        {
-          id: 'surgical_fresh',
-          label: 'Surgical Sperm (PESA / TESA / TESE)',
-          description: 'Surgically retrieved sperm - fresh',
-        },
-        {
-          id: 'surgical_frozen',
-          label: 'Surgical Sperm - Frozen',
-          description: 'Previous frozen surgical sperm sample',
-        },
       ],
     },
   });

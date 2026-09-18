@@ -63,12 +63,13 @@ export default function DashboardPage() {
       : [
           { moduleKey: 'patient_management', title: 'Patient Management', description: 'Demographics & Directory', icon: 'patient', route: '/masters/patient', colorTheme: 'purple', orderIndex: 1, isPinned: true, isActive: true },
           { moduleKey: 'barcode_printing', title: 'Barcode Label Printing', description: 'Dish, Tube & Straw Labels', icon: 'label', route: '/label-printing', colorTheme: 'indigo', orderIndex: 2, isPinned: true, isActive: true },
-          { moduleKey: 'cycle_management', title: 'Cycle Entry', description: 'Witnessing Setup', icon: 'cycle', route: '/cycle/entry', colorTheme: 'blue', orderIndex: 3, isPinned: true, isActive: true },
-          { moduleKey: 'sperm_management', title: 'Sperm Processing', description: 'Semen Analysis & Prep', icon: 'sperm', route: '/sperm', colorTheme: 'teal', orderIndex: 4, isPinned: true, isActive: true },
-          { moduleKey: 'oocyte_management', title: 'Oocyte & Embryo', description: 'OPU & Culturing', icon: 'embryo', route: '/oocyte-embryo', colorTheme: 'pink', orderIndex: 5, isPinned: true, isActive: true },
-          { moduleKey: 'cryopreservation', title: 'Cryopreservation', description: 'Straws & Tanks', icon: 'cryo', route: '/sperm?mode=Cryopreservation', colorTheme: 'sky', orderIndex: 6, isPinned: true, isActive: true },
-          { moduleKey: 'witness_system', title: 'Witness Verification', description: 'RFID & Mismatch Shield', icon: 'witness', route: '/witness', colorTheme: 'emerald', orderIndex: 7, isPinned: true, isActive: true },
-          { moduleKey: 'reports_analytics', title: 'Audit Log & Reports', description: 'Compliance Records', icon: 'reports', route: '/reports', colorTheme: 'amber', orderIndex: 8, isPinned: true, isActive: true },
+          { moduleKey: 'cycle_creation', title: 'Cycle Creation', description: 'Start a new ART cycle', icon: 'cycle', route: '/cycle/creation', colorTheme: 'blue', orderIndex: 3, isPinned: true, isActive: true },
+          { moduleKey: 'cycle_management', title: 'Cycle Retrieval Screen', description: 'Oocyte & semen source', icon: 'cycle', route: '/cycle/entry', colorTheme: 'indigo', orderIndex: 4, isPinned: true, isActive: true },
+          { moduleKey: 'sperm_management', title: 'Sperm Processing', description: 'Semen Analysis & Prep', icon: 'sperm', route: '/sperm', colorTheme: 'teal', orderIndex: 5, isPinned: true, isActive: true },
+          { moduleKey: 'oocyte_management', title: 'Oocyte & Embryo', description: 'OPU & Culturing', icon: 'embryo', route: '/oocyte-embryo', colorTheme: 'pink', orderIndex: 6, isPinned: true, isActive: true },
+          { moduleKey: 'cryopreservation', title: 'Cryopreservation', description: 'Straws & Tanks', icon: 'cryo', route: '/sperm?mode=Cryopreservation', colorTheme: 'sky', orderIndex: 7, isPinned: true, isActive: true },
+          { moduleKey: 'witness_system', title: 'Witness Verification', description: 'RFID & Mismatch Shield', icon: 'witness', route: '/witness', colorTheme: 'emerald', orderIndex: 8, isPinned: true, isActive: true },
+          { moduleKey: 'reports_analytics', title: 'Audit Log & Reports', description: 'Compliance Records', icon: 'reports', route: '/reports', colorTheme: 'amber', orderIndex: 9, isPinned: true, isActive: true },
         ];
   const [currentTime, setCurrentTime] = useState<string>('');
   const [currentDate, setCurrentDate] = useState<string>('');

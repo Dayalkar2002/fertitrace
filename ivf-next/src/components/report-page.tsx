@@ -79,14 +79,14 @@ export function ReportPage() {
 
   if (slugPath === 'art-cycle') {
     return (
-      <SmartReportFrame title="ART Cycle Summary">
+      <SmartReportFrame title="ART Cycle Report">
         <ArtCycleReport />
       </SmartReportFrame>
     );
   }
   if (slugPath === 'andrology/iui' || slugPath === 'iui') {
     return (
-      <SmartReportFrame title="IUI Summary Report">
+      <SmartReportFrame title="IUI / HSA Report">
         <IuiSummaryReport />
       </SmartReportFrame>
     );

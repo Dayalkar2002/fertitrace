@@ -1,20 +1,26 @@
 'use client';
 
-import { FormEvent, useEffect, useState, type ReactNode } from 'react';
+import { FormEvent, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { usePatient } from '@/contexts/patient-context';
 import { useAppDispatch } from '@/store/hooks';
 import { setShowPatientModal } from '@/store/slices/uiSlice';
 import {
+  allowedSemenSources,
   computeCycleType,
+  CYCLE_CREATION_STORAGE_KEY,
+  defaultSemenSource,
+  getCycleTypeLabel,
+  oocyteSourceFromCreation,
   showDonorOocyteDetails,
   showEmbryoRecipientDetails,
   showOocyteRecipientDetails,
   showSemenDonorDetails,
 } from '@/lib/cycle-utils';
+import { CycleRetrievalPanels } from '@/components/cycle-retrieval-panels';
 import { fetchCycleTypes, saveCycleEntry } from '@/lib/services/cycles';
-import type { CycleEntry, SourceOption } from '@/lib/types/cycle';
+import type { CycleCreationResult, CycleEntry, SourceOption } from '@/lib/types/cycle';
 
 const DEFAULT_OOCYTE_OPTIONS: SourceOption[] = [
   {
@@ -75,16 +81,6 @@ const DEFAULT_SEMEN_OPTIONS: SourceOption[] = [
     label: 'Donor - Cryopreserved (Frozen)',
     description: 'Frozen semen sample from donor',
   },
-  {
-    id: 'surgical_fresh',
-    label: 'Surgical Sperm (PESA / TESA / TESE)',
-    description: 'Surgically retrieved sperm - fresh',
-  },
-  {
-    id: 'surgical_frozen',
-    label: 'Surgical Sperm - Frozen',
-    description: 'Previous frozen surgical sperm sample',
-  },
 ];
 
 const emptyForm = {
@@ -118,11 +114,18 @@ export function CycleEntryForm() {
   const [oocyteSources, setOocyteSources] = useState<SourceOption[]>(DEFAULT_OOCYTE_OPTIONS);
   const [semenSources, setSemenSources] = useState<SourceOption[]>(DEFAULT_SEMEN_OPTIONS);
   const [currentCycle, setCurrentCycle] = useState<CycleEntry | null>(null);
+  const [creationDraft, setCreationDraft] = useState<CycleCreationResult | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const cycleType = computeCycleType(form.oocyteSource, form.semenSource);
+  const cycleType = computeCycleType(form.oocyteSource, form.semenSource || 'husband_fresh');
+  const oocyteLocked = Boolean(creationDraft?.cycleType);
+  const visibleSemenSources = useMemo(() => {
+    const allowed = allowedSemenSources(form.oocyteSource, creationDraft?.treatmentType);
+    if (!allowed.length) return [];
+    return semenSources.filter((opt) => allowed.includes(opt.id));
+  }, [form.oocyteSource, creationDraft?.treatmentType, semenSources]);
 
   useEffect(() => {
     if (!token) return;
@@ -135,6 +138,50 @@ export function CycleEntryForm() {
         // Keep fallback options
       });
   }, [token]);
+
+  useEffect(() => {
+    const allowed = allowedSemenSources(form.oocyteSource, creationDraft?.treatmentType);
+    if (!allowed.length) {
+      if (form.semenSource) setForm((prev) => ({ ...prev, semenSource: '' }));
+      return;
+    }
+    if (!allowed.includes(form.semenSource)) {
+      setForm((prev) => ({ ...prev, semenSource: allowed[0] }));
+    }
+  }, [form.oocyteSource, form.semenSource, creationDraft?.treatmentType]);
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(CYCLE_CREATION_STORAGE_KEY);
+      if (!raw) return;
+      const created = JSON.parse(raw) as CycleCreationResult;
+      setCreationDraft(created);
+      const oocyteSource = oocyteSourceFromCreation(created.cycleType);
+      const semenSource = defaultSemenSource(created.cycleType, created.treatmentType);
+      setForm((prev) => ({
+        ...prev,
+        oocyteSource,
+        semenSource: semenSource || prev.semenSource,
+        cycleDate: created.startDate || prev.cycleDate,
+      }));
+      if (created.cycleId) {
+        setCurrentCycle((prev) =>
+          prev ?? {
+            patientId: created.patientId,
+            satelliteId: created.satelliteId,
+            oocyteSource,
+            semenSource: semenSource || 'husband_fresh',
+            cycleId: created.cycleId,
+            cycleType: created.cycleType,
+            treatmentType: created.treatmentType,
+            monitoringSheet: created.monitoringSheet,
+          }
+        );
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   function updateField<K extends keyof typeof emptyForm>(key: K, value: (typeof emptyForm)[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -155,9 +202,18 @@ export function CycleEntryForm() {
       const entry = {
         patientId: selectedPatient.id,
         satelliteId: selectedSatellite?.id || 1,
+        cycleId: creationDraft?.cycleId || currentCycle?.cycleId,
         oocyteSource: form.oocyteSource,
         semenSource: form.semenSource,
         cycleDate: form.cycleDate || undefined,
+        cycleType: creationDraft?.cycleType || form.oocyteSource,
+        treatmentType: creationDraft?.treatmentType,
+        lmp: creationDraft?.lmp,
+        expectedOpuDate: creationDraft?.expectedOpuDate,
+        consultantId: creationDraft?.consultantId,
+        protocol: creationDraft?.protocol,
+        monitoringSheet: creationDraft?.monitoringSheet,
+        notes: creationDraft?.notes,
         donorOocyteDetails: showDonorOocyteDetails(form.oocyteSource)
           ? {
               donorId: form.donorId,
@@ -239,7 +295,7 @@ export function CycleEntryForm() {
             </svg>
           </div>
           <h1 className="text-xl sm:text-2xl font-black tracking-tight text-[#1e3a8a]">
-            CYCLE ENTRY MODULE
+            CYCLE RETRIEVAL SCREEN
           </h1>
         </div>
 
@@ -249,6 +305,18 @@ export function CycleEntryForm() {
             <span className="font-semibold text-slate-500">Date : </span>
             <span>{new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
           </div>
+          {creationDraft?.cycleId && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700">
+              <span className="font-semibold text-slate-500">Cycle ID : </span>
+              <span>{creationDraft.cycleId}</span>
+            </div>
+          )}
+          {creationDraft?.cycleType && (
+            <div className="rounded-lg border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-medium text-purple-800">
+              <span className="font-semibold">Type : </span>
+              <span>{getCycleTypeLabel(creationDraft.cycleType)}</span>
+            </div>
+          )}
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700">
             <span className="font-semibold text-slate-500">User : </span>
             <span>{user?.userName || user?.userLoginName || 'Sachin@gmail.com'}</span>
@@ -364,7 +432,7 @@ export function CycleEntryForm() {
       <div className="flex items-center justify-center gap-2 rounded-xl border border-[#fef08a] bg-[#fffbeb] px-4 py-2.5 text-center text-xs font-medium text-slate-700 shadow-2xs">
         <span className="text-base">💡</span>
         <span>
-          Select the appropriate cycle type and semen source below. Based on your selection, the workflow will update accordingly.
+          Select the semen source. Cycle type is carried from Cycle Creation and locked so retrieval matches that selection.
         </span>
       </div>
 
@@ -387,13 +455,16 @@ export function CycleEntryForm() {
             <div className="flex-1 p-4 space-y-2.5">
               {oocyteSources.map((opt) => {
                 const selected = form.oocyteSource === opt.id;
+                const disabled = oocyteLocked && !selected;
                 return (
                   <label
                     key={opt.id}
-                    className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${
+                    className={`flex items-start gap-3 rounded-xl border p-3 transition ${
                       selected
                         ? 'border-purple-400 bg-white shadow-xs ring-1 ring-purple-300'
-                        : 'border-slate-200/70 bg-white/70 hover:bg-white hover:border-purple-200'
+                        : disabled
+                          ? 'cursor-not-allowed border-slate-200/70 bg-slate-50 opacity-50'
+                          : 'cursor-pointer border-slate-200/70 bg-white/70 hover:bg-white hover:border-purple-200'
                     }`}
                   >
                     <input
@@ -401,6 +472,7 @@ export function CycleEntryForm() {
                       name="oocyteSource"
                       value={opt.id}
                       checked={selected}
+                      disabled={disabled}
                       onChange={() => updateField('oocyteSource', opt.id)}
                       className="mt-1 h-4 w-4 text-purple-600 focus:ring-purple-500"
                     />
@@ -418,7 +490,9 @@ export function CycleEntryForm() {
               })}
 
               <div className="pt-2 text-center text-xs font-semibold text-purple-600">
-                Note : Select only one option
+                {oocyteLocked
+                  ? `Locked from Cycle Creation : ${getCycleTypeLabel(form.oocyteSource)}`
+                  : 'Note : Select only one option'}
               </div>
             </div>
           </div>
@@ -430,12 +504,17 @@ export function CycleEntryForm() {
                 2
               </div>
               <h2 className="text-sm font-bold tracking-wide">
-                SEMEN SOURCE &nbsp; ( Select One )
+                HUSBAND / SEMEN SOURCE &nbsp; ( Select One )
               </h2>
             </div>
             
             <div className="flex-1 p-4 space-y-2.5">
-              {semenSources.map((opt) => {
+              {visibleSemenSources.length === 0 ? (
+                <div className="rounded-xl border border-emerald-200 bg-white px-4 py-6 text-sm text-slate-600">
+                  Semen source is not captured on an oocyte-donor cycle. Retrieval uses Donor To Recipient.
+                </div>
+              ) : (
+                visibleSemenSources.map((opt) => {
                 const selected = form.semenSource === opt.id;
                 return (
                   <label
@@ -465,10 +544,12 @@ export function CycleEntryForm() {
                     </div>
                   </label>
                 );
-              })}
+              }))}
 
               <div className="pt-2 text-center text-xs font-semibold text-emerald-600">
-                Note : Select only one option
+                {creationDraft?.treatmentType
+                  ? `Defaulted from Treatment Type : ${creationDraft.treatmentType}`
+                  : 'Note : Select only one option'}
               </div>
             </div>
           </div>
@@ -686,6 +767,13 @@ export function CycleEntryForm() {
           </div>
 
         </div>
+
+        <CycleRetrievalPanels
+          cycleType={form.oocyteSource}
+          semenSource={form.semenSource}
+          cycleId={creationDraft?.cycleId || currentCycle?.cycleId}
+          patient={selectedPatient}
+        />
 
         {/* 6. CYCLE SUMMARY Card */}
         <div className="rounded-2xl border border-blue-200 bg-[#f8fafc] p-4 shadow-xs">

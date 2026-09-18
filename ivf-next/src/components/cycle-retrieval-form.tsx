@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
+import { usePatient } from '@/contexts/patient-context';
+import { CycleRetrievalPanels } from '@/components/cycle-retrieval-panels';
+import { getCycleTypeLabel } from '@/lib/cycle-utils';
 import { ApiError } from '@/lib/api';
 import {
   checkDonorAadhar,
@@ -49,6 +52,7 @@ interface CycleRetrievalFormProps {
 export function CycleRetrievalForm({ cycleId }: CycleRetrievalFormProps) {
   const router = useRouter();
   const { token } = useAuth();
+  const { selectedPatient } = usePatient();
 
   const [config, setConfig] = useState<RetrievalConfig | null>(null);
   const [loading, setLoading] = useState(true);
@@ -222,13 +226,13 @@ export function CycleRetrievalForm({ cycleId }: CycleRetrievalFormProps) {
   return (
     <div className="space-y-6">
       <div className="border-b border-slate-200 pb-4">
-        <h1 className="text-2xl font-extrabold text-slate-800">Cycle Entry Module</h1>
+        <h1 className="text-2xl font-extrabold text-slate-800">Cycle Retrieval Screen</h1>
         <div className="mt-2 flex flex-wrap gap-4 text-sm text-slate-600">
           <span>
             <strong>CycID:</strong> {config.cycle.cycleId}
           </span>
           <span>
-            <strong>Type:</strong> {config.cycle.cycleType}
+            <strong>Type:</strong> {getCycleTypeLabel(config.cycle.cycleType || config.cycle.oocyteSource)}
           </span>
         </div>
       </div>
@@ -256,149 +260,12 @@ export function CycleRetrievalForm({ cycleId }: CycleRetrievalFormProps) {
       {activeTab === 'outcome' && <CycleOutcomeTab cycleId={cycleId} />}
       {activeTab === 'retrieval' && (
         <div className="space-y-6">
-          {config.sections.showSelfToSelf && (
-            <section className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-4">
-              <h3 className="mb-3 font-bold text-slate-800">Self → Self (Oocytes for own use)</h3>
-              {selfToSelf.map((row, i) => (
-                <div key={i} className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
-                  {(['leftOvary', 'rightOvary', 'ivf', 'icsi', 'gift', 'zift', 'damaged', 'total'] as const).map(
-                    (key) => (
-                      <input
-                        key={key}
-                        type="number"
-                        placeholder={key.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase())}
-                        value={row[key] ?? ''}
-                        onChange={(e) => updateSelfRow(i, key, e.target.value)}
-                        className="h-9 rounded-lg border border-slate-300 px-2 text-sm"
-                      />
-                    )
-                  )}
-                </div>
-              ))}
-              <button
-                type="button"
-                className="text-sm font-semibold text-brand-green hover:underline"
-                onClick={() => setSelfToSelf((rows) => [...rows, emptySelfRow()])}
-              >
-                + Add Row
-              </button>
-            </section>
-          )}
-
-          {config.sections.showDonorToRecipient && (
-            <section className="rounded-xl border border-violet-200 bg-violet-50/30 p-4">
-              <h3 className="mb-2 font-bold text-slate-800">
-                Donor → Recipient (Oocyte Donor donating to Recipient)
-              </h3>
-              <p className="mb-3 text-xs text-slate-600">
-                As per government norms, one oocyte donor (Aadhaar) can donate to only one recipient. A
-                recipient may receive from many donors.
-              </p>
-              {config.donorAadhar && (
-                <p className="mb-3 text-sm">
-                  <strong>Donor Aadhaar:</strong> {config.donorAadhar}
-                </p>
-              )}
-              {config.lockedRecipients.length > 0 && (
-                <div className="mb-3 flex flex-wrap gap-2 text-sm">
-                  <span className="text-slate-600">Locked recipient from prior donation:</span>
-                  {config.lockedRecipients.map((lr) => (
-                    <span
-                      key={lr.recipientId}
-                      className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800"
-                    >
-                      {lr.recipientName}
-                      {lr.recipientAadhar ? ` (Aadhaar: ${lr.recipientAadhar})` : ''}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {donorToRecipient.map((row, i) => (
-                <div key={i} className="mb-4 rounded-lg border border-slate-200 bg-white p-3">
-                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-7">
-                    <select
-                      value={row.recipientPatientId ?? ''}
-                      onChange={(e) => {
-                        updateRecipientRow(i, 'recipientPatientId', e.target.value);
-                        void onRecipientChange(i, Number(e.target.value));
-                      }}
-                      className="h-9 rounded-lg border border-slate-300 px-2 text-sm lg:col-span-2"
-                    >
-                      <option value="">Select Recipient</option>
-                      {config.availableRecipients.map((r) => (
-                        <option key={r.id} value={r.id} disabled={isRecipientLocked(r.id)}>
-                          {r.name} ({r.uhid})
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      type="text"
-                      placeholder="Recipient Cycle ID"
-                      value={row.recipientCycleId ?? ''}
-                      onChange={(e) => updateRecipientRow(i, 'recipientCycleId', e.target.value)}
-                      className="h-9 rounded-lg border border-slate-300 px-2 text-sm"
-                    />
-                    {(['leftOvary', 'rightOvary', 'ivf', 'icsi', 'total'] as const).map((key) => (
-                      <input
-                        key={key}
-                        type="number"
-                        placeholder={key.replace(/([A-Z])/g, ' $1')}
-                        value={row[key] ?? ''}
-                        onChange={(e) => updateRecipientRow(i, key, e.target.value)}
-                        className="h-9 rounded-lg border border-slate-300 px-2 text-sm"
-                      />
-                    ))}
-                  </div>
-                  {rowAadharChecks[i] && (
-                    <div
-                      className={`mt-2 rounded-lg px-3 py-2 text-xs ${
-                        !rowAadharChecks[i].isAllowed
-                          ? 'bg-red-50 text-red-700'
-                          : rowAadharChecks[i].message
-                            ? 'bg-amber-50 text-amber-800'
-                            : 'bg-slate-50 text-slate-600'
-                      }`}
-                    >
-                      {(rowAadharChecks[i].donorAadhar || rowAadharChecks[i].recipientAadhar) && (
-                        <div className="flex flex-wrap gap-4">
-                          <span>
-                            <strong>Donor Aadhaar:</strong> {rowAadharChecks[i].donorAadhar || '—'}
-                          </span>
-                          <span>
-                            <strong>Recipient Aadhaar:</strong>{' '}
-                            {rowAadharChecks[i].recipientAadhar || '—'}
-                          </span>
-                        </div>
-                      )}
-                      {rowAadharChecks[i].message && (
-                        <div className="mt-1">{rowAadharChecks[i].message}</div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-              <button
-                type="button"
-                className="text-sm font-semibold text-brand-green hover:underline"
-                onClick={() => setDonorToRecipient((rows) => [...rows, emptyRecipientRow()])}
-              >
-                + Add Row
-              </button>
-            </section>
-          )}
-
-          {config.sections.showOocyteReceivedFrom && (
-            <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-              Oocyte received from donor is reflected on the Master Patient page.
-            </div>
-          )}
-
-          {config.sections.showEmbryoRecipient && (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              Embryo recipient retrieval is managed in the legacy smART module until fully ported.
-            </div>
-          )}
+          <CycleRetrievalPanels
+            cycleType={config.cycle.oocyteSource || config.cycle.cycleType || 'Fresh'}
+            semenSource={config.cycle.semenSource}
+            cycleId={config.cycle.cycleId}
+            patient={selectedPatient}
+          />
 
           {validationError && <Alert type="error" message={validationError} />}
           {error && <Alert type="error" message={error} />}
@@ -418,7 +285,7 @@ export function CycleRetrievalForm({ cycleId }: CycleRetrievalFormProps) {
               onClick={() => router.push('/cycle/entry')}
               className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50"
             >
-              Back to Cycle Entry
+              Back to Cycle Retrieval
             </button>
           </div>
         </div>

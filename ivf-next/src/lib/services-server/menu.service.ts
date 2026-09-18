@@ -43,11 +43,14 @@ export async function getLeftMenuItems(): Promise<LeftMenuItem[]> {
             subModules: subs.length > 0 ? subs : undefined,
           };
         });
-        return mapped
+        const patched = mapped
           .filter((item) => item.nodeName !== 'cryopreservation' && item.nodeName !== 'embryo_management')
           .map((item) => {
             if (item.nodeName === 'oocyte_management') {
               return { ...item, label: 'Oocyte & Embryo', route: '/oocyte-embryo' };
+            }
+            if (item.nodeName === 'cycle_management') {
+              return { ...item, label: 'Cycle Retrieval Screen', route: '/cycle/entry' };
             }
             if (item.nodeName !== 'communication' || (item.subModules && item.subModules.length > 0)) {
               return item;
@@ -55,12 +58,26 @@ export async function getLeftMenuItems(): Promise<LeftMenuItem[]> {
             const fallback = DEFAULT_LEFT_MENUS.find((row) => row.nodeName === 'communication');
             return fallback?.subModules ? { ...item, subModules: fallback.subModules } : item;
           });
+        return ensureCycleCreationMenu(patched);
       }
     } catch (err) {
       console.warn('[MenuService] DB fetch failed for Left Menu, using fallback:', err);
     }
   }
   return DEFAULT_LEFT_MENUS;
+}
+
+function ensureCycleCreationMenu(items: LeftMenuItem[]): LeftMenuItem[] {
+  if (items.some((item) => item.nodeName === 'cycle_creation' || item.route === '/cycle/creation')) {
+    return items;
+  }
+  const creation = DEFAULT_LEFT_MENUS.find((item) => item.nodeName === 'cycle_creation');
+  if (!creation) return items;
+  const retrievalIndex = items.findIndex(
+    (item) => item.nodeName === 'cycle_management' || item.route === '/cycle/entry'
+  );
+  if (retrievalIndex < 0) return [creation, ...items];
+  return [...items.slice(0, retrievalIndex), creation, ...items.slice(retrievalIndex)];
 }
 
 export async function getTopMenuItems(onlyActive = true): Promise<TopMenuItem[]> {
@@ -73,16 +90,19 @@ export async function getTopMenuItems(onlyActive = true): Promise<TopMenuItem[]>
       const rows = await executeText<Record<string, unknown>>(sqlQuery);
 
       if (rows.recordset && rows.recordset.length > 0) {
-        return rows.recordset.map((r) => ({
-          topMenuId: Number(r.TopMenuId),
-          nodeName: String(r.NodeName),
-          label: String(r.Label),
-          route: String(r.Route),
-          icon: r.Icon ? String(r.Icon) : undefined,
-          orderIndex: Number(r.OrderIndex || 0),
-          isActive: Boolean(r.IsActive),
-          requiresBarcode: Boolean(r.RequiresBarcode),
-        }));
+        return rows.recordset.map((r) => {
+          const nodeName = String(r.NodeName);
+          return {
+            topMenuId: Number(r.TopMenuId),
+            nodeName,
+            label: String(r.Label),
+            route: nodeName === 'cycle_barcode' ? '/cycle/creation' : String(r.Route),
+            icon: r.Icon ? String(r.Icon) : undefined,
+            orderIndex: Number(r.OrderIndex || 0),
+            isActive: Boolean(r.IsActive),
+            requiresBarcode: Boolean(r.RequiresBarcode),
+          };
+        });
       }
     } catch (err) {
       console.warn('[MenuService] DB fetch failed for Top Menu, using fallback:', err);

@@ -52,6 +52,7 @@ export interface CycleHistory {
   attemptEw: number;
   currentDate: string;
   comments: string;
+  monitoringSheet: string;
   historyAttempts: CycleHistoryAttempt[];
 }
 

@@ -106,6 +106,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   function isParentActive(item: LeftMenuItem): boolean {
     const [base] = item.route.split('?');
     if (pathname === base || pathname.startsWith(`${base}/`)) return true;
+    if (item.nodeName === 'cycle_management' && pathname.startsWith('/cycle/retrieval')) return true;
     if (item.subModules?.some((s) => isSubItemActive(s.route))) return true;
     return false;
   }
