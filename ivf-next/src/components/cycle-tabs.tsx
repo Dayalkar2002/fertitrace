@@ -16,7 +16,9 @@ import { emptyTabMasters } from '@/lib/types/cycle-detail';
 import {
   CYCLE_CREATION_STORAGE_KEY,
   embedMonitoringSheetMarker,
+  isMonitoringSheetAllowed,
   MONITORING_SHEET_OPTIONS,
+  monitoringSheetHint,
   parseMonitoringSheet,
   stripMonitoringSheetMarker,
 } from '@/lib/cycle-utils';
@@ -33,6 +35,7 @@ export function CycleHistoryTab({ cycleId }: TabProps) {
   const [success, setSuccess] = useState('');
   const [masters, setMasters] = useState<TabMasters>(emptyTabMasters);
   const [form, setForm] = useState<CycleHistory>(defaultHistory());
+  const [cycleType, setCycleType] = useState('Fresh');
 
   useEffect(() => {
     if (!token) return;
@@ -51,8 +54,19 @@ export function CycleHistoryTab({ cycleId }: TabProps) {
         try {
           const stored = sessionStorage.getItem(CYCLE_CREATION_STORAGE_KEY);
           if (stored) {
-            const created = JSON.parse(stored) as { monitoringSheet?: string };
+            const created = JSON.parse(stored) as { monitoringSheet?: string; cycleType?: string };
             if (created.monitoringSheet) merged.monitoringSheet = created.monitoringSheet;
+            if (created.cycleType) setCycleType(created.cycleType);
+          }
+        } catch {
+          /* ignore */
+        }
+      } else if (typeof window !== 'undefined') {
+        try {
+          const stored = sessionStorage.getItem(CYCLE_CREATION_STORAGE_KEY);
+          if (stored) {
+            const created = JSON.parse(stored) as { cycleType?: string };
+            if (created.cycleType) setCycleType(created.cycleType);
           }
         } catch {
           /* ignore */
@@ -107,20 +121,30 @@ export function CycleHistoryTab({ cycleId }: TabProps) {
           <div className="sm:col-span-2 lg:col-span-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
             <p className="mb-2 text-sm font-semibold text-slate-700">Monitoring Sheet :</p>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              {MONITORING_SHEET_OPTIONS.map((item) => (
-                <label key={item.value} className="flex items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="radio"
-                    name="historyMonitoringSheet"
-                    value={item.value}
-                    checked={form.monitoringSheet === item.value}
-                    onChange={() => setForm((f) => ({ ...f, monitoringSheet: item.value }))}
-                    className="accent-[#6345A6]"
-                  />
-                  {item.label}
-                </label>
-              ))}
+              {MONITORING_SHEET_OPTIONS.map((item) => {
+                const allowed = isMonitoringSheetAllowed(cycleType, item.value);
+                return (
+                  <label
+                    key={item.value}
+                    className={`flex items-center gap-2 text-sm ${allowed ? 'text-slate-700' : 'cursor-not-allowed text-slate-400'}`}
+                  >
+                    <input
+                      type="radio"
+                      name="historyMonitoringSheet"
+                      value={item.value}
+                      checked={form.monitoringSheet === item.value}
+                      disabled={!allowed}
+                      onChange={() => {
+                        if (allowed) setForm((f) => ({ ...f, monitoringSheet: item.value }));
+                      }}
+                      className="accent-[#6345A6] disabled:cursor-not-allowed"
+                    />
+                    {item.label}
+                  </label>
+                );
+              })}
             </div>
+            <p className="mt-2 text-[11px] text-slate-500">{monitoringSheetHint(cycleType)}</p>
           </div>
           <NumField label="Attempts" value={form.attemptCount} onChange={(v) => setForm((f) => ({ ...f, attemptCount: v }))} />
           <NumField label="Prev Attempts" value={form.attemptPrev} onChange={(v) => setForm((f) => ({ ...f, attemptPrev: v }))} />

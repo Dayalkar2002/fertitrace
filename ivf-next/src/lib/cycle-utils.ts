@@ -113,7 +113,7 @@ export const CYCLE_CREATION_TYPES = [
 
 export type SmartCycleType = (typeof CYCLE_CREATION_TYPES)[number]['value'];
 
-export const SMART_SEMEN_IDS = ['husband_fresh', 'husband_cryo', 'donor_fresh', 'donor_cryo'] as const;
+export const SMART_SEMEN_IDS = ['husband_fresh', 'husband_cryo', 'donor_cryo'] as const;
 
 export const TREATMENT_TYPES = [
   { value: 'Fresh', label: 'Fresh' },
@@ -203,6 +203,34 @@ export function getMonitoringSheetLabel(option: string | undefined | null): stri
   return MONITORING_SHEET_OPTIONS.find((item) => item.value === value)?.label ?? value;
 }
 
+/** SMART: Fresh / FZO / OD use Agonist or Antagonist charts. */
+export function isStimulationMonSheetCycle(cycleType: string | undefined | null): boolean {
+  const type = normalizeCycleType(cycleType);
+  return type === 'Fresh' || type === 'FrozenOocytes' || type === 'OD';
+}
+
+/** SMART: FET / THO / OR / ER use HRT or Modified Natural charts. */
+export function isHrtMonSheetCycle(cycleType: string | undefined | null): boolean {
+  const type = normalizeCycleType(cycleType);
+  return type === 'FET' || type === 'ThawOocytes' || type === 'OR' || type === 'ER';
+}
+
+export function isMonitoringSheetAllowed(cycleType: string | undefined | null, option: string): boolean {
+  if (isStimulationMonSheetCycle(cycleType)) return option === 'Agonist' || option === 'Antagonist';
+  if (isHrtMonSheetCycle(cycleType)) return option === 'HRT' || option === 'ModifiedHRT';
+  return false;
+}
+
+export function monitoringSheetHint(cycleType: string | undefined | null): string {
+  if (isStimulationMonSheetCycle(cycleType)) {
+    return 'Select Agonist or Antagonist (HRT options blocked for this cycle).';
+  }
+  if (isHrtMonSheetCycle(cycleType)) {
+    return 'Select HRT or Modified Natural Cycle (Agonist / Antagonist blocked for this cycle).';
+  }
+  return 'Select a monitoring sheet for this cycle.';
+}
+
 export function isFrozenCycleType(cycleType: string | undefined | null, treatmentType?: string): boolean {
   const type = normalizeCycleType(cycleType);
   if (treatmentType === 'Frozen') return true;
@@ -212,7 +240,7 @@ export function isFrozenCycleType(cycleType: string | undefined | null, treatmen
 export function defaultSemenSource(cycleType: string | undefined | null, treatmentType?: string): string {
   const type = normalizeCycleType(cycleType);
   const frozen = isFrozenCycleType(type, treatmentType);
-  if (type === 'ER') return frozen ? 'donor_cryo' : 'donor_fresh';
+  if (type === 'ER') return 'donor_cryo';
   if (type === 'OD') return '';
   if (frozen) return 'husband_cryo';
   return 'husband_fresh';
@@ -221,10 +249,10 @@ export function defaultSemenSource(cycleType: string | undefined | null, treatme
 export function allowedSemenSources(cycleType: string | undefined | null, treatmentType?: string): string[] {
   const type = normalizeCycleType(cycleType);
   if (type === 'OD') return [];
-  if (type === 'ER') return ['donor_fresh', 'donor_cryo'];
+  if (type === 'ER') return ['donor_cryo'];
   if (type === 'OR') return ['husband_fresh', 'husband_cryo'];
   if (isFrozenCycleType(type, treatmentType) && type !== 'FrozenOocytes') {
-    return ['husband_cryo', 'donor_cryo', 'husband_fresh', 'donor_fresh'];
+    return ['husband_cryo', 'donor_cryo', 'husband_fresh'];
   }
   return [...SMART_SEMEN_IDS];
 }
@@ -262,28 +290,28 @@ export function getRetrievalLayout(cycleType: string | undefined | null) {
     return {
       ...base,
       retrievalChoice: 'self_to_self' as const,
-      sections: { ...base.sections, showSelfToSelf: true, showHusbandSperm: true },
+      sections: { ...base.sections, showSelfToSelf: true, showHusbandSperm: true, showDonorSperm: true },
     };
   }
   if (type === 'FrozenOocytes') {
     return {
       ...base,
       retrievalChoice: 'self_to_self' as const,
-      sections: { ...base.sections, showSelfToSelf: true, showFreezeOocytes: true, showHusbandSperm: true },
+      sections: { ...base.sections, showSelfToSelf: true, showFreezeOocytes: true },
     };
   }
   if (type === 'FET') {
     return {
       ...base,
       retrievalChoice: 'none' as const,
-      sections: { ...base.sections, showFetThaw: true, showHusbandSperm: true },
+      sections: { ...base.sections, showFetThaw: true },
     };
   }
   if (type === 'ThawOocytes') {
     return {
       ...base,
       retrievalChoice: 'none' as const,
-      sections: { ...base.sections, showThawOocytes: true, showHusbandSperm: true },
+      sections: { ...base.sections, showThawOocytes: true, showHusbandSperm: true, showDonorSperm: true },
     };
   }
   if (type === 'OD') {

@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { usePatient } from '@/contexts/patient-context';
@@ -20,6 +20,8 @@ import {
 } from '@/lib/cycle-utils';
 import { CycleRetrievalPanels } from '@/components/cycle-retrieval-panels';
 import { fetchCycleTypes, saveCycleEntry } from '@/lib/services/cycles';
+import { listSemenDonors } from '@/lib/services/semen-donor';
+import { listSpermIdLocations } from '@/lib/services/sperm-id-location';
 import type { CycleCreationResult, CycleEntry, SourceOption } from '@/lib/types/cycle';
 
 const DEFAULT_OOCYTE_OPTIONS: SourceOption[] = [
@@ -72,11 +74,6 @@ const DEFAULT_SEMEN_OPTIONS: SourceOption[] = [
     description: 'Frozen semen sample from husband/partner',
   },
   {
-    id: 'donor_fresh',
-    label: 'Donor - Fresh Sample',
-    description: 'Fresh semen sample from donor',
-  },
-  {
     id: 'donor_cryo',
     label: 'Donor - Cryopreserved (Frozen)',
     description: 'Frozen semen sample from donor',
@@ -120,11 +117,15 @@ export function CycleEntryForm() {
   const [success, setSuccess] = useState<string | null>(null);
 
   const cycleType = computeCycleType(form.oocyteSource, form.semenSource || 'husband_fresh');
-  const oocyteLocked = Boolean(creationDraft?.cycleType);
+  const visibleOocyteSources = useMemo(() => {
+    const selected = oocyteSources.filter((opt) => opt.id === form.oocyteSource);
+    return selected.length ? selected : oocyteSources.slice(0, 1);
+  }, [oocyteSources, form.oocyteSource]);
+
   const visibleSemenSources = useMemo(() => {
     const allowed = allowedSemenSources(form.oocyteSource, creationDraft?.treatmentType);
     if (!allowed.length) return [];
-    return semenSources.filter((opt) => allowed.includes(opt.id));
+    return semenSources.filter((opt) => allowed.includes(opt.id) && opt.id !== 'donor_fresh');
   }, [form.oocyteSource, creationDraft?.treatmentType, semenSources]);
 
   useEffect(() => {
@@ -182,6 +183,75 @@ export function CycleEntryForm() {
       /* ignore */
     }
   }, []);
+
+  const prefillKey = useRef('');
+  useEffect(() => {
+    if (!token || !selectedPatient) return;
+    const cycleId = creationDraft?.cycleId || currentCycle?.cycleId || '';
+    const key = `${form.oocyteSource}|${form.semenSource}|${selectedPatient.id}|${cycleId}`;
+    if (prefillKey.current === key) return;
+    prefillKey.current = key;
+    let cancelled = false;
+
+    async function fillKnownDetails() {
+      const next: Partial<typeof emptyForm> = {};
+      if (showDonorOocyteDetails(form.oocyteSource)) {
+        next.donorId = selectedPatient.uhid || String(selectedPatient.id);
+        next.donorName = selectedPatient.name || '';
+        if (selectedPatient.lockedRecipients?.[0]) next.recipientCount = '1';
+      }
+      if (showOocyteRecipientDetails(form.oocyteSource) && selectedPatient.receivedFromDonorId) {
+        next.receivedFromDonorId = String(selectedPatient.receivedFromDonorId);
+      }
+      if (showEmbryoRecipientDetails(form.oocyteSource)) {
+        if (!form.embryoBatchNo) next.embryoBatchNo = cycleId;
+        if (selectedPatient.receivedFromDonorId) {
+          next.oocyteDonorId = String(selectedPatient.receivedFromDonorId);
+        }
+      }
+      if (showSemenDonorDetails(form.semenSource)) {
+        try {
+          const isHusband = form.semenSource === 'husband_cryo';
+          const ids = await listSpermIdLocations(token, {
+            spermId: isHusband ? 'Husband' : 'Donor',
+            semenType: 'Frozen',
+            patId: selectedPatient.id,
+            satId: selectedSatellite?.id || selectedPatient.satelliteId || 0,
+          });
+          const first = ids[0];
+          if (first) {
+            next.donorSemenId = first.id;
+            next.cryoStrawNo = first.location || first.label;
+          } else if (!isHusband) {
+            const donors = await listSemenDonors(token);
+            const donor = donors[0];
+            if (donor) {
+              next.donorSemenId = donor.donorId || String(donor.donorIdSrNo);
+              next.cryoStrawNo = donor.location || donor.thawId || '';
+              next.freezingDate = toDateInput(donor.date);
+            }
+          }
+        } catch {
+          /* keep empty if DB has no straw */
+        }
+      }
+      if (cancelled || !Object.keys(next).length) return;
+      setForm((prev) => ({ ...prev, ...next }));
+    }
+
+    void fillKnownDetails();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    token,
+    selectedPatient,
+    selectedSatellite?.id,
+    form.oocyteSource,
+    form.semenSource,
+    creationDraft?.cycleId,
+    currentCycle?.cycleId,
+  ]);
 
   function updateField<K extends keyof typeof emptyForm>(key: K, value: (typeof emptyForm)[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -453,27 +523,19 @@ export function CycleEntryForm() {
             </div>
             
             <div className="flex-1 p-4 space-y-2.5">
-              {oocyteSources.map((opt) => {
+              {visibleOocyteSources.map((opt) => {
                 const selected = form.oocyteSource === opt.id;
-                const disabled = oocyteLocked && !selected;
                 return (
                   <label
                     key={opt.id}
-                    className={`flex items-start gap-3 rounded-xl border p-3 transition ${
-                      selected
-                        ? 'border-purple-400 bg-white shadow-xs ring-1 ring-purple-300'
-                        : disabled
-                          ? 'cursor-not-allowed border-slate-200/70 bg-slate-50 opacity-50'
-                          : 'cursor-pointer border-slate-200/70 bg-white/70 hover:bg-white hover:border-purple-200'
-                    }`}
+                    className="flex items-start gap-3 rounded-xl border border-purple-400 bg-white p-3 shadow-xs ring-1 ring-purple-300"
                   >
                     <input
                       type="radio"
                       name="oocyteSource"
                       value={opt.id}
                       checked={selected}
-                      disabled={disabled}
-                      onChange={() => updateField('oocyteSource', opt.id)}
+                      readOnly
                       className="mt-1 h-4 w-4 text-purple-600 focus:ring-purple-500"
                     />
                     <div className="flex items-center gap-3">
@@ -490,9 +552,7 @@ export function CycleEntryForm() {
               })}
 
               <div className="pt-2 text-center text-xs font-semibold text-purple-600">
-                {oocyteLocked
-                  ? `Locked from Cycle Creation : ${getCycleTypeLabel(form.oocyteSource)}`
-                  : 'Note : Select only one option'}
+                {`Locked from Cycle Creation : ${getCycleTypeLabel(form.oocyteSource)}`}
               </div>
             </div>
           </div>
@@ -556,17 +616,13 @@ export function CycleEntryForm() {
 
         </div>
 
-        {/* 5. Conditional Dynamic Form Sections (Fixed Card Boundaries & Overflow) */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          
-          {/* DONOR OOCYTE DETAILS */}
-          <div
-            className={`flex flex-col justify-between overflow-hidden rounded-2xl border p-3.5 transition ${
-              showDonorOocyteDetails(form.oocyteSource)
-                ? 'border-amber-300 bg-[#fffdf5] shadow-xs'
-                : 'border-amber-200/60 bg-[#fffcf5]/50 opacity-60'
-            }`}
-          >
+        {(showDonorOocyteDetails(form.oocyteSource) ||
+          showOocyteRecipientDetails(form.oocyteSource) ||
+          showEmbryoRecipientDetails(form.oocyteSource) ||
+          showSemenDonorDetails(form.semenSource)) && (
+        <div className="grid gap-4 md:grid-cols-2">
+          {showDonorOocyteDetails(form.oocyteSource) && (
+          <div className="overflow-hidden rounded-2xl border border-amber-300 bg-[#fffdf5] p-4 shadow-xs">
             <div>
               <div className="mb-3 flex items-center justify-between text-amber-800">
                 <div className="flex items-center gap-1.5 min-w-0">
@@ -587,13 +643,11 @@ export function CycleEntryForm() {
                   label="Donor ID"
                   value={form.donorId}
                   onChange={(v) => updateField('donorId', v)}
-                  disabled={!showDonorOocyteDetails(form.oocyteSource)}
                 />
                 <CompactField
                   label="Donor Name"
                   value={form.donorName}
                   onChange={(v) => updateField('donorName', v)}
-                  disabled={!showDonorOocyteDetails(form.oocyteSource)}
                 />
                 <CompactField
                   label="No. of Oocytes"
@@ -601,25 +655,14 @@ export function CycleEntryForm() {
                   short
                   value={form.oocyteCount}
                   onChange={(v) => updateField('oocyteCount', v)}
-                  disabled={!showDonorOocyteDetails(form.oocyteSource)}
                 />
               </div>
             </div>
-
-            <div className="mt-4 border-t border-amber-200/60 pt-2 text-center text-[10px] font-bold text-amber-700">
-              This section appears when<br />
-              <span className="font-extrabold">Donor Oocyte</span> is selected
-            </div>
           </div>
+          )}
 
-          {/* OOCYTE RECIPIENT DETAILS */}
-          <div
-            className={`flex flex-col justify-between overflow-hidden rounded-2xl border p-3.5 transition ${
-              showOocyteRecipientDetails(form.oocyteSource)
-                ? 'border-blue-300 bg-[#f5f9ff] shadow-xs'
-                : 'border-blue-200/60 bg-[#f8fbff]/50 opacity-60'
-            }`}
-          >
+          {showOocyteRecipientDetails(form.oocyteSource) && (
+          <div className="overflow-hidden rounded-2xl border border-blue-300 bg-[#f5f9ff] p-4 shadow-xs">
             <div>
               <div className="mb-3 flex items-center justify-between text-blue-800">
                 <div className="flex items-center gap-1.5 min-w-0">
@@ -635,17 +678,17 @@ export function CycleEntryForm() {
               </div>
 
               <div className="space-y-2.5">
+                <CompactField label="Recipient" value={selectedPatient?.name || ''} onChange={() => undefined} disabled />
+                <CompactField label="Recipient UHID" value={selectedPatient?.uhid || ''} onChange={() => undefined} disabled />
                 <CompactField
                   label="Received From Donor ID"
                   value={form.receivedFromDonorId}
                   onChange={(v) => updateField('receivedFromDonorId', v)}
-                  disabled={!showOocyteRecipientDetails(form.oocyteSource)}
                 />
                 <CompactField
                   label="Donor Name"
                   value={form.receivedDonorName}
                   onChange={(v) => updateField('receivedDonorName', v)}
-                  disabled={!showOocyteRecipientDetails(form.oocyteSource)}
                 />
                 <CompactField
                   label="No. of Oocytes"
@@ -653,25 +696,14 @@ export function CycleEntryForm() {
                   short
                   value={form.receivedOocyteCount}
                   onChange={(v) => updateField('receivedOocyteCount', v)}
-                  disabled={!showOocyteRecipientDetails(form.oocyteSource)}
                 />
               </div>
             </div>
-
-            <div className="mt-4 border-t border-blue-200/60 pt-2 text-center text-[10px] font-bold text-blue-700">
-              This section appears when<br />
-              <span className="font-extrabold">Oocyte Recipient</span> is selected
-            </div>
           </div>
+          )}
 
-          {/* EMBRYO RECIPIENT DETAILS */}
-          <div
-            className={`flex flex-col justify-between overflow-hidden rounded-2xl border p-3.5 transition ${
-              showEmbryoRecipientDetails(form.oocyteSource)
-                ? 'border-pink-300 bg-[#fff5f7] shadow-xs'
-                : 'border-pink-200/60 bg-[#fff9fa]/50 opacity-60'
-            }`}
-          >
+          {showEmbryoRecipientDetails(form.oocyteSource) && (
+          <div className="overflow-hidden rounded-2xl border border-pink-300 bg-[#fff5f7] p-4 shadow-xs">
             <div>
               <div className="mb-3 flex items-center justify-between text-pink-800">
                 <div className="flex items-center gap-1.5 min-w-0">
@@ -687,41 +719,37 @@ export function CycleEntryForm() {
               </div>
 
               <div className="space-y-2.5">
+                <CompactField label="Recipient Name" value={selectedPatient?.name || ''} onChange={() => undefined} disabled />
+                <CompactField label="Recipient UHID" value={selectedPatient?.uhid || ''} onChange={() => undefined} disabled />
+                <CompactField label="Partner" value={selectedPatient?.partner || ''} onChange={() => undefined} disabled />
+                <CompactField
+                  label="Cycle ID"
+                  value={creationDraft?.cycleId || currentCycle?.cycleId || ''}
+                  onChange={() => undefined}
+                  disabled
+                />
                 <CompactField
                   label="Embryo Donor Couple ID"
                   value={form.embryoDonorCoupleId}
                   onChange={(v) => updateField('embryoDonorCoupleId', v)}
-                  disabled={!showEmbryoRecipientDetails(form.oocyteSource)}
                 />
                 <CompactField
                   label="Donor Couple Name"
                   value={form.donorCoupleName}
                   onChange={(v) => updateField('donorCoupleName', v)}
-                  disabled={!showEmbryoRecipientDetails(form.oocyteSource)}
                 />
                 <CompactField
                   label="Embryo Batch No."
                   value={form.embryoBatchNo}
                   onChange={(v) => updateField('embryoBatchNo', v)}
-                  disabled={!showEmbryoRecipientDetails(form.oocyteSource)}
                 />
               </div>
             </div>
-
-            <div className="mt-4 border-t border-pink-200/60 pt-2 text-center text-[10px] font-bold text-pink-700">
-              This section appears when<br />
-              <span className="font-extrabold">Embryo Recipient</span> is selected
-            </div>
           </div>
+          )}
 
-          {/* SEMEN DONOR / CRYO DETAILS */}
-          <div
-            className={`flex flex-col justify-between overflow-hidden rounded-2xl border p-3.5 transition ${
-              showSemenDonorDetails(form.semenSource)
-                ? 'border-amber-300 bg-[#fffdf0] shadow-xs'
-                : 'border-amber-200/60 bg-[#fffef5]/50 opacity-60'
-            }`}
-          >
+          {showSemenDonorDetails(form.semenSource) && (
+          <div className="overflow-hidden rounded-2xl border border-amber-300 bg-[#fffdf0] p-4 shadow-xs">
             <div>
               <div className="mb-3 flex items-center justify-between text-amber-900">
                 <div className="flex items-center gap-1.5 min-w-0">
@@ -730,7 +758,7 @@ export function CycleEntryForm() {
                     <circle cx="9" cy="7" r="4" />
                   </svg>
                   <h3 className="truncate text-[11px] font-extrabold uppercase tracking-tight">
-                    SEMEN DONOR / CRYO DETAILS
+                    {form.semenSource === 'husband_cryo' ? 'Husband Cryo Details' : 'Semen Donor / Cryo Details'}
                   </h3>
                 </div>
                 <InfoIcon />
@@ -738,16 +766,14 @@ export function CycleEntryForm() {
 
               <div className="space-y-2.5">
                 <CompactField
-                  label="Donor Semen ID"
+                  label={form.semenSource === 'husband_cryo' ? 'Frozen Sample ID' : 'Donor Semen ID'}
                   value={form.donorSemenId}
                   onChange={(v) => updateField('donorSemenId', v)}
-                  disabled={!showSemenDonorDetails(form.semenSource)}
                 />
                 <CompactField
                   label="Cryo Straw No."
                   value={form.cryoStrawNo}
                   onChange={(v) => updateField('cryoStrawNo', v)}
-                  disabled={!showSemenDonorDetails(form.semenSource)}
                 />
                 <CompactField
                   label="Freezing Date"
@@ -755,24 +781,25 @@ export function CycleEntryForm() {
                   placeholder="DD-MMM-YYYY"
                   value={form.freezingDate}
                   onChange={(v) => updateField('freezingDate', v)}
-                  disabled={!showSemenDonorDetails(form.semenSource)}
                 />
               </div>
             </div>
-
-            <div className="mt-4 border-t border-amber-200/60 pt-2 text-center text-[10px] font-bold text-amber-800">
-              This section appears when<br />
-              <span className="font-extrabold">Donor or Frozen</span> option is selected
-            </div>
+            {!form.donorSemenId ? (
+              <p className="mt-3 text-[11px] text-amber-800">
+                No frozen ID found yet. Register the straw in Sperm Management and it will load here.
+              </p>
+            ) : null}
           </div>
-
+          )}
         </div>
+        )}
 
         <CycleRetrievalPanels
           cycleType={form.oocyteSource}
           semenSource={form.semenSource}
           cycleId={creationDraft?.cycleId || currentCycle?.cycleId}
           patient={selectedPatient}
+          monitoringSheet={creationDraft?.monitoringSheet || currentCycle?.monitoringSheet || ''}
         />
 
         {/* 6. CYCLE SUMMARY Card */}
@@ -883,6 +910,14 @@ function getOptionLabel(options: SourceOption[], id: string): string {
   return options.find((o) => o.id === id)?.label || id;
 }
 
+function toDateInput(value: string) {
+  if (!value) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toISOString().slice(0, 10);
+}
+
 function CompactField({
   label,
   value,
@@ -911,8 +946,8 @@ function CompactField({
         disabled={disabled}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        className={`h-7 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-800 outline-none transition focus:border-blue-500 disabled:bg-slate-100/80 disabled:text-slate-400 shrink-0 ${
-          short ? 'w-16' : 'w-24 sm:w-28'
+        className={`h-7 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-800 outline-none transition focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-600 shrink-0 ${
+          short ? 'w-16' : 'w-28 sm:w-40'
         }`}
       />
     </div>

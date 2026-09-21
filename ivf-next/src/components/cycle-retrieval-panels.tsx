@@ -1,6 +1,9 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { CycleMonitoringChart } from '@/components/cycle-monitoring-chart';
+import { CycleRetrievalSpermCard, type RetrievalSpermValue } from '@/components/cycle-retrieval-sperm';
+import { tallyOpuRows, writeRetrievalSnapshot } from '@/lib/cycle-snapshot';
 import { getCycleTypeLabel, getRetrievalLayout } from '@/lib/cycle-utils';
 import type { Patient } from '@/lib/types/patient';
 import type { FreezeOocyteRow, RetrievalRow } from '@/lib/types/cycle';
@@ -34,9 +37,16 @@ interface CycleRetrievalPanelsProps {
   semenSource: string;
   cycleId?: string;
   patient?: Patient | null;
+  monitoringSheet?: string;
 }
 
-export function CycleRetrievalPanels({ cycleType, semenSource, cycleId, patient }: CycleRetrievalPanelsProps) {
+export function CycleRetrievalPanels({
+  cycleType,
+  semenSource,
+  cycleId,
+  patient,
+  monitoringSheet = '',
+}: CycleRetrievalPanelsProps) {
   const layout = useMemo(() => getRetrievalLayout(cycleType), [cycleType]);
   const [opuRows, setOpuRows] = useState<RetrievalRow[]>([emptyOpuRow()]);
   const [donorRows, setDonorRows] = useState<RetrievalRow[]>([emptyOpuRow()]);
@@ -49,10 +59,55 @@ export function CycleRetrievalPanels({ cycleType, semenSource, cycleId, patient 
     donorAadhar: '',
     donorCycleId: '',
   });
+  const [sperm, setSperm] = useState<RetrievalSpermValue | null>(null);
 
   const monthYear = new Date().toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
   const husbandSelected = semenSource.startsWith('husband');
   const donorSelected = semenSource.startsWith('donor');
+  const showHusbandSperm = Boolean(layout.sections.showHusbandSperm && husbandSelected);
+  const showDonorSperm = Boolean(layout.sections.showDonorSperm && donorSelected);
+
+  useEffect(() => {
+    const opuTally = tallyOpuRows(
+      layout.sections.showDonorToRecipient || layout.sections.showDonorEggCount ? donorRows : opuRows
+    );
+    writeRetrievalSnapshot({
+      cycleId: cycleId || '',
+      patientId: patient?.id || 0,
+      cycleType,
+      semenSource,
+      monitoringSheet,
+      ivfAllotted: opuTally.ivfAllotted,
+      icsiAllotted: opuTally.icsiAllotted,
+      totalRetrieved: opuTally.totalRetrieved,
+      freeze: layout.sections.showFreezeOocytes ? freeze : null,
+      fetEmbryoCount: Number(fet.embryoCount) || 0,
+      thawMii: Number(thaw.mii) || 0,
+      thawMi: Number(thaw.mi) || 0,
+      thawGv: Number(thaw.gv) || 0,
+      thawSurvived: Number(thaw.survived) || 0,
+      sperm,
+      savedAt: new Date().toISOString(),
+    });
+  }, [
+    cycleId,
+    cycleType,
+    donorRows,
+    fet.embryoCount,
+    freeze,
+    layout.sections.showDonorEggCount,
+    layout.sections.showDonorToRecipient,
+    layout.sections.showFreezeOocytes,
+    monitoringSheet,
+    opuRows,
+    patient?.id,
+    semenSource,
+    sperm,
+    thaw.gv,
+    thaw.mi,
+    thaw.mii,
+    thaw.survived,
+  ]);
 
   function updateOpu(index: number, key: keyof RetrievalRow, value: string) {
     setOpuRows((rows) =>
@@ -80,9 +135,11 @@ export function CycleRetrievalPanels({ cycleType, semenSource, cycleId, patient 
         <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">Retrieval workspace</p>
         <p className="mt-1 text-sm font-bold text-slate-800">{getCycleTypeLabel(cycleType)}</p>
         <p className="text-xs text-slate-600">
-          Fields below follow the SMART cycle type, shown in Fertitrace layout.
+          Fields below follow the SMART cycle type, shown in Fertitrace layout. IVF / ICSI allotted here feeds Embryo Management.
         </p>
       </div>
+
+      <CycleMonitoringChart option={monitoringSheet} cycleId={cycleId} />
 
       {layout.retrievalChoice === 'self_to_self' && (
         <ChoiceBadge label="Retrieval option" value="Self To Self" />
@@ -211,20 +268,14 @@ export function CycleRetrievalPanels({ cycleType, semenSource, cycleId, patient 
         </SectionCard>
       )}
 
-      {layout.sections.showHusbandSperm && husbandSelected && (
-        <SectionCard title={semenSource === 'husband_cryo' ? 'Husband Semen Details (Frozen)' : 'Husband Semen Details (Fresh)'} tone="emerald">
-          <p className="text-sm text-slate-600">
-            Husband semen is selected for this cycle. Analysis values appear here after a semen report is saved.
-          </p>
-        </SectionCard>
-      )}
-
-      {layout.sections.showDonorSperm && donorSelected && (
-        <SectionCard title="Donor Semen Details" tone="amber">
-          <p className="text-sm text-slate-600">
-            Embryo recipient cycles use donor sperm. Frozen sample IDs load from analysis when available.
-          </p>
-        </SectionCard>
+      {(showHusbandSperm || showDonorSperm) && (
+        <CycleRetrievalSpermCard
+          semenSource={semenSource}
+          cycleId={cycleId}
+          patientId={patient?.id}
+          satelliteId={patient?.satelliteId}
+          onChange={setSperm}
+        />
       )}
     </div>
   );

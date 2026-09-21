@@ -37,6 +37,7 @@ export interface SourceSummary {
   discard: number;
   donated: number;
   donatedForResearch: number;
+  allotted?: number;
 }
 
 export interface EtEmbryoRow {

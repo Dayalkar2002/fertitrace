@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
       messageType: body.messageType || 'General Message',
       messageText: body.messageText,
       templateId: body.templateId,
+      whatsappTemplate: body.whatsappTemplate,
       language: body.language || 'English',
       sentBy: user.userName || user.userLoginName || 'Administrator',
     });

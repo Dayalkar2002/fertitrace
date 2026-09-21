@@ -11,6 +11,7 @@ import {
   CommunicationChannel,
 } from '@/lib/services/communication';
 import { DEFAULT_TEMPLATE_LABEL, SMS_TEMPLATES } from '@/lib/communication/sms-templates';
+import { isWhatsAppTemplateApproved } from '@/lib/communication/whatsapp-templates';
 
 type CommunicationRecord = CommunicationLogItem;
 
@@ -58,6 +59,8 @@ export interface DltTemplateItem {
   category: string;
   content: string;
   variables: string[];
+  whatsappTemplateName?: string;
+  whatsappApproved?: boolean;
 }
 
 export const DLT_TEMPLATES: Record<string, DltTemplateItem> = Object.fromEntries(
@@ -71,6 +74,8 @@ export const DLT_TEMPLATES: Record<string, DltTemplateItem> = Object.fromEntries
       category: item.activity,
       content: item.content,
       variables: item.variables,
+      whatsappTemplateName: item.whatsappTemplateName || '',
+      whatsappApproved: isWhatsAppTemplateApproved(item.whatsappTemplateName),
     },
   ])
 );
@@ -213,8 +218,10 @@ export function PatientCommunication() {
 
   function handleTemplateChange(key: string) {
     setTemplateKey(key);
-    if (DLT_TEMPLATES[key]) {
-      setMessage(DLT_TEMPLATES[key].content);
+    const item = DLT_TEMPLATES[key];
+    if (item) {
+      setMessage(item.content);
+      setMessageType(item.name);
     } else if (TEMPLATES[key]) {
       setMessage(TEMPLATES[key]);
     }
@@ -225,11 +232,21 @@ export function PatientCommunication() {
     setShowVariablesDropdown(false);
   }
 
+  const activeTemplate = DLT_TEMPLATES[templateKey];
+  const whatsappReady = Boolean(activeTemplate?.whatsappApproved);
+
   async function handleSendMessage() {
     if (!message.trim()) return;
+    if (channel === 'WhatsApp' && !whatsappReady) {
+      setToastMessage(
+        `WhatsApp template "${activeTemplate?.whatsappTemplateName || 'this template'}" is still pending Meta approval.`
+      );
+      setTimeout(() => setToastMessage(null), 5000);
+      return;
+    }
     setSending(true);
 
-    const activeDlt = DLT_TEMPLATES[templateKey];
+    const activeDlt = activeTemplate;
 
     try {
       if (token) {
@@ -241,6 +258,7 @@ export function PatientCommunication() {
           messageType,
           messageText: previewText,
           templateId: activeDlt?.templateId,
+          whatsappTemplate: activeDlt?.whatsappTemplateName,
           language,
         });
         setHistory((prev) => [record, ...prev]);
@@ -444,9 +462,9 @@ export function PatientCommunication() {
                 onChange={(e) => handleTemplateChange(e.target.value)}
                 className="h-10 flex-1 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-800 outline-none transition focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10"
               >
-                {Object.keys(DLT_TEMPLATES).map((key) => (
+                {Object.entries(DLT_TEMPLATES).map(([key, item]) => (
                   <option key={key} value={key}>
-                    {key}
+                    {item.whatsappApproved ? `${key} · WhatsApp approved` : key}
                   </option>
                 ))}
               </select>
@@ -492,30 +510,66 @@ export function PatientCommunication() {
 
             {/* STPL DLT Template Badge */}
             {DLT_TEMPLATES[templateKey] && (
-              <div className={`mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-xl border px-3 py-1.5 text-[11px] ${
-                DLT_TEMPLATES[templateKey].templateId
-                  ? 'bg-emerald-50/70 border-emerald-200/80 text-emerald-900'
-                  : 'bg-amber-50/70 border-amber-200/80 text-amber-900'
-              }`}>
-                <span className="inline-flex items-center gap-1 font-semibold">
-                  <span className={`h-2 w-2 rounded-full ${DLT_TEMPLATES[templateKey].templateId ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                  {DLT_TEMPLATES[templateKey].templateId ? 'STPL DLT Approved' : 'Pending DLT approval'}
-                </span>
-                {DLT_TEMPLATES[templateKey].templateId && (
-                  <>
-                    <span>
-                      Template ID: <strong className="font-mono font-bold">{DLT_TEMPLATES[templateKey].templateId}</strong>
+              <div className="mt-2 space-y-1.5">
+                <div className={`flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-xl border px-3 py-1.5 text-[11px] ${
+                  DLT_TEMPLATES[templateKey].templateId
+                    ? 'bg-emerald-50/70 border-emerald-200/80 text-emerald-900'
+                    : 'bg-amber-50/70 border-amber-200/80 text-amber-900'
+                }`}>
+                  <span className="inline-flex items-center gap-1 font-semibold">
+                    <span className={`h-2 w-2 rounded-full ${DLT_TEMPLATES[templateKey].templateId ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                    {DLT_TEMPLATES[templateKey].templateId ? 'STPL DLT Approved' : 'Pending DLT approval'}
+                  </span>
+                  {DLT_TEMPLATES[templateKey].templateId && (
+                    <>
+                      <span>
+                        Template ID: <strong className="font-mono font-bold">{DLT_TEMPLATES[templateKey].templateId}</strong>
+                      </span>
+                      <span>•</span>
+                      <span>
+                        Ref: <strong className="font-mono">{DLT_TEMPLATES[templateKey].refNo}</strong>
+                      </span>
+                    </>
+                  )}
+                  <span>•</span>
+                  <span>
+                    Screen: <strong>{SMS_TEMPLATES.find((t) => t.label === templateKey)?.captureScreen}</strong>
+                  </span>
+                </div>
+                {channel === 'WhatsApp' && (
+                  <div className={`flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-xl border px-3 py-1.5 text-[11px] ${
+                    whatsappReady
+                      ? 'bg-emerald-50/70 border-emerald-200/80 text-emerald-900'
+                      : 'bg-amber-50/70 border-amber-200/80 text-amber-900'
+                  }`}>
+                    <span className="inline-flex items-center gap-1 font-semibold">
+                      <span className={`h-2 w-2 rounded-full ${whatsappReady ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                      {whatsappReady ? 'WhatsApp Meta Approved' : 'WhatsApp pending Meta approval'}
                     </span>
-                    <span>•</span>
-                    <span>
-                      Ref: <strong className="font-mono">{DLT_TEMPLATES[templateKey].refNo}</strong>
-                    </span>
-                  </>
+                    {activeTemplate?.whatsappTemplateName && (
+                      <>
+                        <span>•</span>
+                        <span>
+                          Template: <strong className="font-mono">{activeTemplate.whatsappTemplateName}</strong>
+                        </span>
+                      </>
+                    )}
+                    {whatsappReady && (
+                      <>
+                        <span>•</span>
+                        <span>Language: <strong>en_US</strong></span>
+                        <span>•</span>
+                        <span>Category: <strong>UTILITY</strong></span>
+                      </>
+                    )}
+                    {!whatsappReady && (
+                      <>
+                        <span>•</span>
+                        <span>Only <strong>appointment_booked</strong> can be sent on WhatsApp</span>
+                      </>
+                    )}
+                  </div>
                 )}
-                <span>•</span>
-                <span>
-                  Screen: <strong>{SMS_TEMPLATES.find((t) => t.label === templateKey)?.captureScreen}</strong>
-                </span>
               </div>
             )}
           </div>
@@ -604,7 +658,7 @@ export function PatientCommunication() {
 
           <button
             type="button"
-            disabled={sending}
+            disabled={sending || (channel === 'WhatsApp' && !whatsappReady)}
             onClick={handleSendMessage}
             className="flex items-center gap-2 rounded-xl bg-[#e11d48] hover:bg-[#be123c] px-6 py-2.5 text-xs font-bold uppercase tracking-wide text-white shadow-md shadow-pink-600/20 transition active:scale-[0.99] disabled:opacity-60"
           >

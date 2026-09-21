@@ -53,11 +53,6 @@ export async function GET() {
           description: 'Frozen semen sample from husband/partner',
         },
         {
-          id: 'donor_fresh',
-          label: 'Donor - Fresh Sample',
-          description: 'Fresh semen sample from donor',
-        },
-        {
           id: 'donor_cryo',
           label: 'Donor - Cryopreserved (Frozen)',
           description: 'Frozen semen sample from donor',

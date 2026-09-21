@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TopNavMenu, MasterMenuItem } from '@/lib/nav-config';
-import { TOP_NAV_MENUS, getMasterColumns } from '@/lib/nav-config';
+import { TOP_NAV_MENUS, getMasterColumns, FERTITRACE_IN_USE_COUNT, STANDARD_MASTER_COUNT } from '@/lib/nav-config';
 
 export function TopNav() {
   const pathname = usePathname();
@@ -172,12 +172,12 @@ export function TopNav() {
                           <div className="flex items-center gap-3 text-[11px]">
                             <span className="flex items-center gap-1.5 font-bold text-purple-900">
                               <span className="h-2.5 w-2.5 rounded-full bg-[#6345A6] shadow-2xs ring-2 ring-purple-200" />
-                              <span>FertiTrace In-Use (12)</span>
+                              <span>FertiTrace In-Use ({FERTITRACE_IN_USE_COUNT})</span>
                             </span>
                             <span className="text-slate-300">•</span>
                             <span className="flex items-center gap-1.5 font-semibold text-slate-600">
                               <span className="h-2.5 w-2.5 rounded-full bg-slate-300 ring-2 ring-slate-100" />
-                              <span>Standard Masters (20+)</span>
+                              <span>Standard Masters ({STANDARD_MASTER_COUNT})</span>
                             </span>
                           </div>
 
@@ -288,7 +288,7 @@ export function TopNav() {
                           </span>
                           <span className="text-slate-300">•</span>
                           <span className="text-[11px] text-purple-800 font-bold">
-                            12 highlighted for FertiTrace project
+                            {FERTITRACE_IN_USE_COUNT} highlighted for FertiTrace project
                           </span>
                         </div>
                         <Link

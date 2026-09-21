@@ -8,15 +8,15 @@ import { ApiError } from '@/lib/api';
 import {
   CYCLE_CREATION_STORAGE_KEY,
   CYCLE_CREATION_TYPES,
-  FALLBACK_PROTOCOLS,
+  getMonitoringSheetLabel,
+  isMonitoringSheetAllowed,
   MONITORING_SHEET_OPTIONS,
+  monitoringSheetHint,
   TREATMENT_TYPES,
 } from '@/lib/cycle-utils';
 import { listPatientCycles, previewCycleId, saveCycleCreation } from '@/lib/services/cycles';
-import { listCommonMaster, listDoctors, type DoctorMasterRow } from '@/lib/services/masters';
+import { listDoctors, type DoctorMasterRow } from '@/lib/services/masters';
 import type { PatientCycleRow } from '@/lib/types/cycle';
-
-const STIM_PROTOCOL_CAT = 13;
 
 function todayInput() {
   return new Date().toISOString().slice(0, 10);
@@ -33,11 +33,9 @@ export function CycleCreationForm() {
   const [lmp, setLmp] = useState('');
   const [expectedOpuDate, setExpectedOpuDate] = useState('');
   const [consultantId, setConsultantId] = useState(0);
-  const [protocol, setProtocol] = useState('');
   const [monitoringSheet, setMonitoringSheet] = useState('');
   const [notes, setNotes] = useState('');
   const [doctors, setDoctors] = useState<DoctorMasterRow[]>([]);
-  const [protocols, setProtocols] = useState<string[]>(FALLBACK_PROTOCOLS);
   const [savedCycles, setSavedCycles] = useState<PatientCycleRow[]>([]);
   const [loadingCycles, setLoadingCycles] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -47,6 +45,7 @@ export function CycleCreationForm() {
     if (cycleType === 'FET' || cycleType === 'FrozenOocytes' || cycleType === 'ThawOocytes') {
       setTreatmentType('Frozen');
     }
+    setMonitoringSheet((current) => (isMonitoringSheetAllowed(cycleType, current) ? current : ''));
   }, [cycleType]);
 
   useEffect(() => {
@@ -54,12 +53,6 @@ export function CycleCreationForm() {
     void listDoctors(token)
       .then(setDoctors)
       .catch(() => setDoctors([]));
-    void listCommonMaster(token, STIM_PROTOCOL_CAT)
-      .then((rows) => {
-        const names = rows.map((row) => row.name).filter(Boolean);
-        if (names.length) setProtocols(names);
-      })
-      .catch(() => setProtocols(FALLBACK_PROTOCOLS));
   }, [token]);
 
   useEffect(() => {
@@ -115,7 +108,7 @@ export function CycleCreationForm() {
         lmp,
         expectedOpuDate,
         consultantId,
-        protocol,
+        protocol: getMonitoringSheetLabel(monitoringSheet),
         monitoringSheet,
         notes,
       });
@@ -172,7 +165,6 @@ export function CycleCreationForm() {
                 setCycleType('Fresh');
                 setTreatmentType('Fresh');
                 setMonitoringSheet('');
-                setProtocol('');
                 setNotes('');
                 setStartDate(todayInput());
                 document.getElementById('cycle-creation-form')?.scrollIntoView({ behavior: 'smooth' });
@@ -319,30 +311,34 @@ export function CycleCreationForm() {
 
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
               <label className={`${labelCls} sm:pt-2`}>Protocol</label>
-              <div className="min-w-0 flex-1 space-y-3">
-                <select value={protocol} onChange={(e) => setProtocol(e.target.value)} className={`${fieldCls} max-w-xs`}>
-                  <option value="">Select protocol</option>
-                  {protocols.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
-                <div className="flex flex-wrap gap-x-6 gap-y-2 pt-1">
-                  {MONITORING_SHEET_OPTIONS.map((item) => (
-                    <label key={item.value} className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                      <input
-                        type="radio"
-                        name="monitoringSheet"
-                        value={item.value}
-                        checked={monitoringSheet === item.value}
-                        onChange={() => setMonitoringSheet(item.value)}
-                        className="h-4 w-4 accent-[#6345A6]"
-                      />
-                      {item.label}
-                    </label>
-                  ))}
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="flex flex-wrap gap-x-6 gap-y-2">
+                  {MONITORING_SHEET_OPTIONS.map((item) => {
+                    const allowed = isMonitoringSheetAllowed(cycleType, item.value);
+                    return (
+                      <label
+                        key={item.value}
+                        className={`flex items-center gap-2 text-sm font-medium ${
+                          allowed ? 'text-slate-700' : 'cursor-not-allowed text-slate-400'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="monitoringSheet"
+                          value={item.value}
+                          checked={monitoringSheet === item.value}
+                          disabled={!allowed}
+                          onChange={() => {
+                            if (allowed) setMonitoringSheet(item.value);
+                          }}
+                          className="h-4 w-4 accent-[#6345A6] disabled:cursor-not-allowed"
+                        />
+                        {item.label}
+                      </label>
+                    );
+                  })}
                 </div>
+                <p className="text-[11px] text-slate-500">{monitoringSheetHint(cycleType)}</p>
               </div>
             </div>
 

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { usePatient } from '@/contexts/patient-context';
 import { CycleRetrievalPanels } from '@/components/cycle-retrieval-panels';
-import { getCycleTypeLabel } from '@/lib/cycle-utils';
+import { CYCLE_CREATION_STORAGE_KEY, getCycleTypeLabel } from '@/lib/cycle-utils';
 import { ApiError } from '@/lib/api';
 import {
   checkDonorAadhar,
@@ -13,6 +13,7 @@ import {
   saveRetrieval,
 } from '@/lib/services/cycles';
 import type {
+  CycleCreationResult,
   DonorAadharCheck,
   RetrievalConfig,
   RetrievalRow,
@@ -265,6 +266,7 @@ export function CycleRetrievalForm({ cycleId }: CycleRetrievalFormProps) {
             semenSource={config.cycle.semenSource}
             cycleId={config.cycle.cycleId}
             patient={selectedPatient}
+            monitoringSheet={config.cycle.monitoringSheet || readCreationMonitoringSheet()}
           />
 
           {validationError && <Alert type="error" message={validationError} />}
@@ -300,4 +302,16 @@ function Alert({ type, message }: { type: 'error' | 'success'; message: string }
       ? 'border-red-200 bg-red-50 text-red-700'
       : 'border-emerald-200 bg-emerald-50 text-emerald-700';
   return <div className={`rounded-lg border px-4 py-3 text-sm ${styles}`}>{message}</div>;
+}
+
+function readCreationMonitoringSheet() {
+  if (typeof window === 'undefined') return '';
+  try {
+    const raw = sessionStorage.getItem(CYCLE_CREATION_STORAGE_KEY);
+    if (!raw) return '';
+    const created = JSON.parse(raw) as CycleCreationResult;
+    return created.monitoringSheet || '';
+  } catch {
+    return '';
+  }
 }

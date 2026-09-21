@@ -73,21 +73,21 @@ function routeFor(item: Omit<MasterMenuItem, 'route'>): string {
 
 const RAW_REGISTRY: Omit<MasterMenuItem, 'route'>[] = [
   // Column 1
-  { label: 'Allergies Master', type: 'common', catId: 12, column: 1, isFertiTrace: false },
+  { label: 'Allergies Master', type: 'common', catId: 12, column: 1, isFertiTrace: true },
   { label: 'Catheter Master', type: 'common', catId: 9, column: 1, isFertiTrace: true },
-  { label: 'Contamination', type: 'common', catId: 27, column: 1, isFertiTrace: false },
-  { label: 'Donor Lab', type: 'donor-lab', column: 1, isFertiTrace: false },
-  { label: 'FSH Drug Master', type: 'common', catId: 14, column: 1, isFertiTrace: false },
-  { label: 'Indication Master', type: 'common', catId: 23, column: 1, isFertiTrace: false },
+  { label: 'Contamination', type: 'common', catId: 27, column: 1, isFertiTrace: true },
+  { label: 'Donor Lab', type: 'donor-lab', column: 1, isFertiTrace: true },
+  { label: 'FSH Drug Master', type: 'common', catId: 14, column: 1, isFertiTrace: true },
+  { label: 'Indication Master', type: 'common', catId: 23, column: 1, isFertiTrace: true },
   { label: 'Media Brand', type: 'common', catId: 28, column: 1, isFertiTrace: true },
   { label: 'Out Come Drug Master', type: 'outcome-drug', column: 1, isFertiTrace: false },
-  { label: 'Referring Doctor', type: 'common', catId: 21, column: 1, isFertiTrace: false },
+  { label: 'Referring Doctor', type: 'common', catId: 21, column: 1, isFertiTrace: true },
   { label: 'Termination Master', type: 'common', catId: 11, column: 1, isFertiTrace: false },
 
   // Column 2
-  { label: 'Antagonist Master', type: 'common', catId: 18, column: 2, isFertiTrace: false },
-  { label: 'Clomiphene Citrate', type: 'common', catId: 17, column: 2, isFertiTrace: false },
-  { label: 'Diagnosis Master', type: 'common', catId: 20, column: 2, isFertiTrace: false },
+  { label: 'Antagonist Master', type: 'common', catId: 18, column: 2, isFertiTrace: true },
+  { label: 'Clomiphene Citrate', type: 'common', catId: 17, column: 2, isFertiTrace: true },
+  { label: 'Diagnosis Master', type: 'common', catId: 20, column: 2, isFertiTrace: true },
   { label: 'Findings', type: 'common', catId: 26, column: 2, isFertiTrace: false },
   { label: 'Gas', type: 'common', catId: 31, column: 2, isFertiTrace: true },
   { label: 'Lab Oper. Master', type: 'common', catId: 2, column: 2, isFertiTrace: true },
@@ -97,33 +97,36 @@ const RAW_REGISTRY: Omit<MasterMenuItem, 'route'>[] = [
   { label: 'User Master', type: 'user', column: 2, isFertiTrace: true },
 
   // Column 3
-  { label: 'Appearance Master', type: 'common', catId: 4, column: 3, isFertiTrace: false },
-  { label: 'Collection Problem', type: 'common', catId: 24, column: 3, isFertiTrace: false },
+  { label: 'Appearance Master', type: 'common', catId: 4, column: 3, isFertiTrace: true },
+  { label: 'Collection Problem', type: 'common', catId: 24, column: 3, isFertiTrace: true },
   { label: 'Doctor Master', type: 'doctor', column: 3, isFertiTrace: true },
   { label: 'Personnel Master', type: 'common', catId: 16, column: 3, isFertiTrace: false },
-  { label: 'HMG Drug Master', type: 'common', catId: 15, column: 3, isFertiTrace: false },
-  { label: 'Linearity', type: 'common', catId: 25, column: 3, isFertiTrace: false },
-  { label: 'Method Master', type: 'common', catId: 3, column: 3, isFertiTrace: false },
+  { label: 'HMG Drug Master', type: 'common', catId: 15, column: 3, isFertiTrace: true },
+  { label: 'Linearity', type: 'common', catId: 25, column: 3, isFertiTrace: true },
+  { label: 'Method Master', type: 'common', catId: 3, column: 3, isFertiTrace: true },
   { label: 'Patient Selection', type: 'patient-selection', column: 3, isFertiTrace: true },
   { label: 'Sperm Id Master', type: 'common', catId: 22, column: 3, isFertiTrace: true },
-  { label: 'Viscosity Master', type: 'common', catId: 6, column: 3, isFertiTrace: false },
+  { label: 'Viscosity Master', type: 'common', catId: 6, column: 3, isFertiTrace: true },
 
   // Column 4
-  { label: 'Appointment Scheduler', type: 'appointments', column: 4, isFertiTrace: false },
-  { label: 'Colour Master', type: 'common', catId: 5, column: 4, isFertiTrace: false },
+  { label: 'Appointment Scheduler', type: 'appointments', column: 4, isFertiTrace: true },
+  { label: 'Colour Master', type: 'common', catId: 5, column: 4, isFertiTrace: true },
   { label: 'Done By Master', type: 'common', catId: 10, column: 4, isFertiTrace: false },
-  { label: 'Fructose Master', type: 'common', catId: 8, column: 4, isFertiTrace: false },
+  { label: 'Fructose Master', type: 'common', catId: 8, column: 4, isFertiTrace: true },
   { label: 'Incubator Used', type: 'common', catId: 30, column: 4, isFertiTrace: true },
-  { label: 'Liquefaction Master', type: 'common', catId: 7, column: 4, isFertiTrace: false },
-  { label: 'Other Drug Master', type: 'common', catId: 19, column: 4, isFertiTrace: false },
+  { label: 'Liquefaction Master', type: 'common', catId: 7, column: 4, isFertiTrace: true },
+  { label: 'Other Drug Master', type: 'common', catId: 19, column: 4, isFertiTrace: true },
   { label: 'Other Drug Master 2', type: 'common', catId: 32, column: 4, isFertiTrace: false },
-  { label: 'Ovulation Induction', type: 'common', catId: 13, column: 4, isFertiTrace: false },
+  { label: 'Ovulation Induction', type: 'common', catId: 13, column: 4, isFertiTrace: true },
 ];
 
 export const MASTER_REGISTRY: MasterMenuItem[] = RAW_REGISTRY.map((item) => ({
   ...item,
   route: routeFor(item),
 }));
+
+export const FERTITRACE_IN_USE_COUNT = MASTER_REGISTRY.filter((item) => item.isFertiTrace).length;
+export const STANDARD_MASTER_COUNT = MASTER_REGISTRY.length - FERTITRACE_IN_USE_COUNT;
 
 export function getMasterColumns(): MasterMenuItem[][] {
   return [1, 2, 3, 4].map((col) => MASTER_REGISTRY.filter((item) => item.column === col));

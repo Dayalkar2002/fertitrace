@@ -10,8 +10,16 @@ export interface SmsTemplate {
   variables: string[];
   dltTemplateId?: string;
   dltRef?: string;
+  whatsappTemplateName?: string;
+  whatsappApproved?: boolean;
   channels: { sms: boolean; whatsapp: boolean; email: boolean };
 }
+
+export {
+  APPROVED_WHATSAPP_TEMPLATES,
+  PENDING_WHATSAPP_TEMPLATES,
+  isWhatsAppTemplateApproved,
+} from '@/lib/communication/whatsapp-templates';
 
 /** DLT-approved templates keep exact registered wording. Others follow SMS Templates For Approval.xlsx. */
 export const SMS_TEMPLATES: SmsTemplate[] = [
@@ -23,6 +31,8 @@ export const SMS_TEMPLATES: SmsTemplate[] = [
     activity: 'First Consultation',
     dltTemplateId: '1707161788735690119',
     dltRef: '07-HH4KN8WCY5H',
+    whatsappTemplateName: 'appointment_booked',
+    whatsappApproved: true,
     content:
       'Dear [Patient Name], Your appointment has been booked with [Doctor Name] for [Procedure] at IVF Craft Clinic at Andheri on [Date & Time]. Team IVF Craft.',
     variables: ['[Patient Name]', '[Doctor Name]', '[Procedure]', '[Date & Time]'],
@@ -36,6 +46,7 @@ export const SMS_TEMPLATES: SmsTemplate[] = [
     activity: 'Re-Schedule Consultation',
     dltTemplateId: '1707161788748638612',
     dltRef: '07-HH4KN8WFQ2B',
+    whatsappTemplateName: 'appointment_reschedule',
     content:
       'Dear [Patient Name],Your appointment with [Doctor Name] has been rescheduled for [Procedure] at IVF Craft Clinic at Andheri on [Date & Time]. Team IVF Craft',
     variables: ['[Patient Name]', '[Doctor Name]', '[Procedure]', '[Date & Time]'],
@@ -49,6 +60,8 @@ export const SMS_TEMPLATES: SmsTemplate[] = [
     activity: 'Follow-up Consultation',
     dltTemplateId: '1707161788759596007',
     dltRef: '07-HH4KN8WI2M0',
+    whatsappTemplateName: 'appointment_booked',
+    whatsappApproved: true,
     content:
       'Dear [Patient Name] Your appointment has been booked with [Doctor Name] for [Procedure] at IVF Craft Clinic at Andheri on [Date & Time]. Team IVF Craft',
     variables: ['[Patient Name]', '[Doctor Name]', '[Procedure]', '[Date & Time]'],
@@ -62,6 +75,7 @@ export const SMS_TEMPLATES: SmsTemplate[] = [
     activity: 'Cancellation - Consultation',
     dltTemplateId: '1707161788771098630',
     dltRef: '07-HH4KN8WKJD6',
+    whatsappTemplateName: 'appointment_cancel',
     content:
       'Dear [Patient Name] Your appointment  with [Doctor Name] at IVF Craft Clinic at Andheri on [Date & Time] has been cancelled. Team IVF Craft.',
     variables: ['[Patient Name]', '[Doctor Name]', '[Date & Time]'],
@@ -75,6 +89,7 @@ export const SMS_TEMPLATES: SmsTemplate[] = [
     activity: 'FM+TIC PROCEDURE',
     dltTemplateId: '1707161788783460834',
     dltRef: '07-HH4KN8WN6R4',
+    whatsappTemplateName: 'injection_appointment',
     content: 'Dear [Patient Name], Your appointment has been booked for [Procedure] on [Date & Time]. Team IVF Craft.',
     variables: ['[Patient Name]', '[Procedure]', '[Date & Time]'],
     channels: { sms: true, whatsapp: true, email: true },
@@ -87,6 +102,7 @@ export const SMS_TEMPLATES: SmsTemplate[] = [
     activity: 'IUI PROCEDURE',
     dltTemplateId: '1707161788814128413',
     dltRef: '07-HH4KN8WTRDZ',
+    whatsappTemplateName: 'iui_appointment',
     content:
       'Dear [Patient Name], Your appointment has been booked for [Procedure] at IVF Craft Clinic at Andheri on [Date & Time]. Team IVF Craft.',
     variables: ['[Patient Name]', '[Procedure]', '[Date & Time]'],
@@ -98,6 +114,7 @@ export const SMS_TEMPLATES: SmsTemplate[] = [
     messageType: 'IUI Summary',
     captureScreen: 'IUI',
     activity: 'IUI SUMMARY',
+    whatsappTemplateName: 'iui_summary',
     content: 'Dear [Patient Name] Your IUI Summary for the month of [Month], on [Date] is attached herewith.',
     variables: ['[Patient Name]', '[Month]', '[Date]'],
     channels: { sms: true, whatsapp: true, email: true },
@@ -108,6 +125,7 @@ export const SMS_TEMPLATES: SmsTemplate[] = [
     messageType: 'FM Procedure',
     captureScreen: 'FM',
     activity: 'FM PROCEDURE',
+    whatsappTemplateName: 'fm_procedure',
     content:
       'Dear [Patient Name], Your appointment has been booked for Follicular Monitoring at IVF Craft Clinic at Andheri on [Date & Time]. Team IVF Craft.',
     variables: ['[Patient Name]', '[Date & Time]'],
@@ -119,6 +137,7 @@ export const SMS_TEMPLATES: SmsTemplate[] = [
     messageType: 'FM & Blood Tests',
     captureScreen: 'MONITORING SHEET PINK',
     activity: 'FM & BLOOD TESTS PROCEDURE',
+    whatsappTemplateName: 'fm_blood_pink',
     content:
       'Dear [Patient Name], Your appointment has been booked for TVS for Follicular Monitoring & Blood Test at IVF Craft Clinic at Andheri on [Date & Time]. Team IVF Craft.',
     variables: ['[Patient Name]', '[Date & Time]'],
@@ -130,6 +149,7 @@ export const SMS_TEMPLATES: SmsTemplate[] = [
     messageType: 'FM & Blood Tests',
     captureScreen: 'MONITORING SHEET YELLOW',
     activity: 'FM & BLOOD TESTS PROCEDURE',
+    whatsappTemplateName: 'fm_blood_yellow',
     content:
       'Dear [Patient Name], Your appointment has been booked for TVS for Follicular Monitoring at IVF Craft Clinic at Andheri on [Date & Time]. Team IVF Craft.',
     variables: ['[Patient Name]', '[Date & Time]'],
@@ -141,6 +161,7 @@ export const SMS_TEMPLATES: SmsTemplate[] = [
     messageType: 'FM & Blood Tests',
     captureScreen: 'MONITORING SHEET D9',
     activity: 'FM & BLOOD TESTS PROCEDURE',
+    whatsappTemplateName: 'fm_blood_d9',
     content:
       'Dear [Patient Name], Your appointment has been booked for TVS for Follicular Monitoring & Blood Test at IVF Craft Clinic at Andheri on [Date & Time]. Team IVF Craft.',
     variables: ['[Patient Name]', '[Date & Time]'],
@@ -154,6 +175,7 @@ export const SMS_TEMPLATES: SmsTemplate[] = [
     activity: 'HCG INJECTION PROCEDURE',
     dltTemplateId: '1707161788923896459',
     dltRef: '07-HH4KN8XHAD0',
+    whatsappTemplateName: 'hcg_injection',
     content: 'Dear [Patient Name], Your HCG Injection is due on [Date & Time]. Team IVF Craft.',
     variables: ['[Patient Name]', '[Date & Time]'],
     channels: { sms: true, whatsapp: true, email: true },
@@ -166,6 +188,7 @@ export const SMS_TEMPLATES: SmsTemplate[] = [
     activity: 'OVUM PICK UP PROCEDURE',
     dltTemplateId: '1707161788940100865',
     dltRef: '07-HH4KN8XKRE8',
+    whatsappTemplateName: 'pre_operative_instruction',
     content:
       'Dear [Patient Name], Pre-Operative Instructios--You are instructed to get admitted on [Date & Time] for [Procedure]  at IVF Craft Clinic at Andheri. ( For Ovum Pickup please come  fasting overnight, inform regarding any ongoing medications for any other conditions to the nursing staff). Team IVF Craft.',
     variables: ['[Patient Name]', '[Date & Time]', '[Procedure]'],
@@ -179,6 +202,7 @@ export const SMS_TEMPLATES: SmsTemplate[] = [
     activity: 'POST OP INSTRUCTIONS',
     dltTemplateId: '1707161788954009948',
     dltRef: '07-HH4KN8XNQPV',
+    whatsappTemplateName: 'post_operative_instruction',
     content:
       'Dear [Patient Name], Post-Operative Instrcutions---Your OPU has been  done at IVF Craft Clinic at Andheri on [Date & Time], If you feel any discomfort like nausea/vomitting, fever, abdominal distension, giddiness, bleeding PV etc please feel free to contact us. Team IVF Craft.',
     variables: ['[Patient Name]', '[Date & Time]'],
@@ -192,6 +216,7 @@ export const SMS_TEMPLATES: SmsTemplate[] = [
     activity: 'EMBRYO TRANSFER PROCEDURE',
     dltTemplateId: '1707161788976103020',
     dltRef: '07-HH4KN8XSH6V',
+    whatsappTemplateName: 'et_procedure',
     content:
       'Dear [Patient Name], Your [Procedure] is scheduled at  IVF Craft Clinic at Andheri on [Date & Time]. Team IVF Craft.',
     variables: ['[Patient Name]', '[Procedure]', '[Date & Time]'],
@@ -205,6 +230,7 @@ export const SMS_TEMPLATES: SmsTemplate[] = [
     activity: 'IVF SUMMARY',
     dltTemplateId: '1707161788987451572',
     dltRef: '07-HH4KN8XUWR7',
+    whatsappTemplateName: 'ivf_summary',
     content: 'Dear [Patient Name] Your IVF Summary for the month of [Date] is attached herewith.',
     variables: ['[Patient Name]', '[Date]'],
     channels: { sms: true, whatsapp: true, email: true },
@@ -217,6 +243,7 @@ export const SMS_TEMPLATES: SmsTemplate[] = [
     activity: 'BHCG BLOOD TEST PROCEDURE',
     dltTemplateId: '1707162832465411194',
     dltRef: '11-OVDKS1IGG7Z',
+    whatsappTemplateName: 'bhcg_blood_test',
     content:
       'Dear [Patient Name] , Your appointment has been booked for B.HCG. Blood Test at IVF Craft Clinic at Andheri On [Date & Time]. Please bring 1st Urine Sample with you. Team IVF Craft.',
     variables: ['[Patient Name]', '[Date & Time]'],
@@ -228,6 +255,7 @@ export const SMS_TEMPLATES: SmsTemplate[] = [
     messageType: 'SQA Test',
     captureScreen: 'Appointment Scheduler',
     activity: 'SQA TEST',
+    whatsappTemplateName: 'sqa_test',
     content:
       'Dear [Patient Name], Your appointment has been booked for SQA at IVF Craft Clinic at Andheri on [Date & Time]. Team IVF Craft.',
     variables: ['[Patient Name]', '[Date & Time]'],
@@ -239,6 +267,7 @@ export const SMS_TEMPLATES: SmsTemplate[] = [
     messageType: 'SA Test',
     captureScreen: 'Appointment Scheduler',
     activity: 'SA TEST',
+    whatsappTemplateName: 'sa_test',
     content:
       'Dear [Patient Name], Your appointment has been booked for SA at IVF Craft Clinic at Andheri on [Date & Time]. Team IVF Craft.',
     variables: ['[Patient Name]', '[Date & Time]'],
@@ -250,6 +279,7 @@ export const SMS_TEMPLATES: SmsTemplate[] = [
     messageType: 'SF Test',
     captureScreen: 'Appointment Scheduler',
     activity: 'SF TEST',
+    whatsappTemplateName: 'sf_test',
     content:
       'Dear [Patient Name], Your appointment has been booked for SF at IVF Craft Clinic at Andheri on [Date & Time]. Team IVF Craft.',
     variables: ['[Patient Name]', '[Date & Time]'],
@@ -261,6 +291,7 @@ export const SMS_TEMPLATES: SmsTemplate[] = [
     messageType: 'SQA Summary',
     captureScreen: 'REPORT SHEET',
     activity: 'SQA SUMMARY',
+    whatsappTemplateName: 'sqa_summary',
     content: 'Dear [Patient Name] Your SQA Summary for the month of [Month], on [Date] is attached herewith.',
     variables: ['[Patient Name]', '[Month]', '[Date]'],
     channels: { sms: true, whatsapp: true, email: true },
@@ -271,6 +302,7 @@ export const SMS_TEMPLATES: SmsTemplate[] = [
     messageType: 'HSA Summary',
     captureScreen: 'REPORT SHEET',
     activity: 'HSA SUMMARY',
+    whatsappTemplateName: 'hsa_summary',
     content: 'Dear [Patient Name] Your HSA Summary for the month of [Month], on [Date] is attached herewith.',
     variables: ['[Patient Name]', '[Month]', '[Date]'],
     channels: { sms: true, whatsapp: true, email: true },
@@ -281,6 +313,7 @@ export const SMS_TEMPLATES: SmsTemplate[] = [
     messageType: 'SF Summary',
     captureScreen: 'REPORT SHEET',
     activity: 'SF SUMMARY',
+    whatsappTemplateName: 'sf_summary',
     content: 'Dear [Patient Name] Your SF Summary for the month of [Month], on [Date] is attached herewith.',
     variables: ['[Patient Name]', '[Month]', '[Date]'],
     channels: { sms: true, whatsapp: true, email: true },

@@ -7,6 +7,7 @@ import { usePatientIds } from '@/components/clinical/clinical-shared';
 import { ApiError } from '@/lib/api';
 import { loadOocyteEmbryoOverview } from '@/lib/services/oocyte-embryo';
 import { ET_ACTION_OPTIONS } from '@/lib/services/iui';
+import { readRetrievalSnapshot, type CycleRetrievalSnapshot } from '@/lib/cycle-snapshot';
 import type { EtEmbryoRow, LabSource, OocyteItem, SourceSummary } from '@/lib/types/oocyte-embryo';
 
 export type OocyteEmbryoTab =
@@ -203,6 +204,17 @@ const EMPTY_SUMMARY: SourceSummary = {
 
 const SMART_ACTIONS = ET_ACTION_OPTIONS.filter((item) => item.id !== 0);
 
+type LabView = LabSource | 'BOTH';
+
+function overlayAllotment(summary: SourceSummary, allotted: number): SourceSummary {
+  if (allotted <= 0) return summary;
+  return {
+    ...summary,
+    allotted,
+    retrieved: summary.retrieved > 0 ? summary.retrieved : allotted,
+  };
+}
+
 export function OocyteEmbryoClient() {
   const { selectedPatient } = usePatient();
   const { user, token } = useAuth();
@@ -218,6 +230,8 @@ export function OocyteEmbryoClient() {
   const [icsiSummary, setIcsiSummary] = useState<SourceSummary>({ ...EMPTY_SUMMARY, source: 'ICSI' });
   const [embryos, setEmbryos] = useState<EtEmbryoRow[]>([]);
   const [summaryError, setSummaryError] = useState('');
+  const [retrieval, setRetrieval] = useState<CycleRetrievalSnapshot | null>(null);
+  const [labView, setLabView] = useState<LabView>('IVF');
 
   // Modals for Quick Actions
   const [showAddOocyteModal, setShowAddOocyteModal] = useState(false);
@@ -251,13 +265,24 @@ export function OocyteEmbryoClient() {
     if (!token || !ready) return;
     let cancelled = false;
     setSummaryError('');
+    const snapshot = readRetrievalSnapshot(undefined, patId);
+    setRetrieval(snapshot);
     loadOocyteEmbryoOverview(token, patId, satId)
       .then((data) => {
         if (cancelled) return;
-        setIvfSummary(data.ivf);
-        setIcsiSummary(data.icsi);
+        const ivf = overlayAllotment(data.ivf, snapshot?.ivfAllotted || 0);
+        const icsi = overlayAllotment(data.icsi, snapshot?.icsiAllotted || 0);
+        setIvfSummary(ivf);
+        setIcsiSummary(icsi);
         setEmbryos(data.embryos || []);
-        if (!data.ivf.hasRecord && data.icsi.hasRecord) setSourceTab('ICSI');
+        const bothAllotted = (snapshot?.ivfAllotted || 0) > 0 && (snapshot?.icsiAllotted || 0) > 0;
+        if (bothAllotted) {
+          setLabView('BOTH');
+          setSourceTab('IVF');
+        } else if (!data.ivf.hasRecord && (data.icsi.hasRecord || (snapshot?.icsiAllotted || 0) > 0)) {
+          setLabView('ICSI');
+          setSourceTab('ICSI');
+        }
       })
       .catch((err) => {
         if (!cancelled) setSummaryError(err instanceof ApiError ? err.message : 'Could not load IVF/ICSI summary.');
@@ -271,21 +296,22 @@ export function OocyteEmbryoClient() {
   const patientId = selectedPatient?.uhid || (selectedPatient?.id ? `P-2026-00${selectedPatient.id}` : 'P-2026-00125');
   const patientName = selectedPatient?.name || 'Mrs. Anjali Sharma';
   const summary = sourceTab === 'ICSI' ? icsiSummary : ivfSummary;
-  const cycleId = summary.cycleId || (selectedPatient?.id ? `C-2026-00${selectedPatient.id}` : 'C-2026-00158');
-  const cycleType = sourceTab;
+  const combinedRetrieved = ivfSummary.retrieved + icsiSummary.retrieved;
+  const cycleId = summary.cycleId || retrieval?.cycleId || (selectedPatient?.id ? `C-2026-00${selectedPatient.id}` : 'C-2026-00158');
+  const cycleType = labView === 'BOTH' ? 'IVF + ICSI' : sourceTab;
   const cycleDay = 16;
   const operator = user?.userName || 'Dr. Satish Sharma (EMB-01)';
   const sourceEmbryos = embryos.filter((row) => row.source === sourceTab);
 
-  const retrievedCount = summary.retrieved;
-  const matureCount = summary.matureMII;
-  const immatureCount = summary.immature;
-  const degeneratedCount = summary.degenerated;
-  const fertilized2PN = summary.fertilized2PN;
-  const cleavageCount = summary.cleavage;
-  const blastocystCount = summary.blastocyst;
-  const cryopreservedCount = summary.cryopreserved;
-  const transferredCount = summary.transferred;
+  const retrievedCount = labView === 'BOTH' ? combinedRetrieved : summary.retrieved;
+  const matureCount = labView === 'BOTH' ? ivfSummary.matureMII + icsiSummary.matureMII : summary.matureMII;
+  const immatureCount = labView === 'BOTH' ? ivfSummary.immature + icsiSummary.immature : summary.immature;
+  const degeneratedCount = labView === 'BOTH' ? ivfSummary.degenerated + icsiSummary.degenerated : summary.degenerated;
+  const fertilized2PN = labView === 'BOTH' ? ivfSummary.fertilized2PN + icsiSummary.fertilized2PN : summary.fertilized2PN;
+  const cleavageCount = labView === 'BOTH' ? ivfSummary.cleavage + icsiSummary.cleavage : summary.cleavage;
+  const blastocystCount = labView === 'BOTH' ? ivfSummary.blastocyst + icsiSummary.blastocyst : summary.blastocyst;
+  const cryopreservedCount = labView === 'BOTH' ? ivfSummary.cryopreserved + icsiSummary.cryopreserved : summary.cryopreserved;
+  const transferredCount = labView === 'BOTH' ? ivfSummary.transferred + icsiSummary.transferred : summary.transferred;
 
   // Add new oocyte handler
   function handleAddOocyte() {
@@ -381,34 +407,53 @@ export function OocyteEmbryoClient() {
           </div>
         </div>
 
-        {/* IVF / ICSI SOURCE TABS */}
+        {/* IVF / ICSI / IVF+ICSI SOURCE TABS */}
         <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
-          {(['IVF', 'ICSI'] as LabSource[]).map((source) => {
-            const data = source === 'IVF' ? ivfSummary : icsiSummary;
-            const active = sourceTab === source;
+          {([
+            { id: 'IVF' as LabView, label: 'IVF', count: ivfSummary.retrieved },
+            { id: 'ICSI' as LabView, label: 'ICSI', count: icsiSummary.retrieved },
+            { id: 'BOTH' as LabView, label: 'IVF + ICSI', count: combinedRetrieved },
+          ]).map((tab) => {
+            const active = labView === tab.id;
             return (
               <button
-                key={source}
+                key={tab.id}
                 type="button"
-                onClick={() => setSourceTab(source)}
+                onClick={() => {
+                  setLabView(tab.id);
+                  if (tab.id !== 'BOTH') setSourceTab(tab.id);
+                }}
                 className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
                   active
                     ? 'bg-purple-700 text-white shadow-sm'
                     : 'bg-purple-50 text-purple-800 hover:bg-purple-100 border border-purple-200'
                 }`}
               >
-                {source}
+                {tab.label}
                 <span className={`rounded-md px-1.5 py-0.5 text-[10px] ${active ? 'bg-white/20' : 'bg-white text-purple-700'}`}>
-                  {data.retrieved}
+                  {tab.count}
                 </span>
               </button>
             );
           })}
           <span className="text-[11px] text-slate-500">
-            Counts come from the {sourceTab} screen
-            {summary.hasRecord ? '' : ' — no saved record yet'}
+            {labView === 'BOTH'
+              ? 'Split follows Cycle Retrieval IVF / ICSI allotment, same as MAIN 2 PAGES'
+              : `Counts come from the ${sourceTab} screen`}
+            {summary.hasRecord || (retrieval?.ivfAllotted || retrieval?.icsiAllotted) ? '' : ' — no saved record yet'}
           </span>
         </div>
+        {retrieval && (retrieval.ivfAllotted > 0 || retrieval.icsiAllotted > 0 || retrieval.sperm?.sampleId) ? (
+          <p className="mt-2 text-[11px] text-slate-500">
+            From Cycle Retrieval
+            {retrieval.totalRetrieved ? ` · Total retrieved ${retrieval.totalRetrieved}` : ''}
+            {retrieval.ivfAllotted ? ` · IVF allotted ${retrieval.ivfAllotted}` : ''}
+            {retrieval.icsiAllotted ? ` · ICSI allotted ${retrieval.icsiAllotted}` : ''}
+            {retrieval.sperm?.sampleLabel || retrieval.sperm?.sampleId
+              ? ` · Sperm ${retrieval.sperm.sampleLabel || retrieval.sperm.sampleId}`
+              : ''}
+          </p>
+        ) : null}
 
         {/* 7 MODULE TABS */}
         <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
@@ -449,7 +494,7 @@ export function OocyteEmbryoClient() {
         <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-3">
           <div className="flex items-center justify-between border-b border-slate-100 pb-2">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              Oocyte Summary · {sourceTab}
+              Oocyte Summary · {cycleType}
             </h3>
             <span className="text-[11px] font-semibold text-purple-600">
               {summary.cycleDate ? `Cycle ${summary.cycleDate}` : 'From IVF / ICSI screen'}
@@ -479,7 +524,7 @@ export function OocyteEmbryoClient() {
         <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-3">
           <div className="flex items-center justify-between border-b border-slate-100 pb-2">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              Embryo Summary · {sourceTab}
+              Embryo Summary · {cycleType}
             </h3>
             <span className="text-[11px] font-semibold text-emerald-600">
               2PN / cleaved from {sourceTab}; blastocyst &amp; freeze from ET Action
@@ -505,6 +550,8 @@ export function OocyteEmbryoClient() {
           </div>
         </div>
       </div>
+
+      <Main2PagesGrid view={labView} ivf={ivfSummary} icsi={icsiSummary} />
 
       {/* MAIN CONTENT AREA: TAB CONTENTS + QUICK ACTIONS SIDEBAR */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
@@ -1158,6 +1205,76 @@ export function OocyteEmbryoClient() {
         </div>
       )}
 
+    </div>
+  );
+}
+
+function metric(summary: SourceSummary, key: keyof SourceSummary) {
+  const value = summary[key];
+  return typeof value === 'number' ? value : 0;
+}
+
+function Main2PagesGrid({
+  view,
+  ivf,
+  icsi,
+}: {
+  view: LabView;
+  ivf: SourceSummary;
+  icsi: SourceSummary;
+}) {
+  const showIvf = view === 'IVF' || view === 'BOTH';
+  const showIcsi = view === 'ICSI' || view === 'BOTH';
+  const rows: { label: string; key: keyof SourceSummary }[] = [
+    { label: 'Allotted', key: 'allotted' },
+    { label: 'Total retrieved', key: 'retrieved' },
+    { label: 'Mature MII', key: 'matureMII' },
+    { label: 'Immature MI / GV', key: 'immature' },
+    { label: 'Degenerated', key: 'degenerated' },
+    { label: '2PN', key: 'fertilized2PN' },
+    { label: 'Stuck 2PN', key: 'stuck' },
+    { label: 'Embryo', key: 'cleavage' },
+    { label: 'Transferred', key: 'transferred' },
+    { label: 'Frozen', key: 'cryopreserved' },
+    { label: 'Discarded', key: 'discard' },
+    { label: 'Donated for research', key: 'donatedForResearch' },
+    { label: 'Blastocyst', key: 'blastocyst' },
+  ];
+
+  return (
+    <div className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+          Oocyte / Embryo split · {view === 'BOTH' ? 'IVF + ICSI' : view}
+        </h3>
+        <span className="text-[11px] text-slate-500">Layout from MAIN 2 PAGES · IVF and ICSI columns follow retrieval allotment</span>
+      </div>
+      <table className="min-w-full text-left text-xs">
+        <thead>
+          <tr className="border-b border-slate-200 text-slate-500">
+            <th className="px-3 py-2 font-semibold">Parameter</th>
+            {showIvf ? <th className="px-3 py-2 text-center font-semibold">IVF</th> : null}
+            {showIcsi ? <th className="px-3 py-2 text-center font-semibold">ICSI</th> : null}
+            {view === 'BOTH' ? <th className="px-3 py-2 text-center font-semibold">Total</th> : null}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const ivfValue = row.key === 'allotted' ? ivf.allotted || ivf.retrieved : metric(ivf, row.key);
+            const icsiValue = row.key === 'allotted' ? icsi.allotted || icsi.retrieved : metric(icsi, row.key);
+            return (
+              <tr key={row.key} className="odd:bg-white even:bg-slate-50/70">
+                <td className="px-3 py-2 font-semibold text-slate-700">{row.label}</td>
+                {showIvf ? <td className="px-3 py-2 text-center font-black text-slate-900">{ivfValue}</td> : null}
+                {showIcsi ? <td className="px-3 py-2 text-center font-black text-slate-900">{icsiValue}</td> : null}
+                {view === 'BOTH' ? (
+                  <td className="px-3 py-2 text-center font-black text-purple-800">{ivfValue + icsiValue}</td>
+                ) : null}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

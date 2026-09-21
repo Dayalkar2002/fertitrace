@@ -10,6 +10,7 @@ export interface CommunicationMessagePayload {
   messageType: string;
   messageText: string;
   templateId?: string;
+  whatsappTemplate?: string;
   language?: string;
 }
 

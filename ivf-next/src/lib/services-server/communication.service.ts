@@ -1,5 +1,6 @@
 import { executeDRL } from '@/lib/db/spExecutor';
 import { isDbConfigured } from '@/lib/db/pool';
+import { dispatchNukeliteWhatsApp } from '@/lib/services-server/nukelite-whatsapp';
 
 export type CommunicationChannel = 'WhatsApp' | 'SMS' | 'Email';
 
@@ -11,6 +12,7 @@ export interface SendMessagePayload {
   messageType: string;
   messageText: string;
   templateId?: string;
+  whatsappTemplate?: string;
   language?: string;
   sentBy: string;
 }
@@ -154,6 +156,8 @@ export async function sendMessage(payload: SendMessagePayload): Promise<Communic
   try {
     if (payload.channel === 'Email') {
       await dispatchEmail(payload);
+    } else if (payload.channel === 'WhatsApp') {
+      await dispatchNukeliteWhatsApp(payload);
     } else if (provider === 'smartping' && gatewayConfigured()) {
       await dispatchSmartping(payload, dltTemplateId);
     } else if (gatewayConfigured()) {
