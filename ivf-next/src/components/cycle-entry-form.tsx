@@ -187,8 +187,10 @@ export function CycleEntryForm() {
   const prefillKey = useRef('');
   useEffect(() => {
     if (!token || !selectedPatient) return;
+    const patient = selectedPatient;
+    const authToken = token;
     const cycleId = creationDraft?.cycleId || currentCycle?.cycleId || '';
-    const key = `${form.oocyteSource}|${form.semenSource}|${selectedPatient.id}|${cycleId}`;
+    const key = `${form.oocyteSource}|${form.semenSource}|${patient.id}|${cycleId}`;
     if (prefillKey.current === key) return;
     prefillKey.current = key;
     let cancelled = false;
@@ -196,34 +198,34 @@ export function CycleEntryForm() {
     async function fillKnownDetails() {
       const next: Partial<typeof emptyForm> = {};
       if (showDonorOocyteDetails(form.oocyteSource)) {
-        next.donorId = selectedPatient.uhid || String(selectedPatient.id);
-        next.donorName = selectedPatient.name || '';
-        if (selectedPatient.lockedRecipients?.[0]) next.recipientCount = '1';
+        next.donorId = patient.uhid || String(patient.id);
+        next.donorName = patient.name || '';
+        if (patient.lockedRecipients?.[0]) next.recipientCount = '1';
       }
-      if (showOocyteRecipientDetails(form.oocyteSource) && selectedPatient.receivedFromDonorId) {
-        next.receivedFromDonorId = String(selectedPatient.receivedFromDonorId);
+      if (showOocyteRecipientDetails(form.oocyteSource) && patient.receivedFromDonorId) {
+        next.receivedFromDonorId = String(patient.receivedFromDonorId);
       }
       if (showEmbryoRecipientDetails(form.oocyteSource)) {
         if (!form.embryoBatchNo) next.embryoBatchNo = cycleId;
-        if (selectedPatient.receivedFromDonorId) {
-          next.oocyteDonorId = String(selectedPatient.receivedFromDonorId);
+        if (patient.receivedFromDonorId) {
+          next.oocyteDonorId = String(patient.receivedFromDonorId);
         }
       }
       if (showSemenDonorDetails(form.semenSource)) {
         try {
           const isHusband = form.semenSource === 'husband_cryo';
-          const ids = await listSpermIdLocations(token, {
+          const ids = await listSpermIdLocations(authToken, {
             spermId: isHusband ? 'Husband' : 'Donor',
             semenType: 'Frozen',
-            patId: selectedPatient.id,
-            satId: selectedSatellite?.id || selectedPatient.satelliteId || 0,
+            patId: patient.id,
+            satId: selectedSatellite?.id || patient.satelliteId || 0,
           });
           const first = ids[0];
           if (first) {
             next.donorSemenId = first.id;
             next.cryoStrawNo = first.location || first.label;
           } else if (!isHusband) {
-            const donors = await listSemenDonors(token);
+            const donors = await listSemenDonors(authToken);
             const donor = donors[0];
             if (donor) {
               next.donorSemenId = donor.donorId || String(donor.donorIdSrNo);
