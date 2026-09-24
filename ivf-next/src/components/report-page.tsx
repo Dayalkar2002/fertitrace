@@ -22,9 +22,9 @@ function isReportTabActive(pathname: string, route: string) {
 function ReportScreenHeader({ title }: { title: string }) {
   const pathname = usePathname();
   return (
-    <div className="print:hidden mb-4">
+    <div className="print:hidden mb-3">
       <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#6345A6]">Reports</p>
-      <h1 className="mt-1 font-display text-2xl font-extrabold text-slate-900">{title}</h1>
+      <h1 className="mt-0.5 font-display text-lg sm:text-xl font-bold text-slate-900">{title}</h1>
       <div className="mt-3 flex flex-wrap gap-2">
         {REPORT_TABS.map((tab) => {
           const active = isReportTabActive(pathname, tab.route);
@@ -95,9 +95,9 @@ export function ReportPage() {
   if (reportsHub) {
     return (
       <div className="space-y-5">
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-card">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-green">Analytics</p>
-          <h1 className="mt-1 font-display text-2xl font-extrabold text-slate-900">Reports Hub</h1>
+          <h1 className="mt-0.5 font-display text-lg sm:text-xl font-bold text-slate-900">Reports Hub</h1>
           <p className="mt-2 max-w-2xl text-sm text-slate-500">
             Open ART Cycle or IUI from the Reports tab in the top menu, matching SMART. Other reports
             still run through the stored-procedure viewer when SQL is configured.

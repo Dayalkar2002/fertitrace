@@ -335,6 +335,7 @@ export function getRetrievalLayout(cycleType: string | undefined | null) {
       showDonorSperm: false,
       showRecipientDetails: false,
       showDonorEggDetails: false,
+      lockRetrievalCounts: false,
     },
   };
 
@@ -396,6 +397,7 @@ export function getRetrievalLayout(cycleType: string | undefined | null) {
         showDonorToSelf: true,
         showOocyteReceivedFrom: true,
         showHusbandSperm: true,
+        lockRetrievalCounts: true,
       },
     };
   }
@@ -409,6 +411,7 @@ export function getRetrievalLayout(cycleType: string | undefined | null) {
       showDonorEggDetails: true,
       showDonorToSelf: true,
       showDonorSperm: true,
+      lockRetrievalCounts: true,
     },
   };
 }

@@ -1,13 +1,18 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { CycleRetrievalSpermCard, type RetrievalSpermValue } from '@/components/cycle-retrieval-sperm';
 import { useAuth } from '@/contexts/auth-context';
 import { tallyOpuRows, writeRetrievalSnapshot } from '@/lib/cycle-snapshot';
 import { getCycleTypeLabel, getRetrievalLayout } from '@/lib/cycle-utils';
-import { fetchRecipientCycles, fetchRetrievalRecipients } from '@/lib/services/cycles';
+import {
+  fetchFrozenOocyteLocations,
+  fetchRecipientCycles,
+  fetchRetrievalRecipients,
+  saveFrozenOocyteLocation,
+} from '@/lib/services/cycles';
 import type { Patient } from '@/lib/types/patient';
-import type { FreezeOocyteRow, RetrievalRow } from '@/lib/types/cycle';
+import type { FreezeOocyteRow, FrozenOocyteLocation, RetrievalData, RetrievalRow } from '@/lib/types/cycle';
 
 /** SMART Cycle.aspx: Freeze Oocytes is allowed only when donor egg total is more than 10. */
 const OD_FREEZE_MIN = 10;
@@ -61,6 +66,9 @@ interface CycleRetrievalPanelsProps {
   cycleId?: string;
   patient?: Patient | null;
   monitoringSheet?: string;
+  fzoCycleId?: string;
+  fzoRecipientId?: number;
+  onChange?: (data: RetrievalData) => void;
 }
 
 export function CycleRetrievalPanels({
@@ -69,6 +77,9 @@ export function CycleRetrievalPanels({
   cycleId,
   patient,
   monitoringSheet = '',
+  fzoCycleId = '',
+  fzoRecipientId = 0,
+  onChange,
 }: CycleRetrievalPanelsProps) {
   const { token } = useAuth();
   const layout = useMemo(() => getRetrievalLayout(cycleType), [cycleType]);
@@ -87,6 +98,10 @@ export function CycleRetrievalPanels({
     donorCycleId: '',
   });
   const [sperm, setSperm] = useState<RetrievalSpermValue | null>(null);
+  const [locations, setLocations] = useState<FrozenOocyteLocation[]>([]);
+  const [locationSaving, setLocationSaving] = useState<number | null>(null);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   const monthYear = new Date().toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
   const husbandSelected = semenSource.startsWith('husband');
@@ -136,6 +151,17 @@ export function CycleRetrievalPanels({
     thaw.survived,
   ]);
 
+  useEffect(() => {
+    onChangeRef.current?.({
+      selfToSelf: layout.sections.showSelfToSelf ? opuRows : undefined,
+      donorEggCount: layout.sections.showDonorEggCount ? opuRows : undefined,
+      donorToRecipient: layout.sections.showDonorToRecipient ? donorRows : undefined,
+      freezeOocytes: layout.sections.showFreezeOocytes ? freeze : undefined,
+      fetThaw: layout.sections.showFetThaw ? fet : undefined,
+      thawOocytes: layout.sections.showThawOocytes ? thaw : undefined,
+    });
+  }, [donorRows, fet, freeze, layout.sections, opuRows, thaw]);
+
   function updateOpu(index: number, key: keyof RetrievalRow, value: string) {
     setOpuRows((rows) => rows.map((row, i) => (i === index ? applyOpuValue(row, key, value) : row)));
   }
@@ -144,10 +170,47 @@ export function CycleRetrievalPanels({
     setDonorRows((rows) => rows.map((row, i) => (i === index ? applyOpuValue(row, key, value) : row)));
   }
 
+  // Quick Allotment helpers for embryologists
+  function quickAllot(type: 'all-icsi' | 'all-ivf' | 'split-50-50') {
+    setOpuRows((rows) => {
+      const row = rows[0] || emptyOpuRow();
+      const total = Number(row.total || 0);
+      if (total <= 0) return rows;
+      if (type === 'all-icsi') {
+        return [{ ...row, icsi: total, ivf: 0 }];
+      }
+      if (type === 'all-ivf') {
+        return [{ ...row, ivf: total, icsi: 0 }];
+      }
+      if (type === 'split-50-50') {
+        const half = Math.floor(total / 2);
+        return [{ ...row, ivf: half, icsi: total - half }];
+      }
+      return rows;
+    });
+  }
+
   const donorEggTotal = Number(opuRows[0]?.total || 0);
   const showFreeze =
     layout.sections.showFreezeOocytes && (layout.type !== 'OD' || donorEggTotal > OD_FREEZE_MIN);
   const selectedRecipientId = Number(donorRows[0]?.recipientPatientId || 0);
+  const retrievalCountsLocked = Boolean(layout.sections.lockRetrievalCounts);
+
+  useEffect(() => {
+    if (!retrievalCountsLocked) return;
+    const donorLabel = patient?.receivedFromDonorId ? String(patient.receivedFromDonorId) : '';
+    if (!donorLabel) return;
+    setOpuRows((rows) => {
+      const row = rows[0] || emptyOpuRow();
+      if (row.fromDonor) return rows;
+      return [{ ...row, fromDonor: donorLabel }];
+    });
+    setErDonor((prev) =>
+      prev.donorCycleId || prev.donorName
+        ? prev
+        : { ...prev, donorCycleId: donorLabel }
+    );
+  }, [patient?.receivedFromDonorId, retrievalCountsLocked]);
 
   useEffect(() => {
     if (!token || !patient?.id || !layout.sections.showDonorToRecipient) {
@@ -195,6 +258,31 @@ export function CycleRetrievalPanels({
     };
   }, [token, selectedRecipientId, patient?.satelliteId, cycleId, layout.sections.showDonorToRecipient]);
 
+  const locationCycleId = fzoCycleId || (layout.type === 'FrozenOocytes' ? cycleId : '');
+  const locationPatId =
+    fzoRecipientId ||
+    (fzoCycleId ? Number(donorRows[0]?.recipientPatientId || 0) : 0) ||
+    patient?.id ||
+    0;
+
+  useEffect(() => {
+    if (!token || !locationCycleId || !locationPatId) {
+      setLocations([]);
+      return;
+    }
+    let cancelled = false;
+    void fetchFrozenOocyteLocations(token, locationCycleId, locationPatId, patient?.satelliteId || 0)
+      .then((rows) => {
+        if (!cancelled) setLocations(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setLocations([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, locationCycleId, locationPatId, patient?.satelliteId]);
+
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-indigo-200 bg-indigo-50/70 px-4 py-3">
@@ -238,17 +326,52 @@ export function CycleRetrievalPanels({
 
       {layout.sections.showDonorEggDetails && (
         <SectionCard title="Donor Egg Details" tone="amber">
+          <p className="mb-3 text-xs text-slate-600">
+            SMART fills this from the linked oocyte donor. Entry is blocked on the recipient cycle.
+          </p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <TextField label="Name" value={erDonor.donorName} onChange={(v) => setErDonor((s) => ({ ...s, donorName: v }))} />
-            <TextField label="Mobile No" value={erDonor.donorMobile} onChange={(v) => setErDonor((s) => ({ ...s, donorMobile: v }))} />
-            <TextField label="Aadhaar Card" value={erDonor.donorAadhar} onChange={(v) => setErDonor((s) => ({ ...s, donorAadhar: v }))} />
-            <TextField label="Cycle ID" value={erDonor.donorCycleId} onChange={(v) => setErDonor((s) => ({ ...s, donorCycleId: v }))} />
+            <ReadField label="Name" value={erDonor.donorName || '—'} />
+            <ReadField label="Mobile No" value={erDonor.donorMobile || '—'} />
+            <ReadField label="Aadhaar Card" value={erDonor.donorAadhar || '—'} />
+            <ReadField label="Cycle ID" value={erDonor.donorCycleId || '—'} />
           </div>
         </SectionCard>
       )}
 
       {layout.sections.showSelfToSelf && (
         <SectionCard title="Self To Self" tone="emerald">
+          {/* Quick Allotment Helpers */}
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[11px] font-medium text-slate-500">
+              Record ovary retrieval and use quick allotment shortcuts below:
+            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => quickAllot('all-icsi')}
+                title="Allot all retrieved oocytes to ICSI"
+                className="rounded-lg border border-purple-200 bg-purple-50 px-2.5 py-1 text-[11px] font-bold text-purple-700 hover:bg-purple-100 transition active:scale-[0.99]"
+              >
+                ⚡ All to ICSI
+              </button>
+              <button
+                type="button"
+                onClick={() => quickAllot('all-ivf')}
+                title="Allot all retrieved oocytes to IVF"
+                className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-100 transition active:scale-[0.99]"
+              >
+                ⚡ All to IVF
+              </button>
+              <button
+                type="button"
+                onClick={() => quickAllot('split-50-50')}
+                title="Split retrieved oocytes equally between IVF and ICSI"
+                className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-100 transition active:scale-[0.99]"
+              >
+                ⚡ 50/50 Split
+              </button>
+            </div>
+          </div>
           <OpuGrid rows={opuRows.slice(0, 1)} onChange={updateOpu} />
         </SectionCard>
       )}
@@ -311,11 +434,24 @@ export function CycleRetrievalPanels({
 
       {layout.sections.showOocyteReceivedFrom && (
         <SectionCard title="Received from Donor" tone="blue">
+          <p className="mb-3 text-xs text-slate-600">
+            SMART blocks ovary / IVF / ICSI entry here. Counts come from the donor retrieval and cannot be typed on this cycle.
+          </p>
           <OpuGrid
             rows={opuRows.slice(0, 1)}
             onChange={updateOpu}
             leading={[{ key: 'fromDonor', label: 'From Donor' }]}
+            readOnly={retrievalCountsLocked}
           />
+        </SectionCard>
+      )}
+
+      {layout.sections.showDonorToSelf && !layout.sections.showOocyteReceivedFrom && (
+        <SectionCard title="Received from Donor" tone="blue">
+          <p className="mb-3 text-xs text-slate-600">
+            SMART shows this donor-egg grid as read-only on Embryo Recipient. Counts are taken from the donor cycle.
+          </p>
+          <OpuGrid rows={opuRows.slice(0, 1)} onChange={updateOpu} readOnly={retrievalCountsLocked} />
         </SectionCard>
       )}
 
@@ -344,10 +480,80 @@ export function CycleRetrievalPanels({
               <input
                 readOnly
                 value={(freeze.mii || 0) + (freeze.mi || 0) + (freeze.gv || 0)}
-                className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-slate-100 px-2 text-sm"
+                className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-slate-100 px-2 text-sm font-bold text-blue-800"
               />
             </label>
           </div>
+          <p className="mt-2 text-[11px] text-slate-500">
+            {layout.type === 'OD'
+              ? 'On Submit leftover freeze oocytes are stored on the recipient Frozen Oocyte (FZO) cycle. Location is assigned there, not on ET / BT / IVF / ICSI.'
+              : 'On Submit these oocytes are stored in CycOocytesLocation. Assign the straw location below.'}
+          </p>
+        </SectionCard>
+      )}
+
+      {(locations.length > 0 || fzoCycleId) && (
+        <SectionCard title="Frozen Oocytes — Location" tone="sky">
+          {fzoCycleId ? (
+            <p className="mb-3 text-xs text-slate-600">
+              SMART stored these on Frozen Oocyte cycle <strong>{fzoCycleId}</strong>. Give each oocyte a cryo location here.
+            </p>
+          ) : (
+            <p className="mb-3 text-xs text-slate-600">
+              Same grid as SMART Frozen Oocytes. Source is MII / MI / GV; location is the straw.
+            </p>
+          )}
+          {!locations.length ? (
+            <p className="text-xs text-slate-500">No oocyte location rows yet. Submit retrieval first.</p>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+              <table className="min-w-full text-left text-xs">
+                <thead>
+                  <tr className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                    <th className="px-3 py-2">Source</th>
+                    <th className="px-3 py-2">Location</th>
+                    <th className="px-3 py-2">Save</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {locations.map((row) => (
+                    <tr key={row.oocytesId}>
+                      <td className="px-3 py-2 font-semibold text-slate-700">{row.source}</td>
+                      <td className="px-3 py-2">
+                        <input
+                          value={row.location}
+                          onChange={(e) =>
+                            setLocations((rows) =>
+                              rows.map((item) =>
+                                item.oocytesId === row.oocytesId ? { ...item, location: e.target.value } : item
+                              )
+                            )
+                          }
+                          placeholder="CC-DF11/C-1/GO-BL/VE-PK/VI-BK/ST-BR"
+                          className="h-8 w-full min-w-[16rem] rounded-lg border border-slate-200 px-2 text-xs"
+                        />
+                      </td>
+                      <td className="px-3 py-2">
+                        <button
+                          type="button"
+                          disabled={!token || locationSaving === row.oocytesId}
+                          onClick={() => {
+                            if (!token || !locationCycleId) return;
+                            setLocationSaving(row.oocytesId);
+                            void saveFrozenOocyteLocation(token, locationCycleId, row.oocytesId, row.location)
+                              .finally(() => setLocationSaving(null));
+                          }}
+                          className="rounded-lg bg-[#6345A6] px-3 py-1.5 text-[11px] font-bold text-white disabled:opacity-60"
+                        >
+                          {locationSaving === row.oocytesId ? 'Saving…' : 'Save'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </SectionCard>
       )}
 
@@ -402,8 +608,8 @@ export function CycleRetrievalPanels({
 
 function ChoiceBadge({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5">
-      <span className="text-xs font-semibold text-slate-500">{label}</span>
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-2xs">
+      <span className="text-xs font-semibold text-slate-500">{label}:</span>
       <span className="rounded-full bg-[#6345A6] px-3 py-1 text-xs font-bold text-white">{value}</span>
     </div>
   );
@@ -447,40 +653,51 @@ function OpuGrid({
   onChange,
   columns = OPU_COLS,
   leading = [],
+  readOnly = false,
 }: {
   rows: RetrievalRow[];
   onChange: (index: number, key: keyof RetrievalRow, value: string) => void;
   columns?: readonly GridColumn[];
   leading?: GridColumn[];
+  readOnly?: boolean;
 }) {
   const cols: GridColumn[] = [...leading, ...columns];
+
+  function handleStep(index: number, key: keyof RetrievalRow, delta: number) {
+    const current = Number(rows[index]?.[key] || 0);
+    const nextVal = Math.max(0, current + delta);
+    onChange(index, key, String(nextVal));
+  }
+
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
       <table className="min-w-full text-left text-xs">
         <thead>
-          <tr className="bg-[#a66c18] text-white">
+          <tr className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200">
             {cols.map((col) => (
-              <th key={String(col.key)} className="px-2 py-2 font-semibold">
+              <th key={String(col.key)} className="px-2.5 py-2 whitespace-nowrap">
                 {col.label}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-slate-100">
           {rows.map((row, i) => (
-            <tr key={i} className="bg-[#d0e4a6]/40">
+            <tr key={i} className="hover:bg-slate-50/50 transition">
               {cols.map((col) => {
                 const text = TEXT_KEYS.has(col.key) || col.key === 'recipientPatientId';
-                const locked = col.key === 'total';
+                const locked = readOnly || col.key === 'total';
                 const current = (row[col.key] as string | number | null | undefined) ?? '';
+                const isOvary = !readOnly && (col.key === 'leftOvary' || col.key === 'rightOvary');
+
                 return (
                   <td key={String(col.key)} className="px-2 py-2">
                     {col.options ? (
                       <select
-                        disabled={col.disabled}
+                        disabled={readOnly || col.disabled}
                         value={String(current)}
                         onChange={(e) => onChange(i, col.key, e.target.value)}
-                        className="h-8 w-full min-w-[8rem] rounded border border-[#a66c18]/40 bg-white px-2 text-sm disabled:bg-slate-100"
+                        className="h-8 w-full min-w-[8.5rem] rounded-lg border border-slate-200 bg-white px-2 text-xs disabled:bg-slate-100"
                       >
                         {col.options.map((option) => (
                           <option key={option.value || 'blank'} value={option.value}>
@@ -489,13 +706,44 @@ function OpuGrid({
                         ))}
                       </select>
                     ) : (
-                      <input
-                        type={text ? 'text' : 'number'}
-                        readOnly={locked}
-                        value={current}
-                        onChange={(e) => onChange(i, col.key, e.target.value)}
-                        className="h-8 w-full min-w-[4.5rem] rounded border border-[#a66c18]/40 bg-white px-2 text-sm read-only:bg-slate-100"
-                      />
+                      <div className="flex items-center gap-1">
+                        {isOvary && (
+                          <button
+                            type="button"
+                            onClick={() => handleStep(i, col.key, -1)}
+                            className="flex h-7 w-5 items-center justify-center rounded bg-slate-100 text-xs font-bold text-slate-600 hover:bg-slate-200 transition"
+                          >
+                            -
+                          </button>
+                        )}
+                        <input
+                          type={text ? 'text' : 'number'}
+                          readOnly={locked}
+                          value={current}
+                          placeholder={locked ? '—' : '—'}
+                          onChange={(e) => onChange(i, col.key, e.target.value)}
+                          className={`h-8 rounded-lg border px-2 text-xs font-semibold outline-none transition ${
+                            readOnly
+                              ? `${text ? 'w-36' : 'w-16'} border-slate-200 bg-slate-100 text-slate-600 text-center`
+                              : locked
+                              ? 'w-18 border-blue-200 bg-blue-50/80 font-bold text-blue-800 text-center'
+                              : isOvary
+                              ? 'w-14 border-slate-200 bg-white text-center focus:border-purple-600'
+                              : text
+                              ? 'w-36 border-slate-200 bg-white'
+                              : 'w-16 border-slate-200 bg-white text-center focus:border-purple-600'
+                          }`}
+                        />
+                        {isOvary && (
+                          <button
+                            type="button"
+                            onClick={() => handleStep(i, col.key, 1)}
+                            className="flex h-7 w-5 items-center justify-center rounded bg-slate-100 text-xs font-bold text-slate-600 hover:bg-slate-200 transition"
+                          >
+                            +
+                          </button>
+                        )}
+                      </div>
                     )}
                   </td>
                 );
@@ -515,7 +763,7 @@ function TextField({ label, value, onChange }: { label: string; value: string; o
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800"
+        className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-normal text-slate-800 outline-none transition focus:border-purple-600 focus:ring-1 focus:ring-purple-600"
       />
     </label>
   );
@@ -525,7 +773,7 @@ function ReadField({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <p className="text-xs font-semibold text-slate-500">{label}</p>
-      <p className="mt-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800">{value}</p>
+      <p className="mt-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 truncate">{value}</p>
     </div>
   );
 }

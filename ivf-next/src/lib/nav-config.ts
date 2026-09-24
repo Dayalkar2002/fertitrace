@@ -199,7 +199,6 @@ export const TOP_NAV_MENUS: TopNavMenu[] = [
       { label: 'IUI', route: '/reports/andrology/iui' },
     ],
   },
-  { label: 'Consent Form', route: '/consent', icon: 'consent' },
 ];
 
 export const SIDE_NAV_SECTIONS: SideNavSection[] = [
@@ -216,7 +215,6 @@ export const SIDE_NAV_SECTIONS: SideNavSection[] = [
       { label: 'Witness System', route: '/witness', icon: 'witness' },
       { label: 'Lab Inventory', route: '/inventory', icon: 'inventory' },
       { label: 'Reports & Analytics', route: '/reports', icon: 'reports' },
-      { label: 'Consent Form', route: '/consent', icon: 'consent' },
       { label: 'Communication', route: '/communication', icon: 'communication' },
       { label: 'Internal Alarms', route: '/communication?tab=alarms', icon: 'communication' },
       { label: 'Audit Trails', route: '/audit', icon: 'audit' },
@@ -313,7 +311,7 @@ export const DEFAULT_LEFT_MENUS: LeftMenuItem[] = [
   { nodeId: 8, nodeName: 'witness_system', label: 'Witness System', route: '/witness', icon: 'witness', orderIndex: 8, isActive: true },
   { nodeId: 9, nodeName: 'lab_inventory', label: 'Lab Inventory', route: '/inventory', icon: 'inventory', orderIndex: 9, isActive: true },
   { nodeId: 10, nodeName: 'reports_analytics', label: 'Reports & Analytics', route: '/reports', icon: 'reports', orderIndex: 10, isActive: true },
-  { nodeId: 20, nodeName: 'consent_forms', label: 'Consent Form', route: '/consent', icon: 'consent', orderIndex: 11, isActive: true },
+  { nodeId: 20, nodeName: 'consent_forms', label: 'Consent Form', route: '/consent', icon: 'consent', orderIndex: 11, isActive: false },
   {
     nodeId: 11,
     nodeName: 'communication',
@@ -345,5 +343,5 @@ export const DEFAULT_TOP_MENUS: TopMenuItem[] = [
   { topMenuId: 6, nodeName: 'dashboard', label: 'Dashboard', route: '/dashboard', icon: 'dashboard', orderIndex: 6, isActive: false, requiresBarcode: false },
   { topMenuId: 7, nodeName: 'master_directory', label: 'Master Directory', route: '/masters', icon: 'masters', orderIndex: 7, isActive: false, requiresBarcode: false },
   { topMenuId: 8, nodeName: 'reports_summary', label: 'Reports', route: '/reports', icon: 'reports', orderIndex: 8, isActive: false, requiresBarcode: false },
-  { topMenuId: 9, nodeName: 'consent_forms', label: 'Consent Form', route: '/consent', icon: 'consent', orderIndex: 9, isActive: true, requiresBarcode: false },
+  { topMenuId: 9, nodeName: 'consent_forms', label: 'Consent Form', route: '/consent', icon: 'consent', orderIndex: 9, isActive: false, requiresBarcode: false },
 ];

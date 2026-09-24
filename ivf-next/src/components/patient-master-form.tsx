@@ -111,6 +111,9 @@ export function PatientMasterForm() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [selectedDetail, setSelectedDetail] = useState<PatientMasterDetail | null>(null);
   const [activeTab, setActiveTab] = useState<'form' | 'list'>('form');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'with-cycle' | 'self' | 'donor' | 'recipient'>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const isUnmarried = form.maritalStatus === 'Unmarried';
   const isNri = form.nationality === 'NRI' || form.nationality === 'Foreign National';
@@ -338,6 +341,12 @@ export function PatientMasterForm() {
   }
 
   const filteredRows = rows.filter((r) => {
+    // Category / Cycle status filter
+    if (categoryFilter === 'with-cycle' && !r.cycleId) return false;
+    if (categoryFilter === 'self' && r.category?.toLowerCase() !== 'self') return false;
+    if (categoryFilter === 'donor' && !r.donationCategory?.toLowerCase().includes('od') && !r.category?.toLowerCase().includes('donor')) return false;
+    if (categoryFilter === 'recipient' && !r.donationCategory?.toLowerCase().includes('or') && !r.category?.toLowerCase().includes('recipient')) return false;
+
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     const rawAadhar = r.raw?.PatAdhar ? String(r.raw.PatAdhar).toLowerCase() : '';
@@ -349,6 +358,7 @@ export function PatientMasterForm() {
       (r.category && r.category.toLowerCase().includes(q)) ||
       (r.address && r.address.toLowerCase().includes(q)) ||
       (r.refNo && r.refNo.toLowerCase().includes(q)) ||
+      (r.cycleId && r.cycleId.toLowerCase().includes(q)) ||
       String(r.id).includes(q) ||
       rawAadhar.includes(q) ||
       rawMobile.includes(q) ||
@@ -356,23 +366,34 @@ export function PatientMasterForm() {
     );
   });
 
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const paginatedRows = filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  const filterCounts = {
+    all: rows.length,
+    withCycle: rows.filter((r) => Boolean(r.cycleId)).length,
+    self: rows.filter((r) => r.category?.toLowerCase() === 'self').length,
+    donor: rows.filter((r) => r.donationCategory?.toLowerCase().includes('od') || r.category?.toLowerCase().includes('donor')).length,
+    recipient: rows.filter((r) => r.donationCategory?.toLowerCase().includes('or') || r.category?.toLowerCase().includes('recipient')).length,
+  };
+
   return (
     <div className="mx-auto max-w-[1240px] space-y-5 font-sans text-slate-800 selection:bg-purple-500 selection:text-white">
       
       {/* 1. Header Banner */}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-white p-4 shadow-xs border border-slate-200/80">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-purple-100 text-[#6345A6] shadow-xs">
-            <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-100 text-[#6345A6] shadow-xs">
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
               <circle cx="12" cy="7" r="4" />
             </svg>
           </div>
           <div>
-            <h1 className="text-2xl font-black tracking-tight text-slate-900">
+            <h1 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900">
               Patient Management
             </h1>
-            <p className="text-xs font-medium text-slate-500 mt-0.5">
+            <p className="text-xs font-medium text-slate-500">
               Register, manage, and track patient demographic and clinical records
             </p>
           </div>
@@ -630,19 +651,87 @@ export function PatientMasterForm() {
 
       {/* 3. PATIENT LIST TAB */}
       {(activeTab === 'list' || activeTab === 'form') && (
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs space-y-4">
+          
+          {/* Top Title & Quick Actions Toolbar */}
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
-            <div>
-              <h2 className="text-base font-bold text-slate-900">
-                Registered Patients List
-              </h2>
-              <p className="text-xs text-slate-500 font-normal">
-                Click any row to view full details in a modal or click Edit to load into the registration form.
-              </p>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 text-[#6345A6] border border-purple-100 shadow-xs">
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-slate-900 tracking-tight">
+                    Registered Patients List
+                  </h2>
+                  <span className="rounded-full bg-purple-100/70 border border-purple-200 px-2.5 py-0.5 text-xs font-bold text-purple-800">
+                    {filteredRows.length} {filteredRows.length === 1 ? 'Patient' : 'Patients'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 font-normal mt-0.5">
+                  Click any row to inspect clinical details, edit registration, or launch a treatment cycle.
+                </p>
+              </div>
             </div>
 
-            {/* Search Input */}
-            <div className="relative w-full max-w-xs">
+            {/* Quick Action Button: New Registration */}
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setForm(emptyForm());
+                  setActiveTab('form');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#6345A6] hover:bg-[#52378c] px-3.5 py-2 text-xs font-bold text-white shadow-xs transition active:scale-95"
+              >
+                <span>+</span>
+                <span>New Registration</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Filter Chips & Search Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+            {/* Category Filter Pills */}
+            <div className="inline-flex flex-wrap items-center gap-1.5">
+              {[
+                { id: 'all', label: 'All Patients', count: filterCounts.all },
+                { id: 'with-cycle', label: 'Active Cycles', count: filterCounts.withCycle },
+                { id: 'self', label: 'Self', count: filterCounts.self },
+                { id: 'donor', label: 'Donors (OD)', count: filterCounts.donor },
+                { id: 'recipient', label: 'Recipients (OR)', count: filterCounts.recipient },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    setCategoryFilter(tab.id as 'all' | 'with-cycle' | 'self' | 'donor' | 'recipient');
+                    setCurrentPage(1);
+                  }}
+                  className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition ${
+                    categoryFilter === tab.id
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-slate-100/80 text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  <span className={`rounded-full px-1.5 py-0.2 text-[10px] ${
+                    categoryFilter === tab.id ? 'bg-slate-700 text-slate-200' : 'bg-white text-slate-600 border border-slate-200'
+                  }`}>
+                    {tab.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {/* Search Bar */}
+            <div className="relative w-full sm:w-72">
               <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="11" cy="11" r="8" />
@@ -651,104 +740,294 @@ export function PatientMasterForm() {
               </div>
               <input
                 type="text"
-                placeholder="Search patient name, UHID..."
+                placeholder="Search patient, UHID, spouse, cycle..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-9 pr-3 text-xs text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-[#6345A6] focus:bg-white focus:ring-2 focus:ring-[#6345A6]/10"
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-9 pr-8 text-xs text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-[#6345A6] focus:bg-white focus:ring-2 focus:ring-[#6345A6]/10"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600"
+                >
+                  ✕
+                </button>
+              )}
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-[#6b4a2a]/30">
-            <table className="w-full min-w-[1100px] text-left text-xs">
-              <thead className="bg-[#8a5a2b] text-[11px] font-bold uppercase tracking-wide text-white">
+          {/* Patients Modern Data Table */}
+          <div className="overflow-x-auto rounded-xl border border-slate-200/90 shadow-2xs">
+            <table className="w-full min-w-[1050px] text-left text-xs">
+              <thead className="bg-[#1e293b] text-[11px] font-bold uppercase tracking-wider text-slate-200">
                 <tr>
-                  <th className="px-3 py-2.5">Edit</th>
-                  <th className="px-3 py-2.5">Go To</th>
-                  <th className="px-3 py-2.5">Name</th>
-                  <th className="px-3 py-2.5">Category</th>
-                  <th className="px-3 py-2.5">Donation / Recipient Category</th>
-                  <th className="px-3 py-2.5">Donation / Recipient Name</th>
-                  <th className="px-3 py-2.5">Cycle ID</th>
-                  <th className="px-3 py-2.5">Cycle Date</th>
-                  <th className="px-3 py-2.5">Husband Name</th>
-                  <th className="px-3 py-2.5">Address</th>
-                  <th className="px-3 py-2.5">Date of Creation</th>
-                  <th className="px-3 py-2.5">Delete</th>
+                  <th className="px-4 py-3.5 w-36">Actions</th>
+                  <th className="px-4 py-3.5">Patient Details</th>
+                  <th className="px-4 py-3.5">Category / Program</th>
+                  <th className="px-4 py-3.5">Cycle Info</th>
+                  <th className="px-4 py-3.5">Spouse / Partner</th>
+                  <th className="px-4 py-3.5">Address</th>
+                  <th className="px-4 py-3.5">Registered</th>
                 </tr>
               </thead>
-              <tbody>
-                {filteredRows.map((row) => (
-                  <tr key={row.id} className="border-t border-[#c5d9a4] bg-[#e7f3c8] hover:bg-[#dcedb0]">
-                    <td className="px-3 py-2">
-                      <button
-                        type="button"
-                        onClick={() => void selectRow(row)}
-                        className="rounded bg-white px-2 py-1 text-[11px] font-bold text-[#6345A6] ring-1 ring-[#6345A6]/30 hover:bg-purple-50"
-                      >
-                        Edit
-                      </button>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {paginatedRows.map((row) => (
+                  <tr
+                    key={row.id}
+                    className="hover:bg-purple-50/30 transition-colors group cursor-pointer"
+                    onClick={() => void openRowPopup(row)}
+                  >
+                    {/* Actions */}
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-1.5">
+                        {/* Go To Cycle */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            selectPatient({
+                              id: row.id,
+                              uhid: row.refNo,
+                              name: row.name,
+                              partner: row.husbandName,
+                              age: 0,
+                              gender: '',
+                              aadhar: row.aadhar || '',
+                              satelliteId: row.satId || 0,
+                              mobile: row.mobile,
+                              category: row.category,
+                            });
+                            router.push('/cycle/creation');
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg bg-blue-600 hover:bg-blue-700 px-2.5 py-1 text-[11px] font-bold text-white shadow-xs transition active:scale-95"
+                          title="Open Cycle Creation for this patient"
+                        >
+                          <span>Cycle</span>
+                          <span className="text-[10px]">→</span>
+                        </button>
+
+                        {/* Edit in form */}
+                        <button
+                          type="button"
+                          onClick={() => void selectRow(row)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100 px-2.5 py-1 text-[11px] font-bold text-purple-700 transition active:scale-95"
+                          title="Load patient into registration form"
+                        >
+                          <span>Edit</span>
+                        </button>
+
+                        {/* Delete */}
+                        <button
+                          type="button"
+                          onClick={() => void deleteRow(row)}
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition"
+                          title="Delete patient"
+                        >
+                          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="3 6 5 6 21 6" />
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                          </svg>
+                        </button>
+                      </div>
                     </td>
-                    <td className="px-3 py-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          selectPatient({
-                            id: row.id,
-                            uhid: row.refNo,
-                            name: row.name,
-                            partner: row.husbandName,
-                            age: 0,
-                            gender: '',
-                            aadhar: row.aadhar || '',
-                            satelliteId: row.satId || 0,
-                            mobile: row.mobile,
-                            category: row.category,
-                          });
-                          router.push('/cycle/creation');
-                        }}
-                        className="font-bold text-[#1d4ed8] underline"
-                      >
-                        Cycle
-                      </button>
+
+                    {/* Patient Name & UHID */}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-100 to-indigo-100 text-xs font-black text-purple-700 border border-purple-200/80 shadow-2xs">
+                          {getInitials(row.name)}
+                        </div>
+                        <div>
+                          <div className="font-bold text-slate-900 group-hover:text-[#6345A6] transition-colors">
+                            {row.name}
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.2 text-[10px] font-mono text-slate-600 border border-slate-200/70">
+                              <span className="text-slate-400">UHID:</span>
+                              <strong>{row.refNo || `PT-00${row.id}`}</strong>
+                            </span>
+                            {row.mobile && (
+                              <span className="text-[10px] text-slate-400 hidden sm:inline">
+                                📞 {row.mobile}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </td>
-                    <td className="px-3 py-2">
-                      <button type="button" onClick={() => void openRowPopup(row)} className="text-left font-semibold text-slate-900 hover:underline">
-                        {row.name}
-                      </button>
+
+                    {/* Category / Donation */}
+                    <td className="px-4 py-3">
+                      <div className="space-y-1">
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                          row.category?.toLowerCase() === 'self'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : row.category?.toLowerCase().includes('donor')
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                            : row.category
+                            ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${
+                            row.category?.toLowerCase() === 'self'
+                              ? 'bg-emerald-500'
+                              : row.category?.toLowerCase().includes('donor')
+                              ? 'bg-amber-500'
+                              : 'bg-purple-500'
+                          }`} />
+                          <span>{row.category || 'General'}</span>
+                        </span>
+                        {row.donationCategory && (
+                          <div className="text-[11px] font-semibold text-slate-700 max-w-[220px] truncate" title={row.donationCategory}>
+                            {row.donationCategory}
+                          </div>
+                        )}
+                        {row.donationName && (
+                          <div className="text-[10px] text-slate-400">
+                            Linked: {row.donationName}
+                          </div>
+                        )}
+                      </div>
                     </td>
-                    <td className="px-3 py-2 text-slate-700">{row.category || '-'}</td>
-                    <td className="px-3 py-2 text-slate-700">{row.donationCategory || ''}</td>
-                    <td className="px-3 py-2 text-slate-700">{row.donationName || ''}</td>
-                    <td className="px-3 py-2 font-semibold text-slate-800">{row.cycleId || ''}</td>
-                    <td className="px-3 py-2 text-slate-700">{row.cycleDate || ''}</td>
-                    <td className="px-3 py-2 text-slate-800">{row.husbandName || ''}</td>
-                    <td className="max-w-[220px] truncate px-3 py-2 text-slate-700" title={row.address}>
-                      {row.address || ''}
+
+                    {/* Cycle Info */}
+                    <td className="px-4 py-3">
+                      {row.cycleId ? (
+                        <div className="space-y-0.5">
+                          <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 border border-blue-200/80 px-2 py-0.5 text-xs font-mono font-bold text-blue-700">
+                            <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                            {row.cycleId}
+                          </span>
+                          {row.cycleDate && (
+                            <div className="text-[10px] text-slate-500 font-medium">
+                              📅 {row.cycleDate}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-slate-400 italic">No cycle created</span>
+                      )}
                     </td>
-                    <td className="px-3 py-2 text-slate-700">{formatDate(row.dateOfCreation)}</td>
-                    <td className="px-3 py-2">
-                      <button
-                        type="button"
-                        onClick={() => void deleteRow(row)}
-                        className="rounded bg-white px-2 py-1 text-[11px] font-bold text-red-700 ring-1 ring-red-200 hover:bg-red-50"
-                      >
-                        Delete
-                      </button>
+
+                    {/* Husband / Spouse */}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5 text-slate-800 font-medium">
+                        <svg className="h-3.5 w-3.5 text-slate-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                          <circle cx="9" cy="7" r="4" />
+                        </svg>
+                        <span>{row.husbandName || '—'}</span>
+                      </div>
+                    </td>
+
+                    {/* Address */}
+                    <td className="px-4 py-3">
+                      <div className="max-w-[200px] truncate text-slate-600 text-xs" title={row.address}>
+                        {row.address || '—'}
+                      </div>
+                    </td>
+
+                    {/* Date of Creation */}
+                    <td className="px-4 py-3 text-slate-600 text-[11px] whitespace-nowrap">
+                      {formatDate(row.dateOfCreation)}
                     </td>
                   </tr>
                 ))}
 
                 {!filteredRows.length && !loading && (
                   <tr>
-                    <td colSpan={12} className="bg-white px-4 py-8 text-center text-xs text-slate-500 font-medium">
-                      No patients found matching your search.
+                    <td colSpan={7} className="px-4 py-12 text-center bg-slate-50/50">
+                      <div className="mx-auto max-w-sm text-center">
+                        <div className="text-3xl mb-2">🔍</div>
+                        <div className="text-xs font-bold text-slate-800">No patients found</div>
+                        <p className="text-[11px] text-slate-500 mt-1">
+                          Try adjusting your search terms or filter selection.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchQuery('');
+                            setCategoryFilter('all');
+                          }}
+                          className="mt-3 inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                        >
+                          Clear filters
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Footer */}
+          {filteredRows.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-4 pt-2 text-xs text-slate-600">
+              <div className="flex items-center gap-2">
+                <span>
+                  Showing <strong className="text-slate-900">{(currentPage - 1) * pageSize + 1}</strong> to{' '}
+                  <strong className="text-slate-900">{Math.min(currentPage * pageSize, filteredRows.length)}</strong> of{' '}
+                  <strong className="text-slate-900">{filteredRows.length}</strong> patients
+                </span>
+                <span className="text-slate-300">|</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-slate-500">Rows per page:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-800 outline-none"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                  </select>
+                </div>
+              </div>
+
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    disabled={currentPage <= 1}
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition"
+                  >
+                    Previous
+                  </button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((pg) => (
+                    <button
+                      key={pg}
+                      type="button"
+                      onClick={() => setCurrentPage(pg)}
+                      className={`h-7 w-7 rounded-lg text-xs font-bold transition ${
+                        currentPage === pg
+                          ? 'bg-[#6345A6] text-white shadow-xs'
+                          : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      {pg}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
         </div>
       )}
 

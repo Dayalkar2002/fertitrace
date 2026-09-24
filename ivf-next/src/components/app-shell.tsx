@@ -28,7 +28,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const { selectedPatient } = usePatient();
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
-  const [leftMenus, setLeftMenus] = useState<LeftMenuItem[]>(DEFAULT_LEFT_MENUS);
+  const [leftMenus, setLeftMenus] = useState<LeftMenuItem[]>(
+    DEFAULT_LEFT_MENUS.filter((item) => item.nodeName !== 'consent_forms' && item.route !== '/consent')
+  );
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({
     patient_management: true,
     communication: true,
@@ -43,7 +45,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           setLeftMenus(
             json.leftMenu.filter(
               (item: LeftMenuItem) =>
-                item.nodeName !== 'cryopreservation' && item.label !== 'Cryopreservation'
+                item.nodeName !== 'cryopreservation' &&
+                item.label !== 'Cryopreservation' &&
+                item.nodeName !== 'consent_forms' &&
+                item.route !== '/consent'
             )
           );
         }

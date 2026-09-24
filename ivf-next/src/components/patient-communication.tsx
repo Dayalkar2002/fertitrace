@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePatient } from '@/contexts/patient-context';
 import { useAuth } from '@/contexts/auth-context';
 import { apiFetch } from '@/lib/api';
@@ -191,6 +191,10 @@ export function PatientCommunication() {
   const [showVariablesDropdown, setShowVariablesDropdown] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<CommunicationRecord | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [copiedMobile, setCopiedMobile] = useState(false);
+  const [copiedPreview, setCopiedPreview] = useState(false);
+  const [historySearch, setHistorySearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Delivered' | 'Failed' | 'Pending'>('All');
 
   useEffect(() => {
     if (channel !== 'SMS') return;
@@ -228,6 +232,21 @@ export function PatientCommunication() {
 
   const charCount = message.length;
   const maxChars = 480;
+  const smsCredits = charCount <= 160 ? 1 : Math.ceil(charCount / 153);
+
+  const filteredHistory = useMemo(() => {
+    return history.filter((rec) => {
+      const matchStatus = statusFilter === 'All' || rec.status === statusFilter;
+      const q = historySearch.trim().toLowerCase();
+      const matchQuery =
+        !q ||
+        rec.recipient.toLowerCase().includes(q) ||
+        rec.messageType.toLowerCase().includes(q) ||
+        rec.messageText.toLowerCase().includes(q) ||
+        rec.sentBy.toLowerCase().includes(q);
+      return matchStatus && matchQuery;
+    });
+  }, [history, statusFilter, historySearch]);
 
   function handleTemplateChange(key: string) {
     setTemplateKey(key);
@@ -328,67 +347,58 @@ export function PatientCommunication() {
         </div>
       )}
 
-      {/* Top Header Row */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 uppercase">
-          PATIENT COMMUNICATION
-        </h1>
-        <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 py-1 text-xs font-semibold text-slate-700 shadow-2xs">
-          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-xs" />
-          <span>API Status: Connected · Header <strong className="text-slate-900">IVCRFT</strong></span>
+      {/* Top Header Row - Sleek & Compact */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <h1 className="text-sm sm:text-base font-bold tracking-tight text-slate-900 uppercase">
+            PATIENT COMMUNICATION
+          </h1>
+          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600">
+            {channel} Dispatch
+          </span>
+        </div>
+        <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-700 shadow-2xs">
+          <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-xs" />
+          <span>API Connected · Header <strong className="text-slate-900">IVCRFT</strong></span>
         </div>
       </div>
 
-      {/* 1. Patient Context Strip Card */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-2xs">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          
-          {/* Avatar & Patient ID */}
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-pink-50 text-pink-500 border border-pink-200">
-              <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
-                <path d="M6 11c0-2.5 2-4 6-4s6 1.5 6 4" strokeDasharray="1 1" />
-              </svg>
-            </div>
-            <div>
-              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Patient ID</div>
-              <div className="text-sm font-bold text-slate-900 mt-0.5">{patientId}</div>
-            </div>
+      {/* Recipient & Contact Strip */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200/90 bg-white px-4 py-2.5 text-xs shadow-2xs">
+        <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Recipient:</span>
+            <span className="font-bold text-slate-900">{patientName}</span>
+            <span className="rounded bg-slate-100 px-1.5 py-0.2 text-[10px] font-mono text-slate-600 border border-slate-200">
+              {patientId}
+            </span>
           </div>
-
-          {/* Patient Name */}
-          <div className="border-l border-slate-100 pl-4">
-            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Patient Name</div>
-            <div className="text-sm font-bold text-slate-900 mt-0.5">{patientName}</div>
+          <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Mobile:</span>
+            <span className="font-bold text-slate-900">{mobileNo}</span>
+            <button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard.writeText(mobileNo);
+                setCopiedMobile(true);
+                setTimeout(() => setCopiedMobile(false), 1800);
+              }}
+              className="rounded bg-slate-50 px-1.5 py-0.2 text-[10px] font-semibold text-blue-600 border border-slate-200 hover:bg-blue-50 transition"
+              title="Copy phone number"
+            >
+              {copiedMobile ? '✓ Copied' : '📋 Copy'}
+            </button>
           </div>
-
-          {/* Age / Gender */}
-          <div className="border-l border-slate-100 pl-4 hidden sm:block">
-            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Age / Gender</div>
-            <div className="text-sm font-bold text-slate-900 mt-0.5">{patientAge}</div>
+          <div className="flex items-center gap-1.5 border-l border-slate-200 pl-4 hidden sm:flex">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Cycle:</span>
+            <span className="font-bold text-slate-900">{cycleNo}</span>
           </div>
-
-          {/* Cycle No. */}
-          <div className="border-l border-slate-100 pl-4 hidden md:block">
-            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Cycle No.</div>
-            <div className="text-sm font-bold text-slate-900 mt-0.5">{cycleNo}</div>
-          </div>
-
-          {/* Mobile No. with WhatsApp Icon */}
-          <div className="border-l border-slate-100 pl-4 flex items-center gap-3">
-            <div>
-              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Mobile No.</div>
-              <div className="text-sm font-bold text-slate-900 mt-0.5">{mobileNo}</div>
-            </div>
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white shadow-xs">
-              <svg className="h-5 w-5 fill-current" viewBox="0 0 24 24">
-                <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" />
-              </svg>
-            </div>
-          </div>
-
+        </div>
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+          <svg className="h-3.5 w-3.5 fill-current" viewBox="0 0 24 24">
+            <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" />
+          </svg>
+          <span>Verified Phone</span>
         </div>
       </div>
 
@@ -569,70 +579,6 @@ export function PatientCommunication() {
               </div>
             </div>
 
-            {/* STPL DLT Template Badge */}
-            {DLT_TEMPLATES[templateKey] && (
-              <div className="mt-2 space-y-1.5">
-                <div className={`flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-xl border px-3 py-1.5 text-[11px] ${
-                  DLT_TEMPLATES[templateKey].templateId
-                    ? 'bg-emerald-50/70 border-emerald-200/80 text-emerald-900'
-                    : 'bg-amber-50/70 border-amber-200/80 text-amber-900'
-                }`}>
-                  <span className="inline-flex items-center gap-1 font-semibold">
-                    <span className={`h-2 w-2 rounded-full ${DLT_TEMPLATES[templateKey].templateId ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                    {DLT_TEMPLATES[templateKey].templateId ? 'STPL DLT Approved' : 'Pending DLT approval'}
-                  </span>
-                  {DLT_TEMPLATES[templateKey].templateId && (
-                    <>
-                      <span>
-                        Template ID: <strong className="font-mono font-bold">{DLT_TEMPLATES[templateKey].templateId}</strong>
-                      </span>
-                      <span>•</span>
-                      <span>
-                        Ref: <strong className="font-mono">{DLT_TEMPLATES[templateKey].refNo}</strong>
-                      </span>
-                    </>
-                  )}
-                  <span>•</span>
-                  <span>
-                    Screen: <strong>{SMS_TEMPLATES.find((t) => t.label === templateKey)?.captureScreen}</strong>
-                  </span>
-                </div>
-                {channel === 'WhatsApp' && (
-                  <div className={`flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-xl border px-3 py-1.5 text-[11px] ${
-                    whatsappReady
-                      ? 'bg-emerald-50/70 border-emerald-200/80 text-emerald-900'
-                      : 'bg-amber-50/70 border-amber-200/80 text-amber-900'
-                  }`}>
-                    <span className="inline-flex items-center gap-1 font-semibold">
-                      <span className={`h-2 w-2 rounded-full ${whatsappReady ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                      {whatsappReady ? 'WhatsApp Meta Approved' : 'WhatsApp pending Meta approval'}
-                    </span>
-                    {activeTemplate?.whatsappTemplateName && (
-                      <>
-                        <span>•</span>
-                        <span>
-                          Template: <strong className="font-mono">{activeTemplate.whatsappTemplateName}</strong>
-                        </span>
-                      </>
-                    )}
-                    {whatsappReady && (
-                      <>
-                        <span>•</span>
-                        <span>Language: <strong>en_US</strong></span>
-                        <span>•</span>
-                        <span>Category: <strong>UTILITY</strong></span>
-                      </>
-                    )}
-                    {!whatsappReady && (
-                      <>
-                        <span>•</span>
-                        <span>Only <strong>appointment_booked</strong> can be sent on WhatsApp</span>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
 
           {/* Language */}
@@ -658,28 +604,92 @@ export function PatientCommunication() {
           
           {/* Left: Message Textarea */}
           <div className="lg:col-span-8">
-            <label className="block text-xs font-medium text-slate-600 mb-1">
-              Message
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-medium text-slate-600">
+                Message
+              </label>
+              <span className="text-[11px] text-slate-400">
+                Press <kbd className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600 border border-slate-200">Ctrl+Enter</kbd> to send
+              </span>
+            </div>
             <div className="relative">
               <textarea
                 rows={5}
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
+                onKeyDown={(e) => {
+                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                    e.preventDefault();
+                    void handleSendMessage();
+                  }
+                }}
                 maxLength={maxChars}
+                placeholder="Type your message or choose a template..."
                 className="w-full rounded-xl border border-slate-200 bg-white p-3.5 text-xs leading-relaxed text-slate-800 outline-none transition focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 font-mono"
               />
-              <div className="mt-1 text-right text-[11px] font-medium text-slate-400">
-                Characters : {charCount} / {maxChars}
+
+              {/* Quick One-Click Variable Chips */}
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mr-1">Quick Add:</span>
+                {[
+                  '[Patient Name]',
+                  '[Doctor Name]',
+                  '[Date & Time]',
+                  '[Clinic Name]',
+                  '[Procedure]',
+                ].map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => handleInsertVariable(v)}
+                    className="inline-flex items-center gap-1 rounded-full border border-pink-200 bg-pink-50/60 px-2.5 py-0.5 text-[10px] font-medium text-pink-700 hover:bg-pink-100 transition active:scale-95"
+                    title={`Insert ${v}`}
+                  >
+                    <span>+</span>
+                    <span>{v}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Character & SMS Credit Counter */}
+              <div className="mt-1.5 flex items-center justify-between text-[11px] font-medium text-slate-400">
+                <div>
+                  {channel === 'SMS' && (
+                    <span className="inline-flex items-center gap-1 text-slate-600 font-semibold">
+                      <span>⚡</span>
+                      <span>{smsCredits} SMS Credit{smsCredits > 1 ? 's' : ''}</span>
+                      <span className="text-slate-400 font-normal">
+                        ({charCount <= 160 ? `${160 - charCount} chars left in 1st credit` : `${charCount} chars total`})
+                      </span>
+                    </span>
+                  )}
+                </div>
+                <div>
+                  Characters : <strong className={charCount > maxChars * 0.9 ? 'text-amber-600' : 'text-slate-700'}>{charCount}</strong> / {maxChars}
+                </div>
               </div>
             </div>
           </div>
 
           {/* Right: Live Realistic Chat Bubble Preview */}
           <div className="lg:col-span-4 flex flex-col justify-start">
-            <span className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-              Live {channel} Preview
-            </span>
+            <div className="flex items-center justify-between mb-1">
+              <span className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                Live {channel} Preview
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  void navigator.clipboard.writeText(previewText);
+                  setCopiedPreview(true);
+                  setTimeout(() => setCopiedPreview(false), 1800);
+                }}
+                className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:underline"
+                title="Copy preview text"
+              >
+                {copiedPreview ? '✓ Copied!' : '📋 Copy Text'}
+              </button>
+            </div>
             <div className="relative rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4 min-h-[140px] flex items-center justify-center">
               
               {/* WhatsApp or SMS Bubble */}
@@ -721,12 +731,16 @@ export function PatientCommunication() {
             type="button"
             disabled={sending || (channel === 'WhatsApp' && !whatsappReady) || (channel === 'SMS' && smsDigits.length < 10)}
             onClick={handleSendMessage}
+            title="Press Ctrl+Enter to send"
             className="flex items-center gap-2 rounded-xl bg-[#e11d48] hover:bg-[#be123c] px-6 py-2.5 text-xs font-bold uppercase tracking-wide text-white shadow-md shadow-pink-600/20 transition active:scale-[0.99] disabled:opacity-60"
           >
             <svg className="h-4 w-4 fill-current -rotate-45" viewBox="0 0 24 24">
               <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
             </svg>
             <span>{sending ? 'SENDING...' : channel === 'SMS' ? 'SEND SMS' : 'SEND MESSAGE'}</span>
+            <kbd className="hidden sm:inline-block rounded bg-pink-700/60 px-1.5 py-0.5 text-[9px] font-mono text-pink-100">
+              Ctrl+↵
+            </kbd>
           </button>
         </div>
 
@@ -734,21 +748,68 @@ export function PatientCommunication() {
 
       {/* 3. COMMUNICATION HISTORY Table Card */}
       <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-2xs space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-            COMMUNICATION HISTORY
-          </h2>
-          <button
-            type="button"
-            onClick={() => {
-              setToastMessage('Showing all sent messages for this cycle.');
-              setTimeout(() => setToastMessage(null), 2500);
-            }}
-            className="flex items-center gap-1 text-xs font-bold text-[#6345A6] hover:underline"
-          >
-            <span>View All History</span>
-            <span>→</span>
-          </button>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+              COMMUNICATION HISTORY
+            </h2>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+              {filteredHistory.length} of {history.length}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Status Filter Chips */}
+            <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-[11px] font-semibold">
+              {(['All', 'Delivered', 'Failed', 'Pending'] as const).map((st) => (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => setStatusFilter(st)}
+                  className={`rounded-md px-2 py-0.5 transition ${
+                    statusFilter === st
+                      ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  {st}
+                </button>
+              ))}
+            </div>
+
+            {/* Quick Search Input */}
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search history..."
+                value={historySearch}
+                onChange={(e) => setHistorySearch(e.target.value)}
+                className="h-7 w-36 sm:w-44 rounded-lg border border-slate-200 bg-white px-2.5 text-[11px] text-slate-800 placeholder-slate-400 outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/10"
+              />
+              {historySearch && (
+                <button
+                  type="button"
+                  onClick={() => setHistorySearch('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 hover:text-slate-600"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setStatusFilter('All');
+                setHistorySearch('');
+                setToastMessage('Showing all sent messages for this cycle.');
+                setTimeout(() => setToastMessage(null), 2500);
+              }}
+              className="flex items-center gap-1 text-xs font-bold text-[#6345A6] hover:underline"
+            >
+              <span>Reset</span>
+            </button>
+          </div>
         </div>
 
         <div className="overflow-x-auto rounded-xl border border-slate-200/80">
@@ -765,12 +826,19 @@ export function PatientCommunication() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {history.map((rec) => (
-                <tr key={rec.id} className="hover:bg-slate-50/60 transition">
-                  {/* Date / Time */}
-                  <td className="px-4 py-3.5 font-medium text-slate-700">
-                    {rec.dateTime}
+              {filteredHistory.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-xs text-slate-400">
+                    No communication records matching your filter or search.
                   </td>
+                </tr>
+              ) : (
+                filteredHistory.map((rec) => (
+                  <tr key={rec.id} className="hover:bg-slate-50/60 transition">
+                    {/* Date / Time */}
+                    <td className="px-4 py-3.5 font-medium text-slate-700">
+                      {rec.dateTime}
+                    </td>
 
                   {/* Message Type */}
                   <td className="px-4 py-3.5 font-bold text-slate-900">
@@ -854,7 +922,7 @@ export function PatientCommunication() {
                     </button>
                   </td>
                 </tr>
-              ))}
+              )))}
             </tbody>
           </table>
         </div>

@@ -111,6 +111,8 @@ export interface RetrievalSections {
   showDonorSperm?: boolean;
   showRecipientDetails?: boolean;
   showDonorEggDetails?: boolean;
+  /** SMART D2S / D2SGVER: recipient cannot type retrieval counts. */
+  lockRetrievalCounts?: boolean;
 }
 
 export interface RetrievalRow {
@@ -133,6 +135,24 @@ export interface FreezeOocyteRow {
   mi?: number | null;
   gv?: number | null;
   total?: number | null;
+}
+
+export interface FrozenOocyteLocation {
+  oocytesId: number;
+  source: string;
+  location: string;
+  cycleId: string;
+  procDoneBy: string;
+  sourceDonorCycleId: string;
+}
+
+export interface FreezePersistResult {
+  fzoCycleId: string;
+  recipientPatientId: number;
+  mii: number;
+  mi: number;
+  gv: number;
+  locations: FrozenOocyteLocation[];
 }
 
 export interface FetThawDetails {

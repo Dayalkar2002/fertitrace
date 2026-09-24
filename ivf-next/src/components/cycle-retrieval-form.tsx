@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { usePatient } from '@/contexts/patient-context';
@@ -16,6 +16,7 @@ import type {
   CycleCreationResult,
   DonorAadharCheck,
   RetrievalConfig,
+  RetrievalData,
   RetrievalRow,
 } from '@/lib/types/cycle';
 import {
@@ -67,6 +68,9 @@ export function CycleRetrievalForm({ cycleId }: CycleRetrievalFormProps) {
   const [donorToRecipient, setDonorToRecipient] = useState<RetrievalRow[]>([emptyRecipientRow()]);
   const [rowAadharChecks, setRowAadharChecks] = useState<Record<number, DonorAadharCheck>>({});
   const [lockedRecipientId, setLockedRecipientId] = useState<number | null>(null);
+  const [fzoCycleId, setFzoCycleId] = useState('');
+  const [fzoRecipientId, setFzoRecipientId] = useState(0);
+  const retrievalPayloadRef = useRef<RetrievalData>({});
 
   const tabs = [
     { id: 'history', label: 'History' },
@@ -178,16 +182,13 @@ export function CycleRetrievalForm({ cycleId }: CycleRetrievalFormProps) {
     setError(null);
     setSuccess(null);
 
-    const sections: { selfToSelf?: RetrievalRow[]; donorToRecipient?: RetrievalRow[] } = {};
-
-    if (config.sections.showSelfToSelf) {
+    const sections = { ...retrievalPayloadRef.current };
+    if (config.sections.showSelfToSelf && !sections.selfToSelf) {
       sections.selfToSelf = selfToSelf;
     }
-
     if (config.sections.showDonorToRecipient) {
-      const recipientIds = donorToRecipient
-        .map((row) => Number(row.recipientPatientId))
-        .filter((id) => id > 0);
+      const rows = sections.donorToRecipient || donorToRecipient;
+      const recipientIds = rows.map((row) => Number(row.recipientPatientId)).filter((id) => id > 0);
       const uniqueRecipients = [...new Set(recipientIds)];
       if (uniqueRecipients.length > 1) {
         setValidationError(
@@ -202,13 +203,24 @@ export function CycleRetrievalForm({ cycleId }: CycleRetrievalFormProps) {
         return;
       }
 
-      sections.donorToRecipient = donorToRecipient;
+      sections.donorToRecipient = rows;
     }
 
     setSaving(true);
     try {
-      await saveRetrieval(token, cycleId, sections);
-      setSuccess('Retrieval data saved successfully.');
+      const saved = await saveRetrieval(token, cycleId, sections, {
+        patientId: selectedPatient?.id || config.cycle.patientId,
+        satelliteId: selectedPatient?.satelliteId || config.cycle.satelliteId,
+        cycleType: config.cycle.cycleType || config.cycle.oocyteSource,
+        donorName: selectedPatient?.name,
+      });
+      if (saved.freeze?.fzoCycleId) {
+        setFzoCycleId(saved.freeze.fzoCycleId);
+        setFzoRecipientId(saved.freeze.recipientPatientId || 0);
+        setSuccess(`Freeze oocytes saved on FZO cycle ${saved.freeze.fzoCycleId}. Assign location on Frozen Oocytes.`);
+      } else {
+        setSuccess('Retrieval data saved successfully.');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save retrieval.');
     } finally {
@@ -226,8 +238,8 @@ export function CycleRetrievalForm({ cycleId }: CycleRetrievalFormProps) {
 
   return (
     <div className="space-y-6">
-      <div className="border-b border-slate-200 pb-4">
-        <h1 className="text-2xl font-extrabold text-slate-800">Cycle Retrieval Screen</h1>
+      <div className="border-b border-slate-200 pb-3">
+        <h1 className="text-base sm:text-lg font-bold text-slate-800">Cycle Retrieval Screen</h1>
         <div className="mt-2 flex flex-wrap gap-4 text-sm text-slate-600">
           <span>
             <strong>CycID:</strong> {config.cycle.cycleId}
@@ -267,6 +279,11 @@ export function CycleRetrievalForm({ cycleId }: CycleRetrievalFormProps) {
             cycleId={config.cycle.cycleId}
             patient={selectedPatient}
             monitoringSheet={config.cycle.monitoringSheet || readCreationMonitoringSheet()}
+            fzoCycleId={fzoCycleId}
+            fzoRecipientId={fzoRecipientId}
+            onChange={(data) => {
+              retrievalPayloadRef.current = data;
+            }}
           />
 
           {validationError && <Alert type="error" message={validationError} />}

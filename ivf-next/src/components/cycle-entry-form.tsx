@@ -19,10 +19,10 @@ import {
   showSemenDonorDetails,
 } from '@/lib/cycle-utils';
 import { CycleRetrievalPanels } from '@/components/cycle-retrieval-panels';
-import { fetchCycleTypes, saveCycleEntry } from '@/lib/services/cycles';
+import { fetchCycleTypes, saveCycleEntry, saveRetrieval } from '@/lib/services/cycles';
 import { listSemenDonors } from '@/lib/services/semen-donor';
 import { listSpermIdLocations } from '@/lib/services/sperm-id-location';
-import type { CycleCreationResult, CycleEntry, SourceOption } from '@/lib/types/cycle';
+import type { CycleCreationResult, CycleEntry, RetrievalData, SourceOption } from '@/lib/types/cycle';
 
 const DEFAULT_OOCYTE_OPTIONS: SourceOption[] = [
   {
@@ -115,6 +115,23 @@ export function CycleEntryForm() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [copiedCycleId, setCopiedCycleId] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [fzoCycleId, setFzoCycleId] = useState('');
+  const [fzoRecipientId, setFzoRecipientId] = useState(0);
+  const retrievalPayloadRef = useRef<RetrievalData>({});
+
+  // Keyboard shortcut: Ctrl+S / Cmd+S to Save & Next
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        void save(true);
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  });
 
   const cycleType = computeCycleType(form.oocyteSource, form.semenSource || 'husband_fresh');
   const visibleOocyteSources = useMemo(() => {
@@ -261,7 +278,8 @@ export function CycleEntryForm() {
 
   async function save(andNext = false) {
     if (!selectedPatient) {
-      alert('Please select a patient first.');
+      setToastMessage('Please select a patient first.');
+      setTimeout(() => setToastMessage(null), 3500);
       return;
     }
     if (!token) return;
@@ -321,7 +339,25 @@ export function CycleEntryForm() {
 
       const saved = await saveCycleEntry(token, entry);
       setCurrentCycle(saved);
+      if (saved.cycleId) {
+        const retrieval = await saveRetrieval(token, saved.cycleId, retrievalPayloadRef.current, {
+          patientId: selectedPatient.id,
+          satelliteId: selectedSatellite?.id || 1,
+          cycleType: creationDraft?.cycleType || form.oocyteSource,
+          donorName: selectedPatient.name,
+        });
+        if (retrieval.freeze?.fzoCycleId) {
+          setFzoCycleId(retrieval.freeze.fzoCycleId);
+          setFzoRecipientId(retrieval.freeze.recipientPatientId || 0);
+          setToastMessage(`Freeze oocytes saved on FZO cycle ${retrieval.freeze.fzoCycleId}. Assign location there.`);
+        } else {
+          setToastMessage('Cycle retrieval entry saved successfully.');
+        }
+      } else {
+        setToastMessage('Cycle retrieval entry saved successfully.');
+      }
       setSuccess('Cycle entry saved successfully.');
+      setTimeout(() => setToastMessage(null), 3000);
       if (andNext && saved.cycleId) {
         router.push(`/cycle/retrieval/${saved.cycleId}`);
       }
@@ -336,7 +372,8 @@ export function CycleEntryForm() {
     if (currentCycle?.cycleId) {
       router.push(`/cycle/retrieval/${currentCycle.cycleId}`);
     } else {
-      alert('Please save the cycle entry first.');
+      setToastMessage('Please save the cycle entry first before proceeding.');
+      setTimeout(() => setToastMessage(null), 3500);
     }
   }
 
@@ -356,110 +393,68 @@ export function CycleEntryForm() {
   return (
     <div className="mx-auto max-w-[1240px] space-y-4 font-sans text-slate-800 selection:bg-purple-500 selection:text-white">
       
-      {/* 1. Header Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white p-3.5 shadow-xs border border-slate-200/80">
+      {/* 1. Header Bar - Sleek & Compact */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl bg-white px-4 py-2 shadow-2xs border border-slate-200/80">
         {/* Module Title Badge */}
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-[#1d4ed8]">
-            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <div className="flex items-center gap-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-[#1d4ed8]">
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="10" />
               <path d="M12 6v6l4 2" />
             </svg>
           </div>
-          <h1 className="text-xl sm:text-2xl font-black tracking-tight text-[#1e3a8a]">
+          <h1 className="text-sm sm:text-base font-bold tracking-tight text-[#1e3a8a]">
             CYCLE RETRIEVAL SCREEN
           </h1>
         </div>
 
         {/* Right Info Badges */}
-        <div className="flex items-center gap-2">
-          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700">
             <span className="font-semibold text-slate-500">Date : </span>
             <span>{new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
           </div>
           {creationDraft?.cycleId && (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700">
+            <div className="flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700">
               <span className="font-semibold text-slate-500">Cycle ID : </span>
-              <span>{creationDraft.cycleId}</span>
+              <span className="font-mono font-bold text-slate-800">{creationDraft.cycleId}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  void navigator.clipboard.writeText(creationDraft.cycleId);
+                  setCopiedCycleId(true);
+                  setTimeout(() => setCopiedCycleId(false), 1800);
+                }}
+                className="ml-1 inline-flex items-center gap-1 rounded bg-white px-1.5 py-0.2 text-[10px] font-semibold text-blue-600 border border-slate-200 hover:bg-blue-50 transition"
+                title="Copy Cycle ID to clipboard"
+              >
+                {copiedCycleId ? '✓ Copied' : '📋 Copy'}
+              </button>
             </div>
           )}
           {creationDraft?.cycleType && (
-            <div className="rounded-lg border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-medium text-purple-800">
+            <div className="rounded-md border border-purple-200 bg-purple-50 px-2 py-0.5 text-[11px] font-medium text-purple-800">
               <span className="font-semibold">Type : </span>
               <span>{getCycleTypeLabel(creationDraft.cycleType)}</span>
             </div>
           )}
-          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700">
+          <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700">
             <span className="font-semibold text-slate-500">User : </span>
             <span>{user?.userName || user?.userLoginName || 'Sachin@gmail.com'}</span>
           </div>
         </div>
       </div>
 
-      {/* 2. Patient Context Strip */}
-      <div className={`flex flex-wrap items-center justify-between gap-4 rounded-xl border px-4 py-3 text-xs shadow-2xs transition ${
-        hasPatient ? 'border-sky-200 bg-[#f0f7ff]' : 'border-amber-200 bg-amber-50/50'
-      }`}>
-        <div className="flex flex-wrap items-center gap-6">
-          {/* Patient Name */}
-          <div className="flex items-center gap-2">
-            <svg className={`h-4 w-4 ${hasPatient ? 'text-[#1d4ed8]' : 'text-amber-600'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
-            <span className="font-semibold text-slate-600">Patient Name :</span>
-            <span className={`font-bold ${hasPatient ? 'text-slate-900' : 'text-amber-800 italic'}`}>{patientName}</span>
-          </div>
-
-          {/* UHID */}
-          <div className="flex items-center gap-2">
-            <svg className="h-4 w-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="4" width="18" height="16" rx="2" />
-              <line x1="7" y1="8" x2="17" y2="8" />
-              <line x1="7" y1="12" x2="13" y2="12" />
-            </svg>
-            <span className="font-semibold text-slate-600">UHID :</span>
-            <span className="font-bold text-slate-900">{uhid}</span>
-          </div>
-
-          {/* Partner */}
-          <div className="flex items-center gap-2">
-            <svg className="h-4 w-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
-            <span className="font-semibold text-slate-600">Partner :</span>
-            <span className="font-bold text-slate-900">{partnerName}</span>
-          </div>
-
-          {/* Age / Gender */}
-          <div className="flex items-center gap-2">
-            <svg className="h-4 w-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10" />
-              <path d="M12 6v6l4 2" />
-            </svg>
-            <span className="font-semibold text-slate-600">Age / Gender :</span>
-            <span className="font-bold text-slate-900">{ageGender}</span>
-          </div>
-        </div>
-
-        {/* Change / Select Patient Action */}
-        <button
-          type="button"
-          onClick={() => dispatch(setShowPatientModal(true))}
-          className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs transition ${
-            hasPatient ? 'bg-[#1d4ed8] hover:bg-[#1e40af]' : 'bg-amber-600 hover:bg-amber-700'
-          }`}
-        >
-          {hasPatient ? 'Change Patient' : 'Select Patient'}
-        </button>
-      </div>
-
       {!hasPatient && (
-        <div className="rounded-xl border border-amber-300 bg-amber-50/90 px-4 py-3 text-xs text-amber-900">
-          Please select a patient in the bar above before saving or proceeding with cycle registration.
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs text-amber-900">
+          <span>Please select a patient in the bar above before saving or proceeding with cycle registration.</span>
+          <button
+            type="button"
+            onClick={() => dispatch(setShowPatientModal(true))}
+            className="rounded-lg bg-amber-600 hover:bg-amber-700 px-3 py-1 text-xs font-semibold text-white transition shadow-xs"
+          >
+            Select Patient
+          </button>
         </div>
       )}
 
@@ -685,19 +680,22 @@ export function CycleEntryForm() {
                 <CompactField
                   label="Received From Donor ID"
                   value={form.receivedFromDonorId}
-                  onChange={(v) => updateField('receivedFromDonorId', v)}
+                  onChange={() => undefined}
+                  disabled
                 />
                 <CompactField
                   label="Donor Name"
                   value={form.receivedDonorName}
-                  onChange={(v) => updateField('receivedDonorName', v)}
+                  onChange={() => undefined}
+                  disabled
                 />
                 <CompactField
                   label="No. of Oocytes"
                   type="number"
                   short
                   value={form.receivedOocyteCount}
-                  onChange={(v) => updateField('receivedOocyteCount', v)}
+                  onChange={() => undefined}
+                  disabled
                 />
               </div>
             </div>
@@ -733,17 +731,20 @@ export function CycleEntryForm() {
                 <CompactField
                   label="Embryo Donor Couple ID"
                   value={form.embryoDonorCoupleId}
-                  onChange={(v) => updateField('embryoDonorCoupleId', v)}
+                  onChange={() => undefined}
+                  disabled
                 />
                 <CompactField
                   label="Donor Couple Name"
                   value={form.donorCoupleName}
-                  onChange={(v) => updateField('donorCoupleName', v)}
+                  onChange={() => undefined}
+                  disabled
                 />
                 <CompactField
                   label="Embryo Batch No."
                   value={form.embryoBatchNo}
-                  onChange={(v) => updateField('embryoBatchNo', v)}
+                  onChange={() => undefined}
+                  disabled
                 />
               </div>
             </div>
@@ -802,6 +803,11 @@ export function CycleEntryForm() {
           cycleId={creationDraft?.cycleId || currentCycle?.cycleId}
           patient={selectedPatient}
           monitoringSheet={creationDraft?.monitoringSheet || currentCycle?.monitoringSheet || ''}
+          fzoCycleId={fzoCycleId}
+          fzoRecipientId={fzoRecipientId}
+          onChange={(data) => {
+            retrievalPayloadRef.current = data;
+          }}
         />
 
         {/* 6. CYCLE SUMMARY Card */}
@@ -865,6 +871,7 @@ export function CycleEntryForm() {
             type="button"
             disabled={saving}
             onClick={() => void save(true)}
+            title="Press Ctrl+S / ⌘S to Save & Next"
             className="flex items-center gap-2 rounded-xl bg-[#16a34a] hover:bg-[#15803d] px-6 py-2.5 text-sm font-bold text-white shadow-md transition active:scale-[0.99] disabled:opacity-60"
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -873,6 +880,9 @@ export function CycleEntryForm() {
               <polyline points="7 3 7 8 15 8" />
             </svg>
             <span>SAVE & NEXT</span>
+            <kbd className="hidden sm:inline-block rounded bg-emerald-700/60 px-1.5 py-0.5 text-[10px] font-mono text-emerald-100">
+              Ctrl+S
+            </kbd>
           </button>
 
           {/* NEXT */}
@@ -904,6 +914,21 @@ export function CycleEntryForm() {
         </div>
 
       </form>
+
+      {/* Floating Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 rounded-xl border border-emerald-400 bg-emerald-900/95 px-4 py-3 text-xs font-semibold text-white shadow-2xl backdrop-blur-xs transition-all animate-bounce">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white">✓</span>
+          <span>{toastMessage}</span>
+          <button
+            type="button"
+            onClick={() => setToastMessage(null)}
+            className="ml-2 text-emerald-300 hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 }

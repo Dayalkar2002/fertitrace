@@ -5,6 +5,8 @@ import type {
   CycleEntry,
   CycleEntryPayload,
   DonorAadharCheck,
+  FreezePersistResult,
+  FrozenOocyteLocation,
   PatientCycleRow,
   RetrievalConfig,
   RetrievalData,
@@ -106,14 +108,42 @@ export async function fetchRetrievalConfig(
 export async function saveRetrieval(
   token: string,
   cycleId: string,
-  sections: RetrievalData
-): Promise<CycleEntry> {
-  const res = await apiFetch<{ success: boolean; data: CycleEntry; message: string }>(
+  sections: RetrievalData,
+  context?: { patientId?: number; satelliteId?: number; cycleType?: string; donorName?: string }
+): Promise<CycleEntry & { freeze?: FreezePersistResult | null }> {
+  const res = await apiFetch<{
+    success: boolean;
+    data: CycleEntry & { freeze?: FreezePersistResult | null };
+    message: string;
+  }>(
     `/cycles/${cycleId}/retrieval`,
-    { method: 'POST', body: JSON.stringify({ sections }) },
+    { method: 'POST', body: JSON.stringify({ sections, ...context }) },
     token
   );
   return res.data;
+}
+
+export async function fetchFrozenOocyteLocations(
+  token: string,
+  cycleId: string,
+  patId: number,
+  satId: number
+): Promise<FrozenOocyteLocation[]> {
+  const params = new URLSearchParams({ patId: String(patId), satId: String(satId) });
+  const res = await apiFetch<{ success: boolean; data: FrozenOocyteLocation[] }>(
+    `/cycles/${cycleId}/frozen-oocytes?${params}`,
+    {},
+    token
+  );
+  return res.data || [];
+}
+
+export async function saveFrozenOocyteLocation(token: string, cycleId: string, oocytesId: number, location: string) {
+  await apiFetch<{ success: boolean }>(
+    `/cycles/${cycleId}/frozen-oocytes`,
+    { method: 'PATCH', body: JSON.stringify({ oocytesId, location }) },
+    token
+  );
 }
 
 export async function checkDonorAadhar(

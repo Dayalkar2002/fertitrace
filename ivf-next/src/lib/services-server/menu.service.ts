@@ -58,13 +58,13 @@ export async function getLeftMenuItems(): Promise<LeftMenuItem[]> {
             const fallback = DEFAULT_LEFT_MENUS.find((row) => row.nodeName === 'communication');
             return fallback?.subModules ? { ...item, subModules: fallback.subModules } : item;
           });
-        return ensureConsentMenu(ensureCycleCreationMenu(patched));
+        return hideConsentMenu(ensureCycleCreationMenu(patched));
       }
     } catch (err) {
       console.warn('[MenuService] DB fetch failed for Left Menu, using fallback:', err);
     }
   }
-  return DEFAULT_LEFT_MENUS;
+  return hideConsentMenu(DEFAULT_LEFT_MENUS);
 }
 
 function ensureCycleCreationMenu(items: LeftMenuItem[]): LeftMenuItem[] {
@@ -80,17 +80,8 @@ function ensureCycleCreationMenu(items: LeftMenuItem[]): LeftMenuItem[] {
   return [...items.slice(0, retrievalIndex), creation, ...items.slice(retrievalIndex)];
 }
 
-function ensureConsentMenu(items: LeftMenuItem[]): LeftMenuItem[] {
-  if (items.some((item) => item.nodeName === 'consent_forms' || item.route === '/consent')) {
-    return items;
-  }
-  const consent = DEFAULT_LEFT_MENUS.find((item) => item.nodeName === 'consent_forms');
-  if (!consent) return items;
-  const reportsIndex = items.findIndex(
-    (item) => item.nodeName === 'reports_analytics' || item.route === '/reports'
-  );
-  if (reportsIndex < 0) return [...items, consent];
-  return [...items.slice(0, reportsIndex + 1), consent, ...items.slice(reportsIndex + 1)];
+function hideConsentMenu(items: LeftMenuItem[]): LeftMenuItem[] {
+  return items.filter((item) => item.nodeName !== 'consent_forms' && item.route !== '/consent');
 }
 
 export async function getTopMenuItems(onlyActive = true): Promise<TopMenuItem[]> {
@@ -103,19 +94,21 @@ export async function getTopMenuItems(onlyActive = true): Promise<TopMenuItem[]>
       const rows = await executeText<Record<string, unknown>>(sqlQuery);
 
       if (rows.recordset && rows.recordset.length > 0) {
-        return rows.recordset.map((r) => {
-          const nodeName = String(r.NodeName);
-          return {
-            topMenuId: Number(r.TopMenuId),
-            nodeName,
-            label: String(r.Label),
-            route: nodeName === 'cycle_barcode' ? '/cycle/creation' : String(r.Route),
-            icon: r.Icon ? String(r.Icon) : undefined,
-            orderIndex: Number(r.OrderIndex || 0),
-            isActive: Boolean(r.IsActive),
-            requiresBarcode: Boolean(r.RequiresBarcode),
-          };
-        });
+        return rows.recordset
+          .map((r) => {
+            const nodeName = String(r.NodeName);
+            return {
+              topMenuId: Number(r.TopMenuId),
+              nodeName,
+              label: String(r.Label),
+              route: nodeName === 'cycle_barcode' ? '/cycle/creation' : String(r.Route),
+              icon: r.Icon ? String(r.Icon) : undefined,
+              orderIndex: Number(r.OrderIndex || 0),
+              isActive: Boolean(r.IsActive),
+              requiresBarcode: Boolean(r.RequiresBarcode),
+            };
+          })
+          .filter((item) => item.nodeName !== 'consent_forms' && item.route !== '/consent');
       }
     } catch (err) {
       console.warn('[MenuService] DB fetch failed for Top Menu, using fallback:', err);
