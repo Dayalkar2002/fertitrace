@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   emptyMonitoringChart,
   getMonitoringSheetLayout,
+  IUI_STOP_REASONS,
   type MonitoringChartValues,
 } from '@/lib/monitoring-sheet';
 import { getMonitoringSheetLabel } from '@/lib/cycle-utils';
@@ -51,7 +52,7 @@ export function CycleMonitoringChart({ option, cycleId }: CycleMonitoringChartPr
       <section className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
         <h3 className="text-sm font-extrabold uppercase tracking-wide text-slate-800">Monitoring Chart</h3>
         <p className="mt-1 text-sm text-slate-600">
-          Choose Agonist, Antagonist, HRT or Modified Natural on Cycle Creation. The matching chart opens here on retrieval.
+          Choose a protocol on Cycle Creation. Agonist, Antagonist, HRT, Modified Natural, or IUI Monitoring Sheet opens the matching chart there.
         </p>
       </section>
     );
@@ -65,6 +66,11 @@ export function CycleMonitoringChart({ option, cycleId }: CycleMonitoringChartPr
       [rowKey]: { ...(prev[rowKey] || {}), [colKey]: value },
     }));
   }
+
+  const dayRowKeys =
+    layout.orientation === 'day-rows'
+      ? Array.from({ length: layout.dayCount || 7 }, (_, index) => `d${index + 1}`)
+      : [];
 
   return (
     <section className="rounded-2xl border border-indigo-200 bg-white p-4 shadow-xs">
@@ -81,9 +87,11 @@ export function CycleMonitoringChart({ option, cycleId }: CycleMonitoringChartPr
         <table className="min-w-full border-collapse text-left text-xs">
           <thead>
             <tr className="bg-slate-50">
-              <th className="sticky left-0 z-10 min-w-[10rem] border-b border-r border-slate-200 bg-slate-50 px-3 py-2 font-bold text-slate-600">
-                Parameter
-              </th>
+              {layout.orientation === 'day-rows' ? null : (
+                <th className="sticky left-0 z-10 min-w-[10rem] border-b border-r border-slate-200 bg-slate-50 px-3 py-2 font-bold text-slate-600">
+                  Parameter
+                </th>
+              )}
               {layout.columns.map((col) => (
                 <th
                   key={col.key}
@@ -95,26 +103,78 @@ export function CycleMonitoringChart({ option, cycleId }: CycleMonitoringChartPr
             </tr>
           </thead>
           <tbody>
-            {layout.rows.map((row) => (
-              <tr key={row.key} className="odd:bg-white even:bg-slate-50/60">
-                <th className="sticky left-0 z-10 border-r border-slate-200 bg-inherit px-3 py-1.5 text-left font-semibold text-slate-700">
-                  {row.label}
-                </th>
-                {layout.columns.map((col) => (
-                  <td key={col.key} className="border-b border-slate-100 px-1.5 py-1">
-                    <input
-                      type={row.kind === 'date' ? 'date' : row.kind === 'number' ? 'number' : 'text'}
-                      value={values[row.key]?.[col.key] ?? ''}
-                      onChange={(e) => updateCell(row.key, col.key, e.target.value)}
-                      className="h-8 w-full min-w-[6.5rem] rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-800"
-                    />
-                  </td>
+            {layout.orientation === 'day-rows'
+              ? dayRowKeys.map((rowKey) => (
+                  <tr key={rowKey} className="odd:bg-white even:bg-slate-50/60">
+                    {layout.columns.map((col) => (
+                      <td key={col.key} className="border-b border-slate-100 px-1.5 py-1">
+                        <input
+                          type={col.key === 'date' ? 'date' : 'text'}
+                          readOnly={col.key === 'day'}
+                          value={values[rowKey]?.[col.key] ?? ''}
+                          onChange={(e) => updateCell(rowKey, col.key, e.target.value)}
+                          className="h-8 w-full min-w-[6.5rem] rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-800 read-only:bg-slate-50"
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              : layout.rows.map((row) => (
+                  <tr key={row.key} className="odd:bg-white even:bg-slate-50/60">
+                    <th className="sticky left-0 z-10 border-r border-slate-200 bg-inherit px-3 py-1.5 text-left font-semibold text-slate-700">
+                      {row.label}
+                    </th>
+                    {layout.columns.map((col) => (
+                      <td key={col.key} className="border-b border-slate-100 px-1.5 py-1">
+                        <input
+                          type={row.kind === 'date' ? 'date' : row.kind === 'number' ? 'number' : 'text'}
+                          value={values[row.key]?.[col.key] ?? ''}
+                          onChange={(e) => updateCell(row.key, col.key, e.target.value)}
+                          className="h-8 w-full min-w-[6.5rem] rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-800"
+                        />
+                      </td>
+                    ))}
+                  </tr>
                 ))}
-              </tr>
-            ))}
           </tbody>
         </table>
       </div>
+      {layout.option === 'IUI' && (
+        <div className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+          <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <input
+              type="checkbox"
+              checked={values.meta?.terminated === 'yes'}
+              onChange={(e) => updateCell('meta', 'terminated', e.target.checked ? 'yes' : '')}
+              className="h-4 w-4 accent-[#6345A6]"
+            />
+            Terminated
+          </label>
+          <label className="block text-xs font-medium text-slate-600">
+            Reason
+            <select
+              value={values.meta?.reason ?? ''}
+              onChange={(e) => updateCell('meta', 'reason', e.target.value)}
+              className="mt-1 h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"
+            >
+              <option value="">Select</option>
+              {IUI_STOP_REASONS.map((reason) => (
+                <option key={reason} value={reason}>
+                  {reason}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-xs font-medium text-slate-600 sm:col-span-2">
+            Note
+            <input
+              value={values.meta?.note ?? ''}
+              onChange={(e) => updateCell('meta', 'note', e.target.value)}
+              className="mt-1 h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"
+            />
+          </label>
+        </div>
+      )}
     </section>
   );
 }

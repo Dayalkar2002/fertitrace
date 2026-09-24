@@ -32,6 +32,29 @@ export async function saveCycleCreation(
   return res.data;
 }
 
+export async function fetchRetrievalRecipients(token: string, patId: number, satId: number, cycleId: string) {
+  const params = new URLSearchParams({ patId: String(patId), satId: String(satId), cycleId });
+  const res = await apiFetch<{
+    success: boolean;
+    data: { lockedRecipientId: number; recipients: { id: number; name: string }[] };
+  }>(`/cycles/retrieval-lookups?${params}`, {}, token);
+  return res.data;
+}
+
+export async function fetchRecipientCycles(token: string, recipientId: number, satId: number, cycleId: string) {
+  const params = new URLSearchParams({
+    recipientId: String(recipientId),
+    satId: String(satId),
+    cycleId,
+  });
+  const res = await apiFetch<{ success: boolean; data: { cycles: { id: string; label: string }[] } }>(
+    `/cycles/retrieval-lookups?${params}`,
+    {},
+    token
+  );
+  return res.data.cycles || [];
+}
+
 export async function listPatientCycles(
   token: string,
   patId: number,

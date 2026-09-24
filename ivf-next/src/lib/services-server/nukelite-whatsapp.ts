@@ -23,6 +23,7 @@ type NukeliteJson = {
   error?: string;
   status?: string | number;
   request_id?: string;
+  skipped?: number;
 };
 
 function env(name: string, fallback = ''): string {
@@ -123,6 +124,11 @@ function authToken(): string {
   return env('NUKELITE_JWT') || env('NUKELITE_API_KEY') || env('WHATSAPP_API_KEY');
 }
 
+function permanentApiKey(): string {
+  const key = env('NUKELITE_API_KEY') || env('WHATSAPP_API_KEY');
+  return key && !isJwt(key) ? key : '';
+}
+
 function isJwt(token: string): boolean {
   return token.startsWith('eyJ');
 }
@@ -146,7 +152,7 @@ function describeError(data: NukeliteJson, fallback: string, status: number, tem
     return 'Nukelite Dashboard API Key is required for broadcast send. Copy the API Key from Nukelite Dashboard (not the login JWT) into NUKELITE_API_KEY.';
   }
   if (/template not found/i.test(raw) || /no whatsapp account/i.test(raw)) {
-    return `Nukelite has no sendable template "${templateName || 'appointment_booked'}" on account ${username}. The portal list and the send API use different records — ask Nukelite to map WhatsApp + this template to ${username}, or put the Dashboard API Key (not the login JWT) in NUKELITE_API_KEY.`;
+    return `Nukelite could not send "${templateName || 'appointment_booked'}" for ${username}. The template is approved in the portal, but this send call cannot see it.`;
   }
   return raw;
 }
@@ -169,7 +175,7 @@ function wrapNetworkError(err: unknown): Error {
 
 async function nukeliteJson(
   url: string,
-  init: { method: string; headers: Record<string, string>; body: string }
+  init: { method: string; headers: Record<string, string>; body?: string }
 ): Promise<{ ok: boolean; status: number; data: NukeliteJson }> {
   if (!tlsInsecure()) {
     try {
@@ -185,6 +191,8 @@ async function nukeliteJson(
   const { URL } = await import('node:url');
   const parsed = new URL(url);
   const payload = init.body;
+  const headers = { ...init.headers };
+  if (payload !== undefined) headers['Content-Length'] = String(Buffer.byteLength(payload));
 
   return new Promise((resolve, reject) => {
     const req = https.request(
@@ -193,10 +201,7 @@ async function nukeliteJson(
         port: parsed.port || 443,
         path: `${parsed.pathname}${parsed.search}`,
         method: init.method,
-        headers: {
-          ...init.headers,
-          'Content-Length': String(Buffer.byteLength(payload)),
-        },
+        headers,
         rejectUnauthorized: false,
       },
       (res) => {
@@ -216,7 +221,7 @@ async function nukeliteJson(
       }
     );
     req.on('error', (err) => reject(wrapNetworkError(err)));
-    req.write(payload);
+    if (payload !== undefined) req.write(payload);
     req.end();
   });
 }
@@ -289,6 +294,91 @@ async function dispatchViaV5(payload: WhatsAppSendPayload, token: string, templa
   }
 }
 
+async function portalSenderNumber(token: string): Promise<string> {
+  const configured = env('NUKELITE_BROADCAST_NUMBER').replace(/\D/g, '');
+  if (configured) return configured;
+
+  const { ok, data } = await nukeliteJson('https://nukelite.co.in/api/wa-settings/accounts', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const accounts =
+    (data as NukeliteJson & { accounts?: { phone_number?: string; is_active?: boolean }[] }).accounts || [];
+  const active = accounts.find((item) => item.is_active !== false && item.phone_number) || accounts[0];
+  const number = String(active?.phone_number || '').replace(/\D/g, '');
+  if (!ok || !number) {
+    throw new Error('Nukelite has no active WhatsApp sender number on this account.');
+  }
+  return number;
+}
+
+/** Permanent API key. Same templates as the portal, without the login token. */
+async function dispatchViaApiKey(
+  payload: WhatsAppSendPayload,
+  apiKey: string,
+  templateName: string,
+  params: string[]
+): Promise<void> {
+  const broadcastNumber = env('NUKELITE_BROADCAST_NUMBER').replace(/\D/g, '') || '919522534045';
+  const { ok, status, data } = await nukeliteJson('https://nukelite.co.in/api/ext/wa-business/campaigns', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-Key': apiKey,
+    },
+    body: JSON.stringify({
+      broadcastName: payload.messageType || templateName,
+      broadcastNumber,
+      template: templateName,
+      category: 'UTILITY',
+      numbers: [toE164India(payload.recipient)],
+      bodyVariables: params,
+      headerMediaUrl: '',
+    }),
+  });
+
+  if (!ok || data.error || data.success === false) {
+    throw new Error(describeError(data, `Nukelite WhatsApp failed (${status}).`, status, templateName));
+  }
+}
+
+/** Same call the Nukelite Broadcasting screen uses. The wa20 template API does not see these records. */
+async function dispatchViaPortal(
+  payload: WhatsAppSendPayload,
+  token: string,
+  templateName: string,
+  params: string[]
+): Promise<void> {
+  const broadcastNumber = await portalSenderNumber(token);
+  const now = new Date();
+  const { ok, status, data } = await nukeliteJson('https://nukelite.co.in/api/wa-broadcast', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      broadcastName: payload.messageType || templateName,
+      broadcastNumber,
+      templateId: '',
+      category: 'UTILITY',
+      message: '',
+      headerMediaUrl: null,
+      template: templateName,
+      numbers: [{ mobile: toE164India(payload.recipient) }],
+      csvMode: 'bulk',
+      scheduled: false,
+      bodyVariables: params,
+      date: now.toISOString().slice(0, 10),
+      time: now.toTimeString().slice(0, 5),
+    }),
+  });
+
+  if (!ok || data.error || data.success === false) {
+    throw new Error(describeError(data, `Nukelite WhatsApp failed (${status}).`, status, templateName));
+  }
+}
+
 export async function dispatchNukeliteWhatsApp(payload: WhatsAppSendPayload): Promise<void> {
   if (!nukeliteConfigured()) {
     throw new Error(
@@ -302,17 +392,21 @@ export async function dispatchNukeliteWhatsApp(payload: WhatsAppSendPayload): Pr
 
   if (!approvedTemplateNames().has(templateName.toLowerCase())) {
     throw new Error(
-      `WhatsApp template "${templateName}" is still pending Meta approval. Appointment and Follow Up can be sent now.`
+      `WhatsApp template "${templateName}" is not enabled for sending.`
     );
   }
 
   try {
-    const preferV5 = Boolean(env('NUKELITE_API_KEY')) && !isJwt(env('NUKELITE_API_KEY'));
-    if (preferV5) {
-      await dispatchViaV5(payload, env('NUKELITE_API_KEY'), templateName, params);
+    const apiKey = permanentApiKey();
+    if (apiKey) {
+      await dispatchViaApiKey(payload, apiKey, templateName, params);
       return;
     }
-    if (isJwt(token) || env('NUKELITE_API_URL').includes('/v6/')) {
+    if (isJwt(token)) {
+      await dispatchViaPortal(payload, token, templateName, params);
+      return;
+    }
+    if (env('NUKELITE_API_URL').includes('/v6/')) {
       try {
         await dispatchViaV6(payload, token, templateName, params);
         return;

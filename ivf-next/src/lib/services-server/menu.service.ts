@@ -58,7 +58,7 @@ export async function getLeftMenuItems(): Promise<LeftMenuItem[]> {
             const fallback = DEFAULT_LEFT_MENUS.find((row) => row.nodeName === 'communication');
             return fallback?.subModules ? { ...item, subModules: fallback.subModules } : item;
           });
-        return ensureCycleCreationMenu(patched);
+        return ensureConsentMenu(ensureCycleCreationMenu(patched));
       }
     } catch (err) {
       console.warn('[MenuService] DB fetch failed for Left Menu, using fallback:', err);
@@ -78,6 +78,19 @@ function ensureCycleCreationMenu(items: LeftMenuItem[]): LeftMenuItem[] {
   );
   if (retrievalIndex < 0) return [creation, ...items];
   return [...items.slice(0, retrievalIndex), creation, ...items.slice(retrievalIndex)];
+}
+
+function ensureConsentMenu(items: LeftMenuItem[]): LeftMenuItem[] {
+  if (items.some((item) => item.nodeName === 'consent_forms' || item.route === '/consent')) {
+    return items;
+  }
+  const consent = DEFAULT_LEFT_MENUS.find((item) => item.nodeName === 'consent_forms');
+  if (!consent) return items;
+  const reportsIndex = items.findIndex(
+    (item) => item.nodeName === 'reports_analytics' || item.route === '/reports'
+  );
+  if (reportsIndex < 0) return [...items, consent];
+  return [...items.slice(0, reportsIndex + 1), consent, ...items.slice(reportsIndex + 1)];
 }
 
 export async function getTopMenuItems(onlyActive = true): Promise<TopMenuItem[]> {

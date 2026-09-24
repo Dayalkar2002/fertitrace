@@ -4,256 +4,306 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { usePatient } from '@/contexts/patient-context';
 import {
-  fetchConsentForms,
+  downloadConsentBook,
+  fetchConsentCatalog,
   fetchConsentPatientContext,
-  fetchConsentPreset,
-  fetchConsentPresets,
-  type ConsentFormGroup,
-  type ConsentPreset,
+  type ConsentCatalog,
+  type ConsentPatientContext,
 } from '@/lib/services/consent';
 
 export function ConsentFormBook() {
   const { token } = useAuth();
   const { selectedPatient } = usePatient();
-  const [presets, setPresets] = useState<ConsentPreset[]>([]);
-  const [groups, setGroups] = useState<ConsentFormGroup[]>([]);
-  const [selectedPreset, setSelectedPreset] = useState('');
+  const [moduleName, setModuleName] = useState<'IVF' | 'IUI'>('IVF');
+  const [catalog, setCatalog] = useState<ConsentCatalog>({ categories: [], presets: [] });
+  const [context, setContext] = useState<ConsentPatientContext | null>(null);
+  const [presetId, setPresetId] = useState('');
   const [checked, setChecked] = useState<Record<string, boolean>>({});
-  const [module, setModule] = useState('IVF');
-  const [contextNote, setContextNote] = useState<string | null>(null);
-  const [clinic, setClinic] = useState({ name: '', address: '', consultant1: '', consultant2: '' });
-  const [cycles, setCycles] = useState<Array<{ id: string; date: string | null; type: string }>>([]);
+  const [open, setOpen] = useState<Record<string, boolean>>({});
   const [message, setMessage] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [recent, setRecent] = useState<Array<{ name: string; when: string; forms: number }>>([]);
 
   useEffect(() => {
     if (!token) return;
     (async () => {
       try {
-        const [p, f] = await Promise.all([fetchConsentPresets(token), fetchConsentForms(token)]);
-        setPresets(p);
-        setGroups(f);
+        const data = await fetchConsentCatalog(token, moduleName);
+        setCatalog(data);
+        setOpen(Object.fromEntries(data.categories.map((category) => [category.title, true])));
+        setChecked({});
+        setPresetId('');
       } catch (err) {
-        setMessage(err instanceof Error ? err.message : 'Failed to load consent catalog.');
+        setMessage(err instanceof Error ? err.message : 'Could not load consent forms.');
       }
     })();
-  }, [token]);
+  }, [token, moduleName]);
 
   useEffect(() => {
     if (!token || !selectedPatient?.id || !selectedPatient.satelliteId) {
-      setContextNote(null);
+      setContext(null);
       return;
     }
     (async () => {
       try {
-        const ctx = await fetchConsentPatientContext(
-          token,
-          selectedPatient.id,
-          selectedPatient.satelliteId
-        );
-        setClinic(ctx.clinic);
-        setCycles(ctx.cycles);
-        setContextNote(null);
+        setContext(await fetchConsentPatientContext(token, selectedPatient.id, selectedPatient.satelliteId));
       } catch (err) {
-        setContextNote(err instanceof Error ? err.message : 'Could not load patient consent context.');
+        setMessage(err instanceof Error ? err.message : 'Could not load patient details.');
       }
     })();
   }, [token, selectedPatient?.id, selectedPatient?.satelliteId]);
 
-  const selectedCount = useMemo(
-    () => Object.values(checked).filter(Boolean).length,
-    [checked]
+  const allPaths = useMemo(
+    () => catalog.categories.flatMap((category) => category.forms.map((form) => form.relativePath)),
+    [catalog]
   );
+  const selectedPaths = allPaths.filter((item) => checked[item]);
+  const allSelected = allPaths.length > 0 && selectedPaths.length === allPaths.length;
 
-  async function applyPreset(id: string) {
-    setSelectedPreset(id);
-    if (!token || !id) return;
+  function applyPreset(id: string) {
+    setPresetId(id);
+    const preset = catalog.presets.find((item) => item.id === id);
+    if (!preset) return;
+    const next: Record<string, boolean> = {};
+    preset.paths.forEach((item) => {
+      next[item] = true;
+    });
+    setChecked(next);
+  }
+
+  async function generate() {
+    if (!token || !selectedPatient?.id || !selectedPatient.satelliteId) {
+      setMessage('Select a patient from the top bar before generating.');
+      return;
+    }
+    if (selectedPaths.length === 0) {
+      setMessage('Tick at least one consent form.');
+      return;
+    }
+    setGenerating(true);
+    setMessage(null);
     try {
-      const preset = await fetchConsentPreset(token, id);
-      const next: Record<string, boolean> = {};
-      (preset.selected || []).forEach((formId) => {
-        next[formId] = true;
+      await downloadConsentBook(token, {
+        patId: selectedPatient.id,
+        satId: selectedPatient.satelliteId,
+        paths: selectedPaths,
+        patientName: selectedPatient.name,
       });
-      setChecked(next);
+      setRecent((items) => [
+        {
+          name: `${selectedPatient.name} - Consent Book`,
+          when: new Date().toLocaleString('en-GB', { hour12: true }),
+          forms: selectedPaths.length,
+        },
+        ...items,
+      ].slice(0, 6));
+      setMessage(`Downloaded ${selectedPaths.length} Word form(s) as PDF.`);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Failed to apply preset.');
+      setMessage(err instanceof Error ? err.message : 'Could not build the consent book.');
+    } finally {
+      setGenerating(false);
     }
   }
 
-  function toggleForm(id: string) {
-    setChecked((prev) => ({ ...prev, [id]: !prev[id] }));
-  }
-
-  function handleGenerate() {
-    if (!selectedPatient) {
-      setMessage('Select a patient before generating the consent book.');
-      return;
-    }
-    if (selectedCount === 0) {
-      setMessage('Tick at least one consent form (or apply a case-category preset).');
-      return;
-    }
-    setMessage(
-      `Ready to generate ${selectedCount} form(s) for ${selectedPatient.name} (${module}). PDF merge uses the clinic Word/LibreOffice pipeline from the legacy ConsentForm module — wire document storage path on the API host to enable download.`
-    );
-  }
+  const patient = context?.patient;
+  const clinic = context?.clinic;
+  const address = [patient?.address, patient?.city].filter(Boolean).join(', ');
 
   return (
-    <div className="space-y-5">
-      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-green">Documents</p>
-            <h1 className="mt-1 font-display text-2xl font-extrabold text-slate-900">Consent Form Book</h1>
-            <p className="mt-1 max-w-2xl text-sm text-slate-500">
-              Case-category presets from legacy ConsentForm.aspx — ART / ICMR / PCPNDT packs auto-tick for the
-              selected IVF path.
-            </p>
-          </div>
-          <select
-            value={module}
-            onChange={(e) => setModule(e.target.value)}
-            className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700"
-          >
-            {['IVF', 'IUI', 'ICSI', 'ET', 'BT'].map((m) => (
-              <option key={m} value={m}>
-                Module: {m}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
+    <div className="space-y-4">
+      <h1 className="text-center font-display text-2xl font-bold text-slate-900">Consent Form Book</h1>
       {message && (
-        <div className="rounded-2xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-950">
-          {message}
-        </div>
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">{message}</div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-card">
-          <h2 className="font-display text-lg font-bold text-slate-900">Patient details</h2>
-          {!selectedPatient ? (
-            <p className="mt-4 rounded-2xl border border-dashed border-amber-200 bg-amber-50 px-4 py-6 text-sm text-amber-900">
-              Select a patient from the top bar to auto-fill consent fields.
+      <div className="grid gap-4 xl:grid-cols-2">
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-card">
+          <h2 className="text-center text-xs font-bold uppercase tracking-wide text-slate-500">Patient details (auto filled)</h2>
+          {!patient ? (
+            <p className="mt-6 rounded-2xl border border-dashed border-amber-200 bg-amber-50 px-4 py-8 text-center text-sm text-amber-900">
+              Use Change Patient in the top bar. The active patient fills this panel.
             </p>
           ) : (
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {[
-                ['Female / Wife', selectedPatient.name],
-                ['Male / Husband', selectedPatient.partner || '—'],
-                ['UHID', selectedPatient.uhid || '—'],
-                ['Age', selectedPatient.age != null ? `${selectedPatient.age} Y` : '—'],
-                ['Aadhar (Female)', selectedPatient.aadhar || '—'],
-                ['Category', selectedPatient.category || '—'],
-              ].map(([label, value]) => (
-                <div key={label} className="rounded-2xl bg-slate-50 px-3 py-3">
-                  <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</div>
-                  <div className="mt-0.5 text-sm font-semibold text-slate-800">{value}</div>
-                </div>
+            <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+              <Detail label="Name of female / wife / woman" value={patient.name} />
+              <Detail label="Name of male / husband / man" value={patient.partner} />
+              <Detail label="Aadhaar (female / wife)" value={patient.aadhar} />
+              <Detail label="Aadhaar (male / husband)" value={patient.maleAadhar} />
+              <Detail label="Residence address" value={address} wide />
+              <Detail label="Mobile number" value={patient.mobile} />
+              <Detail label="Registration no." value={patient.registrationNo} />
+              <Detail label="UHID / Patient ID" value={patient.uhid} />
+              <Detail label="Patient age" value={patient.age != null ? `${patient.age} Years` : ''} />
+              <Detail label="Date of birth" value={patient.dob} />
+              <Detail label="Date" value={new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} />
+              <Detail label="Cycle no." value={context?.cycles[0]?.id} />
+              <Detail label="Email" value={patient.email} />
+              <Detail label="Diagnosis" value={patient.diagnosis} />
+              <Detail label="Consultant 1" value={clinic?.consultant1} extra={clinic?.consultant1Reg ? `Reg. no. ${clinic.consultant1Reg}` : ''} />
+              <Detail label="Consultant 2" value={clinic?.consultant2} extra={clinic?.consultant2Reg ? `Reg. no. ${clinic.consultant2Reg}` : ''} />
+              <Detail label="Consultant 3 (ref by)" value={patient.referredBy} extra={clinic?.consultantReg ? `Reg. no. ${clinic.consultantReg}` : ''} />
+              <Detail label="Consultant address" value={clinic?.consultantAddress} wide />
+              <Detail label="ART registration of clinic no." value={clinic?.artRegNo} />
+              <Detail label="PCPNDT registration of clinic no." value={clinic?.pcpndtRegNo} />
+              <Detail label="Type of facility" value={clinic?.facilityType} />
+              <Detail label="Name and address of clinic" value={[clinic?.name, clinic?.address].filter(Boolean).join(', ')} wide />
+              <Detail label="Witness name" value={clinic?.witnessName} />
+              <Detail label="Witness address" value={clinic?.witnessAddress} />
+            </dl>
+          )}
+        </section>
+
+        <div className="space-y-4">
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-card">
+            <h2 className="text-center text-xs font-bold uppercase tracking-wide text-slate-500">Pre-set case category consent forms</h2>
+            <label className="mt-3 block text-xs font-semibold text-slate-500">Category</label>
+            <select
+              value={presetId}
+              onChange={(event) => applyPreset(event.target.value)}
+              disabled={moduleName !== 'IVF'}
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+            >
+              <option value="">Select case type to auto-tick forms</option>
+              {catalog.presets.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.id}. {preset.title}
+                </option>
+              ))}
+            </select>
+            <p className="mt-2 text-xs text-slate-400">Chooses ART / ICMR / PCPNDT / thaw sheets for that case. You can still tick or untick forms after.</p>
+          </section>
+
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-card">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-xs font-bold uppercase tracking-wide text-slate-500">Select consent forms</h2>
+              <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={() => {
+                    if (allSelected) setChecked({});
+                    else setChecked(Object.fromEntries(allPaths.map((item) => [item, true])));
+                  }}
+                />
+                Select all
+              </label>
+            </div>
+            <div className="mt-3 flex gap-2">
+              {(['IVF', 'IUI'] as const).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setModuleName(item)}
+                  className={`rounded-full px-4 py-1.5 text-xs font-bold ${
+                    moduleName === item ? 'bg-[#6d4cc4] text-white' : 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  {item} Module
+                </button>
               ))}
             </div>
-          )}
-          {contextNote && <p className="mt-3 text-xs text-amber-700">{contextNote}</p>}
-          {clinic.name && (
-            <div className="mt-4 rounded-2xl bg-brand-mist px-4 py-3 text-sm text-brand-ink">
-              <div className="font-semibold">{clinic.name}</div>
-              <div className="text-xs text-brand-dark/70">{clinic.address}</div>
-              <div className="mt-2 text-xs">
-                {clinic.consultant1}
-                {clinic.consultant2 ? ` · ${clinic.consultant2}` : ''}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-card">
-          <h2 className="font-display text-lg font-bold text-slate-900">Case category preset</h2>
-          <p className="mt-1 text-xs text-slate-500">Auto-ticks ART / ICMR / PCPNDT forms for the case type.</p>
-          <select
-            value={selectedPreset}
-            onChange={(e) => applyPreset(e.target.value)}
-            className="mt-4 w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm"
-          >
-            <option value="">— Select case type —</option>
-            {presets.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.id}. {p.title}
-              </option>
-            ))}
-          </select>
-          <div className="mt-4">
-            <div className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">Recent cycles</div>
-            {cycles.length === 0 ? (
-              <div className="rounded-xl bg-slate-50 px-3 py-4 text-sm text-slate-500">No cycles loaded.</div>
-            ) : (
-              <div className="max-h-40 space-y-1 overflow-y-auto">
-                {cycles.map((c) => (
-                  <div key={c.id} className="rounded-lg border border-slate-100 px-3 py-2 text-xs">
-                    <span className="font-semibold">{c.id}</span>
-                    <span className="ml-2 text-slate-500">{c.type}</span>
+            <div className="mt-4 max-h-[28rem] space-y-2 overflow-y-auto pr-1">
+              {catalog.categories.length === 0 ? (
+                <p className="rounded-xl bg-slate-50 px-3 py-4 text-sm text-slate-500">No Word forms were found for this module.</p>
+              ) : (
+                catalog.categories.map((category) => (
+                  <div key={category.title} className="rounded-2xl border border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setOpen((state) => ({ ...state, [category.title]: !state[category.title] }))}
+                      className="flex w-full items-center justify-between px-3 py-2 text-left text-sm font-semibold text-slate-800"
+                    >
+                      <span>{category.title}</span>
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">{category.forms.length} forms</span>
+                    </button>
+                    {open[category.title] && (
+                      <div className="space-y-1 px-3 pb-3">
+                        {category.forms.map((form) => (
+                          <label key={form.relativePath} className="flex cursor-pointer items-start gap-2 rounded-lg px-1 py-1 text-sm hover:bg-slate-50">
+                            <input
+                              type="checkbox"
+                              className="mt-1"
+                              checked={!!checked[form.relativePath]}
+                              onChange={() => setChecked((state) => ({ ...state, [form.relativePath]: !state[form.relativePath] }))}
+                            />
+                            <span>{form.displayName}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-card">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-display text-lg font-bold text-slate-900">Forms checklist</h2>
-          <span className="rounded-full bg-brand-mist px-3 py-1 text-xs font-bold text-brand-dark">
-            {selectedCount} selected
-          </span>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {groups.map((group) => (
-            <div key={group.id} className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
-              <div className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-400">{group.label}</div>
-              <div className="space-y-2">
-                {group.forms.map((form) => (
-                  <label
-                    key={form.id}
-                    className="flex cursor-pointer items-start gap-2 rounded-xl bg-white px-3 py-2 text-sm ring-1 ring-slate-100"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={!!checked[form.id]}
-                      onChange={() => toggleForm(form.id)}
-                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-primary"
-                    />
-                    <span>
-                      <span className="font-semibold text-slate-800">{form.id}</span>
-                      <span className="mt-0.5 block text-xs text-slate-500">{form.label}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
+                ))
+              )}
             </div>
-          ))}
-        </div>
-
-        <div className="mt-5 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={handleGenerate}
-            className="rounded-xl bg-gradient-to-r from-brand-dark to-brand-primary px-5 py-2.5 text-sm font-bold text-white shadow-soft hover:opacity-95"
-          >
-            Generate Consent Book
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setChecked({});
-              setSelectedPreset('');
-              setMessage(null);
-            }}
-            className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            Clear
-          </button>
+          </section>
         </div>
       </div>
+
+      <div className="grid gap-4 lg:grid-cols-[1fr_220px]">
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-card">
+          <h2 className="text-xs font-bold uppercase tracking-wide text-slate-500">PDF actions</h2>
+          <p className="mt-1 text-xs text-slate-400">The original Word form is filled, then LibreOffice converts that same file to PDF.</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={generate}
+              disabled={generating}
+              className="rounded-xl bg-[#6d4cc4] px-5 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+            >
+              {generating ? 'Filling Word forms…' : 'Generate & Download PDF'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setChecked({});
+                setPresetId('');
+                setMessage(null);
+              }}
+              className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700"
+            >
+              Clear
+            </button>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <Count label="Total forms selected" value={selectedPaths.length} />
+            <Count label="Estimated pages" value={selectedPaths.length} />
+          </div>
+        </section>
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-card">
+          <h2 className="text-xs font-bold uppercase tracking-wide text-slate-500">Recently generated books (this session)</h2>
+          {recent.length === 0 ? (
+            <p className="mt-3 text-sm text-slate-400">Generated PDFs appear here after you create a PDF book.</p>
+          ) : (
+            <ul className="mt-3 space-y-2 text-sm">
+              {recent.map((item) => (
+                <li key={`${item.when}-${item.name}`} className="rounded-xl bg-slate-50 px-3 py-2">
+                  <div className="font-semibold text-slate-800">{item.name}</div>
+                  <div className="text-xs text-slate-500">{item.forms} forms · {item.when}</div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function Detail({ label, value, extra, wide }: { label: string; value?: string | null; extra?: string; wide?: boolean }) {
+  return (
+    <div className={wide ? 'col-span-2' : undefined}>
+      <dt className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</dt>
+      <dd className="font-semibold text-slate-800">{value || '—'}</dd>
+      {extra ? <dd className="text-xs text-slate-500">{extra}</dd> : null}
+    </div>
+  );
+}
+
+function Count({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl bg-slate-50 px-4 py-3 text-center">
+      <div className="text-2xl font-bold text-[#6d4cc4]">{value}</div>
+      <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</div>
     </div>
   );
 }

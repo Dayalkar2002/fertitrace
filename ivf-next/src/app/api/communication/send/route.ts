@@ -43,7 +43,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `Message dispatched successfully via ${body.channel || 'SMS'}.`,
+      message:
+        (body.channel || 'SMS') === 'SMS'
+          ? 'SMS submitted to the gateway. It can take a minute to reach the phone.'
+          : `Message dispatched successfully via ${body.channel}.`,
       data: record,
     });
   } catch (err) {

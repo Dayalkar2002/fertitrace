@@ -1,7 +1,9 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
+import { usePatient } from '@/contexts/patient-context';
 import { ApiError } from '@/lib/api';
 import {
   deleteMasterPatient,
@@ -91,7 +93,9 @@ function calculateDobFromAge(age: number): string {
 }
 
 export function PatientMasterForm() {
+  const router = useRouter();
   const { token } = useAuth();
+  const { selectPatient } = usePatient();
   const [form, setForm] = useState(emptyForm());
   const [satellites, setSatellites] = useState<LookupItem[]>([]);
   const [doctors, setDoctors] = useState<LookupItem[]>([]);
@@ -655,83 +659,89 @@ export function PatientMasterForm() {
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-slate-200/80">
-            <table className="w-full min-w-[700px] text-left text-xs">
-              <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200/80">
+          <div className="overflow-x-auto rounded-xl border border-[#6b4a2a]/30">
+            <table className="w-full min-w-[1100px] text-left text-xs">
+              <thead className="bg-[#8a5a2b] text-[11px] font-bold uppercase tracking-wide text-white">
                 <tr>
-                  <th className="px-4 py-3">Patient</th>
-                  <th className="px-4 py-3">Category</th>
-                  <th className="px-4 py-3">Spouse / Partner</th>
-                  <th className="px-4 py-3">Address</th>
-                  <th className="px-4 py-3">Registered Date</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
+                  <th className="px-3 py-2.5">Edit</th>
+                  <th className="px-3 py-2.5">Go To</th>
+                  <th className="px-3 py-2.5">Name</th>
+                  <th className="px-3 py-2.5">Category</th>
+                  <th className="px-3 py-2.5">Donation / Recipient Category</th>
+                  <th className="px-3 py-2.5">Donation / Recipient Name</th>
+                  <th className="px-3 py-2.5">Cycle ID</th>
+                  <th className="px-3 py-2.5">Cycle Date</th>
+                  <th className="px-3 py-2.5">Husband Name</th>
+                  <th className="px-3 py-2.5">Address</th>
+                  <th className="px-3 py-2.5">Date of Creation</th>
+                  <th className="px-3 py-2.5">Delete</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {filteredRows.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="group cursor-pointer transition hover:bg-purple-50/30"
-                    onClick={() => void openRowPopup(row)}
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-100 font-bold text-xs text-[#6345A6]">
-                          {getInitials(row.name)}
-                        </div>
-                        <div>
-                          <div className="font-bold text-slate-900 group-hover:text-[#6345A6] transition-colors">
-                            {row.name}
-                          </div>
-                          <div className="text-[10px] text-slate-400 font-medium">
-                            ID: #{row.id}
-                          </div>
-                        </div>
-                      </div>
+                  <tr key={row.id} className="border-t border-[#c5d9a4] bg-[#e7f3c8] hover:bg-[#dcedb0]">
+                    <td className="px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => void selectRow(row)}
+                        className="rounded bg-white px-2 py-1 text-[11px] font-bold text-[#6345A6] ring-1 ring-[#6345A6]/30 hover:bg-purple-50"
+                      >
+                        Edit
+                      </button>
                     </td>
-
-                    <td className="px-4 py-3">
-                      <span className="inline-flex rounded-lg bg-purple-50 px-2.5 py-1 text-[11px] font-semibold text-[#6345A6] border border-purple-200/60">
-                        {row.category || 'Standard Patient'}
-                      </span>
+                    <td className="px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          selectPatient({
+                            id: row.id,
+                            uhid: row.refNo,
+                            name: row.name,
+                            partner: row.husbandName,
+                            age: 0,
+                            gender: '',
+                            aadhar: row.aadhar || '',
+                            satelliteId: row.satId || 0,
+                            mobile: row.mobile,
+                            category: row.category,
+                          });
+                          router.push('/cycle/creation');
+                        }}
+                        className="font-bold text-[#1d4ed8] underline"
+                      >
+                        Cycle
+                      </button>
                     </td>
-
-                    <td className="px-4 py-3 font-medium text-slate-700">
-                      {row.husbandName || '—'}
+                    <td className="px-3 py-2">
+                      <button type="button" onClick={() => void openRowPopup(row)} className="text-left font-semibold text-slate-900 hover:underline">
+                        {row.name}
+                      </button>
                     </td>
-
-                    <td className="px-4 py-3 max-w-xs truncate text-slate-600">
-                      {row.address || '—'}
+                    <td className="px-3 py-2 text-slate-700">{row.category || '-'}</td>
+                    <td className="px-3 py-2 text-slate-700">{row.donationCategory || ''}</td>
+                    <td className="px-3 py-2 text-slate-700">{row.donationName || ''}</td>
+                    <td className="px-3 py-2 font-semibold text-slate-800">{row.cycleId || ''}</td>
+                    <td className="px-3 py-2 text-slate-700">{row.cycleDate || ''}</td>
+                    <td className="px-3 py-2 text-slate-800">{row.husbandName || ''}</td>
+                    <td className="max-w-[220px] truncate px-3 py-2 text-slate-700" title={row.address}>
+                      {row.address || ''}
                     </td>
-
-                    <td className="px-4 py-3 text-slate-500 font-medium">
-                      {formatDate(row.dateOfCreation)}
-                    </td>
-
-                    <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => void selectRow(row)}
-                          className="rounded-lg border border-purple-200 bg-purple-50 px-2.5 py-1 text-[11px] font-bold text-[#6345A6] hover:bg-purple-100 transition"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void deleteRow(row)}
-                          className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-bold text-red-600 hover:bg-red-100 transition"
-                        >
-                          Delete
-                        </button>
-                      </div>
+                    <td className="px-3 py-2 text-slate-700">{formatDate(row.dateOfCreation)}</td>
+                    <td className="px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => void deleteRow(row)}
+                        className="rounded bg-white px-2 py-1 text-[11px] font-bold text-red-700 ring-1 ring-red-200 hover:bg-red-50"
+                      >
+                        Delete
+                      </button>
                     </td>
                   </tr>
                 ))}
 
                 {!filteredRows.length && !loading && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-xs text-slate-500 font-medium">
+                    <td colSpan={12} className="bg-white px-4 py-8 text-center text-xs text-slate-500 font-medium">
                       No patients found matching your search.
                     </td>
                   </tr>

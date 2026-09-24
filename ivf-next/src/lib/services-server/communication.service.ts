@@ -124,6 +124,102 @@ async function dispatchGenericGateway(payload: SendMessagePayload, dltTemplateId
   }
 }
 
+function interpretSmartSms(body: string): { ok: boolean; pending: boolean; message: string; jobId: string } {
+  const text = body.trim();
+  try {
+    const json = JSON.parse(text) as { ErrorCode?: string; ErrorMessage?: string; Message?: string; JobId?: string | null };
+    if (json.ErrorCode !== undefined) {
+      const ok = json.ErrorCode === '000';
+      return {
+        ok,
+        pending: ok,
+        message: ok ? 'SMS submitted to the gateway.' : json.ErrorMessage || 'SMS failed',
+        jobId: json.JobId ? String(json.JobId) : '',
+      };
+    }
+    if (json.Message) return { ok: false, pending: false, message: json.Message, jobId: '' };
+  } catch {
+    /* SMART legacy replies are plain text */
+  }
+  if (text.includes('1|')) {
+    const status = text.split('|')[0];
+    if (status === '1') return { ok: true, pending: true, message: 'SMS submitted to the gateway.', jobId: '' };
+  }
+  if (text === '2') return { ok: false, pending: false, message: 'SMS Service Invalid Credentials', jobId: '' };
+  if (text === '3') return { ok: false, pending: false, message: 'Insufficient SMS Balance', jobId: '' };
+  if (text === '4') return { ok: true, pending: true, message: 'SMS Pending', jobId: '' };
+  if (text === '5') return { ok: false, pending: false, message: 'Invalid SenderId', jobId: '' };
+  if (!text) return { ok: false, pending: false, message: 'Empty SMS gateway response', jobId: '' };
+  return { ok: false, pending: false, message: text.slice(0, 180), jobId: '' };
+}
+
+async function readGatewayDelivery(origin: string, apiKey: string, jobId: string): Promise<string> {
+  const report = new URL('/api/mt/GetDelivery', origin);
+  report.searchParams.set('APIKey', apiKey);
+  report.searchParams.set('jobid', jobId);
+  const res = await fetch(report.toString(), { method: 'GET' });
+  const body = await res.text();
+  try {
+    const json = JSON.parse(body) as { DeliveryReports?: { DeliveryStatus?: string }[] };
+    return json.DeliveryReports?.[0]?.DeliveryStatus || '';
+  } catch {
+    return '';
+  }
+}
+
+function gatewayMessage(body: string): string {
+  const text = body.trim();
+  try {
+    const json = JSON.parse(text) as { Message?: string; message?: string };
+    return String(json.Message || json.message || text).slice(0, 180);
+  } catch {
+    return text.slice(0, 180);
+  }
+}
+
+/** SMART sends a GET with the mobile on `number`, the wording on `text`, and `route=31`. */
+async function dispatchLegacySmartSms(payload: SendMessagePayload, baseUrl: string): Promise<{ pending: boolean }> {
+  const mobile = payload.recipient.replace(/\D/g, '').slice(-10);
+  if (mobile.length < 10) throw new Error('Enter a 10 digit patient phone number.');
+
+  const url = new URL(baseUrl);
+  if (!url.searchParams.get('APIKey') && !url.searchParams.get('apikey') && !url.searchParams.get('username')) {
+    throw new Error('SMART SMS URL is missing the API key.');
+  }
+  url.searchParams.set('number', mobile);
+  url.searchParams.set('text', payload.messageText);
+  url.searchParams.set('route', '31');
+  const templateId =
+    payload.templateId?.trim() ||
+    (payload.messageText.includes('Semen Analysis') ? '1707161788814128413' : '');
+  if (templateId) url.searchParams.set('DLTtemplateid', templateId);
+
+  const res = await fetch(url.toString(), {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+  });
+  const body = await res.text();
+  if (!res.ok) throw new Error(gatewayMessage(body) || 'SMART SMS gateway failed.');
+  const parsed = interpretSmartSms(body);
+  if (!parsed.ok) throw new Error(parsed.message);
+  const apiKey = url.searchParams.get('APIKey') || url.searchParams.get('apikey') || '';
+  if (!parsed.jobId || !apiKey) return { pending: true };
+
+  let delivery = '';
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    delivery = await readGatewayDelivery(url.origin, apiKey, parsed.jobId);
+    if (delivery && delivery !== 'Pending' && delivery !== 'Submitted') break;
+  }
+  if (delivery === 'Delivered') return { pending: false };
+  if (delivery === 'Undelivered' || delivery === 'Failed' || delivery === 'NDNC') {
+    throw new Error(
+      `The operator marked this SMS ${delivery}. It will not reach the phone. Sender IVCRFT on this SMS account needs to be checked with the gateway provider.`
+    );
+  }
+  return { pending: true };
+}
+
 async function dispatchEmail(payload: SendMessagePayload): Promise<void> {
   const emailUrl = process.env.EMAIL_GATEWAY_URL?.trim();
   if (!emailUrl) return;
@@ -158,10 +254,18 @@ export async function sendMessage(payload: SendMessagePayload): Promise<Communic
       await dispatchEmail(payload);
     } else if (payload.channel === 'WhatsApp') {
       await dispatchNukeliteWhatsApp(payload);
-    } else if (provider === 'smartping' && gatewayConfigured()) {
-      await dispatchSmartping(payload, dltTemplateId);
-    } else if (gatewayConfigured()) {
-      await dispatchGenericGateway(payload, dltTemplateId);
+    } else {
+      const smartSmsUrl = process.env.SMART_SMS_URL?.trim();
+      if (smartSmsUrl) {
+        const result = await dispatchLegacySmartSms(payload, smartSmsUrl);
+        if (result.pending) status = 'Pending';
+      } else if (provider === 'smartping' && gatewayConfigured()) {
+        await dispatchSmartping(payload, dltTemplateId);
+      } else if (gatewayConfigured()) {
+        await dispatchGenericGateway(payload, dltTemplateId);
+      } else {
+        throw new Error('SMART SMS is not configured. Set SMART_SMS_URL to the same gateway SMART uses.');
+      }
     }
   } catch (gatewayErr) {
     console.error('Communication dispatch error:', gatewayErr);

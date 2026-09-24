@@ -11,6 +11,11 @@ export interface PatientMasterRow {
   husbandName: string;
   address: string;
   dateOfCreation: string | null;
+  donationCategory?: string;
+  donationName?: string;
+  cycleId?: string;
+  cycleDate?: string;
+  satId?: number;
   aadhar?: string;
   husbandAadhar?: string;
   mobile?: string;

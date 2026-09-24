@@ -69,6 +69,30 @@ export const ET_CELLER_OPTIONS = [
   { id: 10, name: 'Multi Celler' },
 ];
 
+export const BT_EXPANSION_OPTIONS = [
+  { id: 0, name: 'Select' },
+  { id: 1, name: '1 Blastocoel cavity less than half the volume of the embryo.' },
+  { id: 2, name: '2 Blastocoel cavity more than half the volume of the embryo.' },
+  { id: 3, name: '3 Full blastocyst, cavity completely filling the embryo.' },
+  { id: 4, name: '4 Expanded blastocyst, cavity larger than the embryo, with thinning of the shell.' },
+  { id: 5, name: '5 Hatching out of the shell.' },
+  { id: 6, name: '6 Hatched out of the shell' },
+];
+
+export const BT_ICM_OPTIONS = [
+  { id: 0, name: 'Select' },
+  { id: 1, name: 'Grade A, Many Cells, tightly packed' },
+  { id: 2, name: 'Grade B, Several Cells, loosely grouped' },
+  { id: 3, name: 'Grade C, Very few cells' },
+];
+
+export const BT_TE_OPTIONS = [
+  { id: 0, name: 'Select' },
+  { id: 1, name: 'Grade A, Many cells, forming a cohesive layer' },
+  { id: 2, name: 'Grade B, Few Cells, forming a loose epithelium' },
+  { id: 3, name: 'Grade C, Very few large cells' },
+];
+
 export const ET_GRADE_OPTIONS = [
   { id: 0, name: 'Select' },
   { id: 1, name: 'Grade I' },

@@ -13,6 +13,9 @@ import {
   toDateInput,
 } from '@/lib/services/clinical-modules';
 import {
+  BT_EXPANSION_OPTIONS,
+  BT_ICM_OPTIONS,
+  BT_TE_OPTIONS,
   ET_ACTION_OPTIONS,
   ET_CELLER_OPTIONS,
   ET_GRADE_OPTIONS,
@@ -137,6 +140,7 @@ function applyTransferRecord(
     source: String(row[`${prefix}Source`] || row.source || 'IVF'),
     celler: Number(row[`${prefix}Celler`] || row.celler || 0),
     grade: Number(row[`${prefix}Grade`] || row.grade || 0),
+    teGrade: Number(row[`${prefix}TEGrade`] || row.BTTEGrade || row.teGrade || 0),
     action: Number(row[`${prefix}Action`] || row.action || 0),
     remark: String(row[`${prefix}Remark`] || row.remark || ''),
     location: String(row[`${prefix}Location`] || row.location || ''),
@@ -456,8 +460,9 @@ export function TransferEntryForm({ module }: TransferEntryFormProps) {
                         <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
                           <tr>
                             <th className="px-2 py-2">Source</th>
-                            <th className="px-2 py-2">Celler</th>
-                            <th className="px-2 py-2">Grade</th>
+                            <th className="px-2 py-2">{module === 'et' ? 'Celler' : 'Expansion grade'}</th>
+                            <th className="px-2 py-2">{module === 'et' ? 'Grade' : 'ICM Grade'}</th>
+                            {module === 'bt' ? <th className="px-2 py-2">TE Grade</th> : null}
                             <th className="px-2 py-2">Action</th>
                             <th className="px-2 py-2">Location</th>
                             <th className="px-2 py-2">Remark</th>
@@ -472,7 +477,7 @@ export function TransferEntryForm({ module }: TransferEntryFormProps) {
                               </td>
                               <td className="px-2 py-1">
                                 <select value={row.celler ?? 0} onChange={(e) => setGridRows((rows) => rows.map((r, i) => (i === index ? { ...r, celler: Number(e.target.value) } : r)))} className={inputCls}>
-                                  {ET_CELLER_OPTIONS.map((c) => (
+                                  {(module === 'et' ? ET_CELLER_OPTIONS : BT_EXPANSION_OPTIONS).map((c) => (
                                     <option key={c.id} value={c.id}>
                                       {c.name}
                                     </option>
@@ -481,13 +486,24 @@ export function TransferEntryForm({ module }: TransferEntryFormProps) {
                               </td>
                               <td className="px-2 py-1">
                                 <select value={row.grade ?? 0} onChange={(e) => setGridRows((rows) => rows.map((r, i) => (i === index ? { ...r, grade: Number(e.target.value) } : r)))} className={inputCls}>
-                                  {ET_GRADE_OPTIONS.map((g) => (
+                                  {(module === 'et' ? ET_GRADE_OPTIONS : BT_ICM_OPTIONS).map((g) => (
                                     <option key={g.id} value={g.id}>
                                       {g.name}
                                     </option>
                                   ))}
                                 </select>
                               </td>
+                              {module === 'bt' ? (
+                                <td className="px-2 py-1">
+                                  <select value={row.teGrade ?? 0} onChange={(e) => setGridRows((rows) => rows.map((r, i) => (i === index ? { ...r, teGrade: Number(e.target.value) } : r)))} className={inputCls}>
+                                    {BT_TE_OPTIONS.map((g) => (
+                                      <option key={g.id} value={g.id}>
+                                        {g.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </td>
+                              ) : null}
                               <td className="px-2 py-1">
                                 <select value={row.action ?? 0} onChange={(e) => setGridRows((rows) => rows.map((r, i) => (i === index ? { ...r, action: Number(e.target.value) } : r)))} className={inputCls}>
                                   {ET_ACTION_OPTIONS.map((a) => (

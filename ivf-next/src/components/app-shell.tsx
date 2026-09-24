@@ -113,12 +113,12 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <>
-      <div className="flex min-h-screen bg-[#f4f6fa] text-slate-800">
+      <div className="flex h-screen overflow-hidden bg-[#f4f6fa] text-slate-800">
         {/* Left Dark Navy Sidebar */}
         <aside
           className={`${
             sidebarOpen ? 'w-[250px]' : 'w-0'
-          } shrink-0 overflow-hidden transition-all duration-200 z-30 print:hidden`}
+          } sticky top-0 h-screen shrink-0 overflow-hidden transition-all duration-200 z-30 print:hidden`}
         >
           <div className="flex h-full w-[250px] flex-col bg-[#181d38] text-white">
             {/* Sidebar Brand Header */}
@@ -251,12 +251,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         </aside>
 
         {/* Main Content Workspace */}
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
           {/* Top Navbar */}
           <header className="sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm print:hidden">
             <div className="flex items-center justify-between px-4 py-2.5 md:px-5">
               {/* Left Side: Logo & Menu Toggle */}
-              <div className="flex items-center gap-3 md:gap-4">
+              <div className="flex min-w-0 flex-1 items-center gap-3 md:gap-4">
                 <button
                   type="button"
                   onClick={() => dispatch(toggleSidebar())}
@@ -286,7 +286,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </Link>
 
                 {/* Top Navigation Bar */}
-                <div className="ml-2 hidden lg:block">
+                <div className="ml-2 hidden min-w-0 flex-1 lg:flex">
                   <TopNav />
                 </div>
               </div>
@@ -299,32 +299,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                   className="hidden rounded-xl border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-semibold text-[#6b46c1] hover:bg-purple-100 sm:inline-flex"
                 >
                   {selectedPatient ? 'Change Patient' : 'Select Patient'}
-                </button>
-
-                {/* Notification Bell */}
-                <button
-                  type="button"
-                  className="relative flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition"
-                  aria-label="Notifications"
-                >
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                  </svg>
-                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white shadow-sm">
-                    5
-                  </span>
-                </button>
-
-                {/* Help Button */}
-                <button
-                  type="button"
-                  className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
-                >
-                  <div className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-100 text-slate-600 text-[10px] font-bold">
-                    ?
-                  </div>
-                  <span>Help</span>
                 </button>
 
                 {/* User Dropdown */}

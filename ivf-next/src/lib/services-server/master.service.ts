@@ -1,4 +1,5 @@
 import { executeDRL, executeDML, buildParams, executeText } from '@/lib/db/spExecutor';
+import { formatSmartDate, rowNum, rowVal } from '@/lib/db/row';
 import { getCommonMasterByCatId } from './master-registry';
 
 const COMMON_SP = 'spCommonMaster';
@@ -200,8 +201,102 @@ function mapPatientRow(row: Record<string, unknown>) {
     husbandName: String(row.PatHusbName ?? ''),
     address: String(row.PatAddress ?? ''),
     dateOfCreation: row.PatDateOfCreation ?? null,
+    donationCategory: String(row.DonationCategory ?? ''),
+    donationName: String(row.DonationName ?? ''),
+    cycleId: String(row.LatestCycID ?? row.CycID ?? ''),
+    cycleDate: String(row.CycleMonthYear ?? ''),
+    satId: Number(row.SatID ?? row.SatId ?? 0) || 0,
+    mobile: String(row.PatMobileNo ?? ''),
+    aadhar: String(row.PatAdhar ?? ''),
     raw: row,
   };
+}
+
+async function enrichPatientGrid<T extends ReturnType<typeof mapPatientRow>>(rows: T[]): Promise<T[]> {
+  if (!rows.length) return rows;
+  const byId = new Map(rows.map((row) => [row.id, row]));
+
+  try {
+    const cycles = await executeText<Record<string, unknown>>(
+      `SELECT o.PatID, o.CycID, o.CycODate
+       FROM CycOutCome o
+       INNER JOIN (
+         SELECT PatID, MAX(CycOID) AS MaxOid
+         FROM CycOutCome
+         GROUP BY PatID
+       ) latest ON latest.PatID = o.PatID AND latest.MaxOid = o.CycOID`,
+      []
+    );
+    for (const cycle of cycles.recordset || []) {
+      const row = byId.get(rowNum(cycle, 'PatID'));
+      if (!row) continue;
+      row.cycleId = rowVal(cycle, 'CycID');
+      row.cycleDate = formatSmartDate(cycle.CycODate ?? cycle.CycDate);
+    }
+  } catch {
+    /* cycle columns stay blank when the outcome table is unavailable */
+  }
+
+  const donated = new Map<number, string[]>();
+  const received = new Map<number, string[]>();
+  try {
+    const donors = await executeText<Record<string, unknown>>(
+      `SELECT r.PatID, LTRIM(RTRIM(ISNULL(rec.PatName, ''))) AS RecipientName
+       FROM CycRetrieval r
+       INNER JOIN PatientMaster rec ON rec.PatID = r.CycRURcptPatID
+       WHERE r.CycRFromDonor = 1 AND r.CycRUToRcpt = 1 AND r.CycRURcptPatID > 0`,
+      []
+    );
+    for (const item of donors.recordset || []) {
+      const name = rowVal(item, 'RecipientName');
+      const patId = rowNum(item, 'PatID');
+      if (!name || !patId) continue;
+      const list = donated.get(patId) || [];
+      if (!list.includes(name)) list.push(name);
+      donated.set(patId, list);
+    }
+  } catch {
+    /* donation names are optional */
+  }
+
+  try {
+    const recipients = await executeText<Record<string, unknown>>(
+      `SELECT r.CycRURcptPatID AS PatID, LTRIM(RTRIM(ISNULL(d.PatName, ''))) AS DonorName
+       FROM CycRetrieval r
+       INNER JOIN PatientMaster d ON d.PatID = r.CycRDonPatID
+       WHERE r.CycRDonPatID > 0 AND r.CycRURcptPatID > 0`,
+      []
+    );
+    for (const item of recipients.recordset || []) {
+      const name = rowVal(item, 'DonorName');
+      const patId = rowNum(item, 'PatID');
+      if (!name || !patId) continue;
+      const list = received.get(patId) || [];
+      if (!list.includes(name)) list.push(name);
+      received.set(patId, list);
+    }
+  } catch {
+    /* recipient names are optional */
+  }
+
+  for (const row of rows) {
+    const categories: string[] = [];
+    const names: string[] = [];
+    const got = received.get(row.id) || [];
+    const gave = donated.get(row.id) || [];
+    if (got.length) {
+      categories.push('Received from');
+      names.push(...got);
+    }
+    if (gave.length) {
+      categories.push('Donated to');
+      names.push(...gave);
+    }
+    if (categories.length) row.donationCategory = categories.join(' | ');
+    if (names.length) row.donationName = names.join(' | ');
+  }
+
+  return rows;
 }
 
 function mapPatientDetail(row: Record<string, unknown>) {
@@ -239,7 +334,7 @@ function mapPatientDetail(row: Record<string, unknown>) {
 export async function listPatients(payload: Record<string, unknown> = {}) {
   const params = buildPatientParams(defaultPatientPayload(payload), 1);
   const result = await executeDRL<Record<string, unknown>>(PATIENT_SP, params);
-  return (result.recordset || []).map(mapPatientRow);
+  return enrichPatientGrid((result.recordset || []).map(mapPatientRow));
 }
 
 export async function getPatientById(patId: number) {

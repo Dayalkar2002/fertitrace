@@ -76,7 +76,7 @@ export function TopNav() {
   }, [filteredColumns]);
 
   return (
-    <nav ref={navRef} className="hidden flex-1 items-center gap-1.5 xl:flex">
+    <nav ref={navRef} className="flex min-w-0 flex-1 items-center gap-1">
       {TOP_NAV_MENUS.map((menu) => {
         const currentChild = activeChildLabel(menu);
         return (
@@ -84,7 +84,7 @@ export function TopNav() {
           {menu.route && !hasDropdown(menu) ? (
             <Link
               href={menu.route}
-              className={`whitespace-nowrap inline-flex items-center rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
+              className={`whitespace-nowrap inline-flex items-center rounded-xl px-2.5 py-2 text-xs font-bold transition-all ${
                 isActive(menu)
                   ? 'bg-purple-100 text-[#6345A6] shadow-2xs font-extrabold'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
@@ -97,7 +97,7 @@ export function TopNav() {
               <button
                 type="button"
                 onClick={() => setOpenMenu(openMenu === menu.label ? null : menu.label)}
-                className={`whitespace-nowrap inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
+                className={`whitespace-nowrap inline-flex items-center gap-1 rounded-xl px-2.5 py-2 text-xs font-bold transition-all ${
                   openMenu === menu.label || isActive(menu)
                     ? 'bg-purple-100 text-[#6345A6] shadow-2xs font-extrabold'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'

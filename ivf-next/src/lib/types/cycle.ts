@@ -124,6 +124,8 @@ export interface RetrievalRow {
   total?: number | null;
   recipientPatientId?: number | null;
   recipientCycleId?: string;
+  recipientName?: string;
+  fromDonor?: string;
 }
 
 export interface FreezeOocyteRow {

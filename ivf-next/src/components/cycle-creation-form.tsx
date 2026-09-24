@@ -3,15 +3,18 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { PatientRequired, usePatientIds } from '@/components/clinical/clinical-shared';
+import { CycleMonitoringChart } from '@/components/cycle-monitoring-chart';
 import { useAuth } from '@/contexts/auth-context';
 import { ApiError } from '@/lib/api';
 import {
   CYCLE_CREATION_STORAGE_KEY,
   CYCLE_CREATION_TYPES,
   getMonitoringSheetLabel,
+  IUI_TREATMENT_OPTIONS,
   isMonitoringSheetAllowed,
   MONITORING_SHEET_OPTIONS,
   monitoringSheetHint,
+  requiresMonitoringSheet,
   TREATMENT_TYPES,
 } from '@/lib/cycle-utils';
 import { listPatientCycles, previewCycleId, saveCycleCreation } from '@/lib/services/cycles';
@@ -42,11 +45,29 @@ export function CycleCreationForm() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (cycleType === 'IUI') {
+      setTreatmentType((current) =>
+        IUI_TREATMENT_OPTIONS.some((item) => item.value === current) ? current : 'SingleHusband'
+      );
+      setMonitoringSheet('IUI');
+      return;
+    }
     if (cycleType === 'FET' || cycleType === 'FrozenOocytes' || cycleType === 'ThawOocytes') {
       setTreatmentType('Frozen');
+    } else if (IUI_TREATMENT_OPTIONS.some((item) => item.value === treatmentType)) {
+      setTreatmentType('Fresh');
     }
     setMonitoringSheet((current) => (isMonitoringSheetAllowed(cycleType, current) ? current : ''));
   }, [cycleType]);
+
+  useEffect(() => {
+    if (cycleType !== 'IUI') return;
+    if (!requiresMonitoringSheet(cycleType, treatmentType)) {
+      setMonitoringSheet('');
+      return;
+    }
+    setMonitoringSheet('IUI');
+  }, [cycleType, treatmentType]);
 
   useEffect(() => {
     if (!token) return;
@@ -91,7 +112,7 @@ export function CycleCreationForm() {
       setError('Start date is required.');
       return;
     }
-    if (!monitoringSheet) {
+    if (requiresMonitoringSheet(cycleType, treatmentType) && !monitoringSheet) {
       setError('Select a Monitoring Sheet option.');
       return;
     }
@@ -261,13 +282,19 @@ export function CycleCreationForm() {
                 <select
                   value={treatmentType}
                   onChange={(e) => setTreatmentType(e.target.value)}
-                  className={`${fieldCls} max-w-[180px]`}
+                  className={`${fieldCls} ${cycleType === 'IUI' ? 'max-w-[280px]' : 'max-w-[180px]'}`}
                 >
-                  {TREATMENT_TYPES.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
+                  {cycleType === 'IUI'
+                    ? IUI_TREATMENT_OPTIONS.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.group} · {item.label}
+                        </option>
+                      ))
+                    : TREATMENT_TYPES.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.label}
+                        </option>
+                      ))}
                 </select>
               </div>
             </div>
@@ -314,7 +341,7 @@ export function CycleCreationForm() {
               <div className="min-w-0 flex-1 space-y-2">
                 <div className="flex flex-wrap gap-x-6 gap-y-2">
                   {MONITORING_SHEET_OPTIONS.map((item) => {
-                    const allowed = isMonitoringSheetAllowed(cycleType, item.value);
+                    const allowed = isMonitoringSheetAllowed(cycleType, item.value, treatmentType);
                     return (
                       <label
                         key={item.value}
@@ -338,9 +365,11 @@ export function CycleCreationForm() {
                     );
                   })}
                 </div>
-                <p className="text-[11px] text-slate-500">{monitoringSheetHint(cycleType)}</p>
+                <p className="text-[11px] text-slate-500">{monitoringSheetHint(cycleType, treatmentType)}</p>
               </div>
             </div>
+
+            {monitoringSheet ? <CycleMonitoringChart option={monitoringSheet} cycleId={cycleId || 'draft'} /> : null}
 
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
               <label className={labelCls}>Notes</label>

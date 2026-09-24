@@ -1,4 +1,4 @@
-import { executeDRL, buildParams } from '@/lib/db/spExecutor';
+import { executeDRL, executeText, buildParams } from '@/lib/db/spExecutor';
 import * as patientService from './patient.service';
 
 const PRESETS = [
@@ -48,6 +48,42 @@ const FORM_GROUPS = [
   },
 ];
 
+export function clinicProfile() {
+  return {
+    name: process.env.CONSENT_CLINIC_NAME || 'IVF CRAAFT India Pvt. Ltd.',
+    address:
+      process.env.CONSENT_CLINIC_ADDRESS ||
+      '301, Krimson Park, Near Corporation Bank, S.V.Road, Amboli Naka Andheri(W), Mumbai-400058',
+    consultant1: process.env.CONSENT_CONSULTANT1 || 'Dr. Sanjay Kumar Pagare',
+    consultant2: process.env.CONSENT_CONSULTANT2 || 'Dr. Satish Kumar Sharma',
+    consultant1Reg: process.env.CONSENT_CONSULTANT1_REG || 'MMC/8765',
+    consultant2Reg: process.env.CONSENT_CONSULTANT2_REG || 'MMC/63291',
+    consultantAddress:
+      process.env.CONSENT_CONSULTANT_ADDRESS ||
+      '301, Krimson Park, Near Corporation Bank, S.V.Road, Amboli Naka Andheri(W), Mumbai-400058',
+    consultantReg: process.env.CONSENT_CONSULTANT_REG || 'MMC/8765',
+    facilityType: process.env.CONSENT_FACILITY_TYPE || 'ART CLINIC Level 2',
+    artRegNo: process.env.CONSENT_ART_REG_NO || 'MH/AC/2022/12195/L2/Andheri/97',
+    pcpndtRegNo: process.env.CONSENT_PCPNDT_REG_NO || 'AMC/Health/PCPNDT/3234/2024',
+    ...witnessParts(),
+  };
+}
+
+function witnessParts() {
+  const name = process.env.CONSENT_WITNESS_NAME?.trim() || '';
+  const address = process.env.CONSENT_WITNESS_ADDRESS?.trim() || '';
+  if (name || address) return { witnessName: name, witnessAddress: address };
+  const combined =
+    process.env.CONSENT_WITNESS_NAME_ADDRESS ||
+    'Mr./Mrs./Ms: Hetal Jayesh Marfatia, Room No9, Suresh Nagar, Seven Hills Road, Chatrapati Sambhajinagar, Maharashtra, India';
+  const comma = combined.indexOf(',');
+  if (comma < 0) return { witnessName: combined.trim(), witnessAddress: '' };
+  return {
+    witnessName: combined.slice(0, comma).trim(),
+    witnessAddress: combined.slice(comma + 1).trim(),
+  };
+}
+
 export function getPresets() {
   return PRESETS;
 }
@@ -66,6 +102,40 @@ export function resolvePreset(presetId: string | number) {
     ...(preset.misc || '').split(',').map((s) => s.trim()).filter(Boolean),
   ];
   return { ...preset, selected };
+}
+
+async function loadConsentIdentity(patId: number) {
+  const empty = { uhid: '', aadhar: '', maleAadhar: '', dob: '', registrationNo: '', diagnosis: '', referredBy: '' };
+  if (!patId) return empty;
+  try {
+    const result = await executeText<Record<string, unknown>>(
+      `SELECT TOP 1
+          p.PatRefNo,
+          CONVERT(varchar(10), p.PatDob, 103) AS PatDob,
+          LTRIM(RTRIM(ISNULL(p.PatAdhar, ''))) AS PatAdhar,
+          LTRIM(RTRIM(ISNULL(p.PatHusbAdhar, ''))) AS PatHusbAdhar,
+          LTRIM(RTRIM(ISNULL(diag.CommName, ''))) AS DiagName,
+          LTRIM(RTRIM(ISNULL(refBy.CommName, ''))) AS RefName
+        FROM PatientMaster p
+        LEFT JOIN CommonMaster diag ON diag.CommID = p.DiagID
+        LEFT JOIN CommonMaster refBy ON refBy.CommID = p.RefID
+        WHERE p.PatID = @PatID`,
+      [{ name: '@PatID', value: patId }]
+    );
+    const row = result.recordset?.[0];
+    if (!row) return empty;
+    return {
+      uhid: `IVF${patId}`,
+      aadhar: String(row.PatAdhar || ''),
+      maleAadhar: String(row.PatHusbAdhar || ''),
+      dob: String(row.PatDob || ''),
+      registrationNo: String(row.PatRefNo || ''),
+      diagnosis: String(row.DiagName || ''),
+      referredBy: String(row.RefName || ''),
+    };
+  } catch {
+    return { ...empty, uhid: `IVF${patId}` };
+  }
 }
 
 export async function searchConsentPatients({ search = '', satelliteId = 0 }: { search?: string; satelliteId?: number }) {
@@ -91,27 +161,28 @@ export async function getPatientConsentContext({ patId, satId }: { patId: number
     cycles = [];
   }
 
+  const identity = await loadConsentIdentity(Number(patId));
   return {
     patient: {
       id: patient.id,
       name: patient.name,
       partner: patient.partner,
-      uhid: patient.uhid,
+      uhid: identity.uhid || `IVF${patient.id}`,
       age: patient.age,
-      aadhar: patient.aadhar,
+      aadhar: identity.aadhar || patient.aadhar,
+      maleAadhar: identity.maleAadhar,
       mobile: patient.mobile,
       email: patient.email,
       address: patient.address,
       city: patient.city,
       category: patient.category,
       satelliteId: patient.satelliteId,
+      dob: identity.dob,
+      registrationNo: identity.registrationNo,
+      diagnosis: identity.diagnosis,
+      referredBy: identity.referredBy,
     },
     cycles,
-    clinic: {
-      name: process.env.CONSENT_CLINIC_NAME || 'IVF Clinic',
-      address: process.env.CONSENT_CLINIC_ADDRESS || '',
-      consultant1: process.env.CONSENT_CONSULTANT1 || '',
-      consultant2: process.env.CONSENT_CONSULTANT2 || '',
-    },
+    clinic: clinicProfile(),
   };
 }

@@ -97,6 +97,7 @@ export const MONITORING_SHEET_OPTIONS = [
   { value: 'Antagonist', label: 'Antagonist Cycle' },
   { value: 'HRT', label: 'HRT Cycle' },
   { value: 'ModifiedHRT', label: 'Modified Natural Cycle' },
+  { value: 'IUI', label: 'IUI Monitoring Sheet' },
 ] as const;
 
 export type MonitoringSheetOption = (typeof MONITORING_SHEET_OPTIONS)[number]['value'];
@@ -109,6 +110,20 @@ export const CYCLE_CREATION_TYPES = [
   { value: 'ER', label: 'Embryo Recipient (ER)' },
   { value: 'OD', label: 'Oocyte Donor (OD)' },
   { value: 'OR', label: 'Oocyte Recipient (OR)' },
+  { value: 'IUI', label: 'IUI' },
+] as const;
+
+/** IUI treatment choices from the IUI cycle creation Excel. HSA and SQA have no monitoring sheet. */
+export const IUI_TREATMENT_OPTIONS = [
+  { value: 'HSA', label: 'H S A', group: 'Fresh', monitoring: false },
+  { value: 'SQA', label: 'SQA', group: 'Fresh', monitoring: false },
+  { value: 'SingleHusband', label: 'Single Husband', group: 'Fresh', monitoring: true },
+  { value: 'DoubleHusband', label: 'Double Husband', group: 'Fresh', monitoring: true },
+  { value: 'FMTIC', label: 'FM/TIC', group: 'Fresh', monitoring: true },
+  { value: 'ThawHusbandSingle', label: 'Thaw Husband single', group: 'Frozen', monitoring: true },
+  { value: 'ThawHusbandDouble', label: 'Thaw Husband Double', group: 'Frozen', monitoring: true },
+  { value: 'ThawDonorSingle', label: 'Thaw Donor Single', group: 'Frozen', monitoring: true },
+  { value: 'ThawDonorDouble', label: 'Thaw Donor Double', group: 'Frozen', monitoring: true },
 ] as const;
 
 export type SmartCycleType = (typeof CYCLE_CREATION_TYPES)[number]['value'];
@@ -175,10 +190,20 @@ export function normalizeCycleType(value: string | undefined | null): SmartCycle
   if (v === 'donor_oocyte') return 'OD';
   if (v === 'oocyte_recipient') return 'OR';
   if (v === 'embryo_recipient') return 'ER';
-  if (v === 'Fresh' || v === 'FET' || v === 'FrozenOocytes' || v === 'ThawOocytes' || v === 'OD' || v === 'OR' || v === 'ER') {
+  if (
+    v === 'Fresh' ||
+    v === 'FET' ||
+    v === 'FrozenOocytes' ||
+    v === 'ThawOocytes' ||
+    v === 'OD' ||
+    v === 'OR' ||
+    v === 'ER' ||
+    v === 'IUI'
+  ) {
     return v;
   }
   const lower = v.toLowerCase();
+  if (lower === 'iui') return 'IUI';
   if (lower.includes('embryo rec') || lower.startsWith('er ') || lower.startsWith('er(') || lower.startsWith('er -')) return 'ER';
   if (lower.includes('oocyte rec') || lower.startsWith('or ') || lower.startsWith('or(') || lower.startsWith('or -')) return 'OR';
   if (lower.includes('oocyte don') || lower.startsWith('od ') || lower.startsWith('od(')) return 'OD';
@@ -215,13 +240,39 @@ export function isHrtMonSheetCycle(cycleType: string | undefined | null): boolea
   return type === 'FET' || type === 'ThawOocytes' || type === 'OR' || type === 'ER';
 }
 
-export function isMonitoringSheetAllowed(cycleType: string | undefined | null, option: string): boolean {
+export function iuiTreatmentUsesSheet(treatmentType: string | undefined | null): boolean {
+  const match = IUI_TREATMENT_OPTIONS.find((item) => item.value === treatmentType);
+  return match ? match.monitoring : true;
+}
+
+export function requiresMonitoringSheet(cycleType: string | undefined | null, treatmentType?: string): boolean {
+  if (normalizeCycleType(cycleType) === 'IUI') return iuiTreatmentUsesSheet(treatmentType);
+  return true;
+}
+
+export function isMonitoringSheetAllowed(
+  cycleType: string | undefined | null,
+  option: string,
+  treatmentType?: string
+): boolean {
+  const type = normalizeCycleType(cycleType);
+  if (type === 'IUI') {
+    if (!iuiTreatmentUsesSheet(treatmentType)) return false;
+    return option === 'IUI';
+  }
+  if (option === 'IUI') return false;
   if (isStimulationMonSheetCycle(cycleType)) return option === 'Agonist' || option === 'Antagonist';
   if (isHrtMonSheetCycle(cycleType)) return option === 'HRT' || option === 'ModifiedHRT';
   return false;
 }
 
-export function monitoringSheetHint(cycleType: string | undefined | null): string {
+export function monitoringSheetHint(cycleType: string | undefined | null, treatmentType?: string): string {
+  if (normalizeCycleType(cycleType) === 'IUI') {
+    if (!iuiTreatmentUsesSheet(treatmentType)) {
+      return 'H S A and SQA do not use an IUI monitoring sheet.';
+    }
+    return 'IUI uses the IUI Monitoring Sheet. Fill the day rows on this screen.';
+  }
   if (isStimulationMonSheetCycle(cycleType)) {
     return 'Select Agonist or Antagonist (HRT options blocked for this cycle).';
   }
@@ -240,6 +291,7 @@ export function isFrozenCycleType(cycleType: string | undefined | null, treatmen
 export function defaultSemenSource(cycleType: string | undefined | null, treatmentType?: string): string {
   const type = normalizeCycleType(cycleType);
   const frozen = isFrozenCycleType(type, treatmentType);
+  if (type === 'IUI') return '';
   if (type === 'ER') return 'donor_cryo';
   if (type === 'OD') return '';
   if (frozen) return 'husband_cryo';
@@ -248,7 +300,7 @@ export function defaultSemenSource(cycleType: string | undefined | null, treatme
 
 export function allowedSemenSources(cycleType: string | undefined | null, treatmentType?: string): string[] {
   const type = normalizeCycleType(cycleType);
-  if (type === 'OD') return [];
+  if (type === 'IUI' || type === 'OD') return [];
   if (type === 'ER') return ['donor_cryo'];
   if (type === 'OR') return ['husband_fresh', 'husband_cryo'];
   if (isFrozenCycleType(type, treatmentType) && type !== 'FrozenOocytes') {
@@ -325,6 +377,14 @@ export function getRetrievalLayout(cycleType: string | undefined | null) {
         showFreezeOocytes: true,
         lockOocyteDonation: true,
       },
+    };
+  }
+  if (type === 'IUI') {
+    return {
+      ...base,
+      showOocyteRadios: false,
+      showSemenRadios: false,
+      retrievalChoice: 'none' as const,
     };
   }
   if (type === 'OR') {

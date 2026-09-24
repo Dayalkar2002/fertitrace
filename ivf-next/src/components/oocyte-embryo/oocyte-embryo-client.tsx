@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { usePatientIds } from '@/components/clinical/clinical-shared';
 import { ApiError } from '@/lib/api';
 import { loadOocyteEmbryoOverview } from '@/lib/services/oocyte-embryo';
-import { ET_ACTION_OPTIONS } from '@/lib/services/iui';
+import { BT_EXPANSION_OPTIONS, BT_ICM_OPTIONS, ET_ACTION_OPTIONS } from '@/lib/services/iui';
 import { readRetrievalSnapshot, type CycleRetrievalSnapshot } from '@/lib/cycle-snapshot';
 import type { EtEmbryoRow, LabSource, OocyteItem, SourceSummary } from '@/lib/types/oocyte-embryo';
 
@@ -15,6 +15,7 @@ export type OocyteEmbryoTab =
   | 'fertilization'
   | 'embryo-culture'
   | 'embryo-transfer'
+  | 'blastocyst-transfer'
   | 'cryopreservation'
   | 'thaw'
   | 'embryo-disposition';
@@ -255,7 +256,7 @@ export function OocyteEmbryoClient() {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get('tab');
-      if (tabParam && ['oocytes', 'fertilization', 'embryo-culture', 'embryo-transfer', 'cryopreservation', 'thaw', 'embryo-disposition'].includes(tabParam)) {
+      if (tabParam && ['oocytes', 'fertilization', 'embryo-culture', 'embryo-transfer', 'blastocyst-transfer', 'cryopreservation', 'thaw', 'embryo-disposition'].includes(tabParam)) {
         setActiveTab(tabParam as OocyteEmbryoTab);
       }
     }
@@ -296,22 +297,22 @@ export function OocyteEmbryoClient() {
   const patientId = selectedPatient?.uhid || (selectedPatient?.id ? `P-2026-00${selectedPatient.id}` : 'P-2026-00125');
   const patientName = selectedPatient?.name || 'Mrs. Anjali Sharma';
   const summary = sourceTab === 'ICSI' ? icsiSummary : ivfSummary;
-  const combinedRetrieved = ivfSummary.retrieved + icsiSummary.retrieved;
+  const bothLabs = labView === 'BOTH';
   const cycleId = summary.cycleId || retrieval?.cycleId || (selectedPatient?.id ? `C-2026-00${selectedPatient.id}` : 'C-2026-00158');
-  const cycleType = labView === 'BOTH' ? 'IVF + ICSI' : sourceTab;
+  const cycleType = bothLabs ? 'IVF + ICSI' : sourceTab;
   const cycleDay = 16;
   const operator = user?.userName || 'Dr. Satish Sharma (EMB-01)';
   const sourceEmbryos = embryos.filter((row) => row.source === sourceTab);
 
-  const retrievedCount = labView === 'BOTH' ? combinedRetrieved : summary.retrieved;
-  const matureCount = labView === 'BOTH' ? ivfSummary.matureMII + icsiSummary.matureMII : summary.matureMII;
-  const immatureCount = labView === 'BOTH' ? ivfSummary.immature + icsiSummary.immature : summary.immature;
-  const degeneratedCount = labView === 'BOTH' ? ivfSummary.degenerated + icsiSummary.degenerated : summary.degenerated;
-  const fertilized2PN = labView === 'BOTH' ? ivfSummary.fertilized2PN + icsiSummary.fertilized2PN : summary.fertilized2PN;
-  const cleavageCount = labView === 'BOTH' ? ivfSummary.cleavage + icsiSummary.cleavage : summary.cleavage;
-  const blastocystCount = labView === 'BOTH' ? ivfSummary.blastocyst + icsiSummary.blastocyst : summary.blastocyst;
-  const cryopreservedCount = labView === 'BOTH' ? ivfSummary.cryopreserved + icsiSummary.cryopreserved : summary.cryopreserved;
-  const transferredCount = labView === 'BOTH' ? ivfSummary.transferred + icsiSummary.transferred : summary.transferred;
+  const retrievedCount = summary.retrieved;
+  const matureCount = summary.matureMII;
+  const immatureCount = summary.immature;
+  const degeneratedCount = summary.degenerated;
+  const fertilized2PN = summary.fertilized2PN;
+  const cleavageCount = summary.cleavage;
+  const blastocystCount = summary.blastocyst;
+  const cryopreservedCount = summary.cryopreserved;
+  const transferredCount = summary.transferred;
 
   // Add new oocyte handler
   function handleAddOocyte() {
@@ -394,15 +395,15 @@ export function OocyteEmbryoClient() {
             </div>
             <div>
               <span className="block text-[10px] uppercase font-bold text-slate-400">Total Oocytes</span>
-              <span className="font-bold text-purple-700 text-sm">{retrievedCount}</span>
+              <span className="font-bold text-purple-700 text-sm">{pairLabel(bothLabs, ivfSummary.retrieved, icsiSummary.retrieved, retrievedCount)}</span>
             </div>
             <div>
               <span className="block text-[10px] uppercase font-bold text-slate-400">Fertilized (2PN)</span>
-              <span className="font-bold text-emerald-600 text-sm">{fertilized2PN}</span>
+              <span className="font-bold text-emerald-600 text-sm">{pairLabel(bothLabs, ivfSummary.fertilized2PN, icsiSummary.fertilized2PN, fertilized2PN)}</span>
             </div>
             <div>
               <span className="block text-[10px] uppercase font-bold text-slate-400">Transferred</span>
-              <span className="font-bold text-slate-800 text-sm">{transferredCount}</span>
+              <span className="font-bold text-slate-800 text-sm">{pairLabel(bothLabs, ivfSummary.transferred, icsiSummary.transferred, transferredCount)}</span>
             </div>
           </div>
         </div>
@@ -412,7 +413,7 @@ export function OocyteEmbryoClient() {
           {([
             { id: 'IVF' as LabView, label: 'IVF', count: ivfSummary.retrieved },
             { id: 'ICSI' as LabView, label: 'ICSI', count: icsiSummary.retrieved },
-            { id: 'BOTH' as LabView, label: 'IVF + ICSI', count: combinedRetrieved },
+            { id: 'BOTH' as LabView, label: 'IVF + ICSI', count: 0 },
           ]).map((tab) => {
             const active = labView === tab.id;
             return (
@@ -431,14 +432,14 @@ export function OocyteEmbryoClient() {
               >
                 {tab.label}
                 <span className={`rounded-md px-1.5 py-0.5 text-[10px] ${active ? 'bg-white/20' : 'bg-white text-purple-700'}`}>
-                  {tab.count}
+                  {tab.id === 'BOTH' ? `${ivfSummary.retrieved} | ${icsiSummary.retrieved}` : tab.count}
                 </span>
               </button>
             );
           })}
           <span className="text-[11px] text-slate-500">
             {labView === 'BOTH'
-              ? 'Split follows Cycle Retrieval IVF / ICSI allotment, same as MAIN 2 PAGES'
+              ? 'IVF and ICSI stay in separate columns. The badge is IVF | ICSI.'
               : `Counts come from the ${sourceTab} screen`}
             {summary.hasRecord || (retrieval?.ivfAllotted || retrieval?.icsiAllotted) ? '' : ' — no saved record yet'}
           </span>
@@ -462,6 +463,7 @@ export function OocyteEmbryoClient() {
             { id: 'fertilization', label: 'Fertilization' },
             { id: 'embryo-culture', label: 'Embryo Culture' },
             { id: 'embryo-transfer', label: 'Embryo Transfer' },
+            { id: 'blastocyst-transfer', label: 'Blastocyst Transfer' },
             { id: 'cryopreservation', label: 'Cryopreservation' },
             { id: 'thaw', label: 'Thaw' },
             { id: 'embryo-disposition', label: 'Embryo Disposition' },
@@ -503,19 +505,19 @@ export function OocyteEmbryoClient() {
           <div className="grid grid-cols-4 gap-3 text-center">
             <div className="rounded-xl bg-purple-50/60 border border-purple-100 p-2.5">
               <span className="block text-[10px] font-bold text-purple-600 uppercase">Retrieved</span>
-              <span className="text-xl font-black text-purple-950">{retrievedCount}</span>
+              <PairCount both={bothLabs} ivf={ivfSummary.retrieved} icsi={icsiSummary.retrieved} single={retrievedCount} />
             </div>
             <div className="rounded-xl bg-emerald-50/60 border border-emerald-100 p-2.5">
               <span className="block text-[10px] font-bold text-emerald-600 uppercase">Mature (MII)</span>
-              <span className="text-xl font-black text-emerald-950">{matureCount}</span>
+              <PairCount both={bothLabs} ivf={ivfSummary.matureMII} icsi={icsiSummary.matureMII} single={matureCount} />
             </div>
             <div className="rounded-xl bg-amber-50/60 border border-amber-100 p-2.5">
               <span className="block text-[10px] font-bold text-amber-600 uppercase">Immature (GV/MI)</span>
-              <span className="text-xl font-black text-amber-950">{immatureCount}</span>
+              <PairCount both={bothLabs} ivf={ivfSummary.immature} icsi={icsiSummary.immature} single={immatureCount} />
             </div>
             <div className="rounded-xl bg-slate-50 border border-slate-200/70 p-2.5">
               <span className="block text-[10px] font-bold text-slate-500 uppercase">Degenerated</span>
-              <span className="text-xl font-black text-slate-700">{degeneratedCount}</span>
+              <PairCount both={bothLabs} ivf={ivfSummary.degenerated} icsi={icsiSummary.degenerated} single={degeneratedCount} />
             </div>
           </div>
         </div>
@@ -533,25 +535,25 @@ export function OocyteEmbryoClient() {
           <div className="grid grid-cols-4 gap-3 text-center">
             <div className="rounded-xl bg-emerald-50/60 border border-emerald-100 p-2.5">
               <span className="block text-[10px] font-bold text-emerald-600 uppercase">Fertilized (2PN)</span>
-              <span className="text-xl font-black text-emerald-950">{fertilized2PN}</span>
+              <PairCount both={bothLabs} ivf={ivfSummary.fertilized2PN} icsi={icsiSummary.fertilized2PN} single={fertilized2PN} />
             </div>
             <div className="rounded-xl bg-blue-50/60 border border-blue-100 p-2.5">
               <span className="block text-[10px] font-bold text-blue-600 uppercase">Cleavage</span>
-              <span className="text-xl font-black text-blue-950">{cleavageCount}</span>
+              <PairCount both={bothLabs} ivf={ivfSummary.cleavage} icsi={icsiSummary.cleavage} single={cleavageCount} />
             </div>
             <div className="rounded-xl bg-purple-50/60 border border-purple-100 p-2.5">
               <span className="block text-[10px] font-bold text-purple-600 uppercase">Blastocyst</span>
-              <span className="text-xl font-black text-purple-950">{blastocystCount}</span>
+              <PairCount both={bothLabs} ivf={ivfSummary.blastocyst} icsi={icsiSummary.blastocyst} single={blastocystCount} />
             </div>
             <div className="rounded-xl bg-teal-50/60 border border-teal-100 p-2.5">
               <span className="block text-[10px] font-bold text-teal-600 uppercase">Cryopreserved</span>
-              <span className="text-xl font-black text-teal-950">{cryopreservedCount}</span>
+              <PairCount both={bothLabs} ivf={ivfSummary.cryopreserved} icsi={icsiSummary.cryopreserved} single={cryopreservedCount} />
             </div>
           </div>
         </div>
       </div>
 
-      <Main2PagesGrid view={labView} ivf={ivfSummary} icsi={icsiSummary} />
+      <Main2PagesGrid view={labView} tab={activeTab} ivf={ivfSummary} icsi={icsiSummary} />
 
       {/* MAIN CONTENT AREA: TAB CONTENTS + QUICK ACTIONS SIDEBAR */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
@@ -816,6 +818,56 @@ export function OocyteEmbryoClient() {
                               ))}
                             </select>
                           </td>
+                          <td className="px-3 py-2 text-slate-600">{row.location || '—'}</td>
+                          <td className="px-3 py-2 text-slate-600">{row.remark || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'blastocyst-transfer' && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                  BT Entry · {bothLabs ? 'IVF and ICSI' : sourceTab} blastocysts
+                </h3>
+                <a href="/bt" className="text-[11px] font-bold text-purple-700 underline">
+                  Open full Blastocyst Transfer
+                </a>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                SMART BT columns: Source, Expansion grade, ICM Grade, TE Grade, Action, Location, Remarks. IVF and ICSI are listed on separate rows.
+              </p>
+              {sourceEmbryos.length === 0 && !bothLabs ? (
+                <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                  No {sourceTab} blastocyst rows yet. Add them on the BT screen.
+                </p>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="min-w-full divide-y divide-slate-200 text-xs">
+                    <thead className="bg-slate-50 text-slate-600">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-bold uppercase">Source</th>
+                        <th className="px-3 py-2 text-left font-bold uppercase">Expansion grade</th>
+                        <th className="px-3 py-2 text-left font-bold uppercase">ICM Grade</th>
+                        <th className="px-3 py-2 text-left font-bold uppercase">TE Grade</th>
+                        <th className="px-3 py-2 text-left font-bold uppercase">Action</th>
+                        <th className="px-3 py-2 text-left font-bold uppercase">Location</th>
+                        <th className="px-3 py-2 text-left font-bold uppercase">Remarks</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {(bothLabs ? embryos : sourceEmbryos).map((row) => (
+                        <tr key={row.id} className="hover:bg-slate-50">
+                          <td className="px-3 py-2 font-bold text-slate-800">{row.source}</td>
+                          <td className="px-3 py-2 text-slate-700">{gradeLabel(BT_EXPANSION_OPTIONS, row.celler)}</td>
+                          <td className="px-3 py-2 text-slate-700">{gradeLabel(BT_ICM_OPTIONS, row.grade)}</td>
+                          <td className="px-3 py-2 text-slate-700">—</td>
+                          <td className="px-3 py-2 text-slate-700">{row.actionLabel || '—'}</td>
                           <td className="px-3 py-2 text-slate-600">{row.location || '—'}</td>
                           <td className="px-3 py-2 text-slate-600">{row.remark || '—'}</td>
                         </tr>
@@ -1214,40 +1266,105 @@ function metric(summary: SourceSummary, key: keyof SourceSummary) {
   return typeof value === 'number' ? value : 0;
 }
 
-function Main2PagesGrid({
-  view,
-  ivf,
-  icsi,
-}: {
-  view: LabView;
-  ivf: SourceSummary;
-  icsi: SourceSummary;
-}) {
-  const showIvf = view === 'IVF' || view === 'BOTH';
-  const showIcsi = view === 'ICSI' || view === 'BOTH';
-  const rows: { label: string; key: keyof SourceSummary }[] = [
+function pairLabel(both: boolean, ivf: number, icsi: number, single: number) {
+  return both ? `IVF ${ivf} · ICSI ${icsi}` : String(single);
+}
+
+function PairCount({ both, ivf, icsi, single }: { both: boolean; ivf: number; icsi: number; single: number }) {
+  if (!both) return <span className="text-xl font-black">{single}</span>;
+  return (
+    <span className="mt-0.5 flex items-end justify-center gap-2 text-sm font-black leading-none">
+      <span>
+        <span className="mb-0.5 block text-[9px] font-bold opacity-70">IVF</span>
+        {ivf}
+      </span>
+      <span className="pb-0.5 opacity-40">|</span>
+      <span>
+        <span className="mb-0.5 block text-[9px] font-bold opacity-70">ICSI</span>
+        {icsi}
+      </span>
+    </span>
+  );
+}
+
+function gradeLabel(options: { id: number; name: string }[], value: string | number | undefined) {
+  const text = String(value ?? '').trim();
+  if (!text) return '—';
+  if (/^\d+$/.test(text)) return options.find((item) => item.id === Number(text))?.name || '—';
+  return text;
+}
+
+const SPLIT_BY_TAB: Record<OocyteEmbryoTab, { label: string; key: keyof SourceSummary }[]> = {
+  oocytes: [
     { label: 'Allotted', key: 'allotted' },
     { label: 'Total retrieved', key: 'retrieved' },
     { label: 'Mature MII', key: 'matureMII' },
     { label: 'Immature MI / GV', key: 'immature' },
     { label: 'Degenerated', key: 'degenerated' },
+  ],
+  fertilization: [
+    { label: 'Mature MII inseminated', key: 'matureMII' },
     { label: '2PN', key: 'fertilized2PN' },
+    { label: 'Abnormal PN', key: 'abnormalPn' },
+    { label: 'Unfertilized', key: 'unfertilized' },
     { label: 'Stuck 2PN', key: 'stuck' },
+  ],
+  'embryo-culture': [
     { label: 'Embryo', key: 'cleavage' },
+    { label: 'Blastocyst', key: 'blastocyst' },
+  ],
+  'embryo-transfer': [
     { label: 'Transferred', key: 'transferred' },
     { label: 'Frozen', key: 'cryopreserved' },
+    { label: 'Stuck', key: 'stuck' },
+    { label: 'Keep for blastocyst', key: 'blastocyst' },
     { label: 'Discarded', key: 'discard' },
+    { label: 'Donated', key: 'donated' },
     { label: 'Donated for research', key: 'donatedForResearch' },
+  ],
+  'blastocyst-transfer': [
     { label: 'Blastocyst', key: 'blastocyst' },
-  ];
+    { label: 'Transferred', key: 'transferred' },
+    { label: 'Frozen', key: 'cryopreserved' },
+    { label: 'Stuck', key: 'stuck' },
+    { label: 'Discarded', key: 'discard' },
+    { label: 'Donated', key: 'donated' },
+    { label: 'Donated for research', key: 'donatedForResearch' },
+  ],
+  cryopreservation: [
+    { label: 'Frozen', key: 'cryopreserved' },
+    { label: 'Blastocyst', key: 'blastocyst' },
+  ],
+  thaw: [{ label: 'Frozen available', key: 'cryopreserved' }],
+  'embryo-disposition': [
+    { label: 'Discarded', key: 'discard' },
+    { label: 'Donated', key: 'donated' },
+    { label: 'Donated for research', key: 'donatedForResearch' },
+  ],
+};
+
+function Main2PagesGrid({
+  view,
+  tab,
+  ivf,
+  icsi,
+}: {
+  view: LabView;
+  tab: OocyteEmbryoTab;
+  ivf: SourceSummary;
+  icsi: SourceSummary;
+}) {
+  const showIvf = view === 'IVF' || view === 'BOTH';
+  const showIcsi = view === 'ICSI' || view === 'BOTH';
+  const rows = SPLIT_BY_TAB[tab];
 
   return (
     <div className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-          Oocyte / Embryo split · {view === 'BOTH' ? 'IVF + ICSI' : view}
+          {tab === 'fertilization' ? 'Fertilization split' : tab === 'blastocyst-transfer' ? 'Blastocyst split' : 'Oocyte / Embryo split'} · {view === 'BOTH' ? 'IVF + ICSI' : view}
         </h3>
-        <span className="text-[11px] text-slate-500">Layout from MAIN 2 PAGES · IVF and ICSI columns follow retrieval allotment</span>
+        <span className="text-[11px] text-slate-500">IVF and ICSI are shown in their own columns</span>
       </div>
       <table className="min-w-full text-left text-xs">
         <thead>
@@ -1255,7 +1372,6 @@ function Main2PagesGrid({
             <th className="px-3 py-2 font-semibold">Parameter</th>
             {showIvf ? <th className="px-3 py-2 text-center font-semibold">IVF</th> : null}
             {showIcsi ? <th className="px-3 py-2 text-center font-semibold">ICSI</th> : null}
-            {view === 'BOTH' ? <th className="px-3 py-2 text-center font-semibold">Total</th> : null}
           </tr>
         </thead>
         <tbody>
@@ -1267,9 +1383,6 @@ function Main2PagesGrid({
                 <td className="px-3 py-2 font-semibold text-slate-700">{row.label}</td>
                 {showIvf ? <td className="px-3 py-2 text-center font-black text-slate-900">{ivfValue}</td> : null}
                 {showIcsi ? <td className="px-3 py-2 text-center font-black text-slate-900">{icsiValue}</td> : null}
-                {view === 'BOTH' ? (
-                  <td className="px-3 py-2 text-center font-black text-purple-800">{ivfValue + icsiValue}</td>
-                ) : null}
               </tr>
             );
           })}

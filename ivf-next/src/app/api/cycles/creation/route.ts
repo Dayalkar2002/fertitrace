@@ -3,7 +3,7 @@ import { getAuthenticatedUser, authUnauthorizedResponse } from '@/lib/auth/verif
 import { isDbConfigured } from '@/lib/db/pool';
 import { buildParams, executeDRL } from '@/lib/db/spExecutor';
 import { upsertCycle } from '@/lib/cycle-store';
-import { defaultSemenSource, oocyteSourceFromCreation } from '@/lib/cycle-utils';
+import { defaultSemenSource, isMonitoringSheetAllowed, oocyteSourceFromCreation, requiresMonitoringSheet } from '@/lib/cycle-utils';
 import type { CycleCreationPayload } from '@/lib/types/cycle';
 
 async function nextCycleId(patId: number, satId: number): Promise<string> {
@@ -46,9 +46,15 @@ export async function POST(req: NextRequest) {
     if (!body.startDate) {
       return NextResponse.json({ success: false, message: 'Start date is required.' }, { status: 400 });
     }
-    if (!body.monitoringSheet) {
+    if (requiresMonitoringSheet(body.cycleType, body.treatmentType) && !body.monitoringSheet) {
       return NextResponse.json(
         { success: false, message: 'Select a Monitoring Sheet option.' },
+        { status: 400 }
+      );
+    }
+    if (body.monitoringSheet && !isMonitoringSheetAllowed(body.cycleType, body.monitoringSheet, body.treatmentType)) {
+      return NextResponse.json(
+        { success: false, message: 'That monitoring sheet is not used for this cycle type.' },
         { status: 400 }
       );
     }

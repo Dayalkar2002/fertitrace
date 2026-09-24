@@ -86,7 +86,8 @@ const TEMPLATES: Record<string, string> = Object.fromEntries(
 
 export function PatientCommunication() {
   const { token, user } = useAuth();
-  const { selectedPatient } = usePatient();
+  const { selectedPatient, patients, loadPatients, selectPatient, selectedSatellite } = usePatient();
+  const [smsPhone, setSmsPhone] = useState('');
 
   const [patientDetail, setPatientDetail] = useState<{
     mobile?: string;
@@ -173,6 +174,12 @@ export function PatientCommunication() {
   }
 
   const mobileNo = formatMobileDisplay(rawMobile);
+  const smsDigits = (smsPhone || rawMobile).replace(/\D/g, '').slice(-10);
+
+  useEffect(() => {
+    const digits = rawMobile.replace(/\D/g, '').slice(-10);
+    if (digits) setSmsPhone(digits);
+  }, [rawMobile]);
 
   const [messageType, setMessageType] = useState('Appointment');
   const [channel, setChannel] = useState<CommunicationChannel>('WhatsApp');
@@ -184,6 +191,12 @@ export function PatientCommunication() {
   const [showVariablesDropdown, setShowVariablesDropdown] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<CommunicationRecord | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (channel !== 'SMS') return;
+    const satId = selectedSatellite?.id || selectedPatient?.satelliteId;
+    if (satId) void loadPatients(satId);
+  }, [channel, selectedSatellite?.id, selectedPatient?.satelliteId, loadPatients]);
 
   // Load history from API
   const loadHistory = useCallback(async () => {
@@ -237,6 +250,11 @@ export function PatientCommunication() {
 
   async function handleSendMessage() {
     if (!message.trim()) return;
+    if (channel === 'SMS' && smsDigits.length < 10) {
+      setToastMessage('Enter the patient phone number before sending SMS.');
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
+    }
     if (channel === 'WhatsApp' && !whatsappReady) {
       setToastMessage(
         `WhatsApp template "${activeTemplate?.whatsappTemplateName || 'this template'}" is still pending Meta approval.`
@@ -251,9 +269,9 @@ export function PatientCommunication() {
     try {
       if (token) {
         const record = await sendCommunicationMessage(token, {
-          patientId,
+          patientId: selectedPatient?.id || patientId,
           patientName,
-          recipient: mobileNo,
+          recipient: channel === 'SMS' ? smsDigits : mobileNo,
           channel,
           messageType,
           messageText: previewText,
@@ -262,7 +280,11 @@ export function PatientCommunication() {
           language,
         });
         setHistory((prev) => [record, ...prev]);
-        setToastMessage(`Message dispatched via ${channel} to ${mobileNo}!`);
+        setToastMessage(
+          channel === 'SMS'
+            ? `SMS submitted for ${smsDigits}. It can take a minute to reach the phone.`
+            : `Message dispatched via ${channel} to ${mobileNo}!`
+        );
       } else {
         // Local simulation if unauthenticated
         const now = new Date();
@@ -272,13 +294,13 @@ export function PatientCommunication() {
           dateTime: dateStr,
           messageType,
           channel,
-          recipient: mobileNo,
+          recipient: channel === 'SMS' ? smsDigits : mobileNo,
           sentBy: user?.roleName || user?.userName || 'Embryologist',
           status: 'Delivered',
           messageText: previewText,
         };
         setHistory((prev) => [localRecord, ...prev]);
-        setToastMessage(`Message dispatched via ${channel} to ${mobileNo}!`);
+        setToastMessage(`Message dispatched via ${channel} to ${channel === 'SMS' ? smsDigits : mobileNo}!`);
       }
       setTimeout(() => setToastMessage(null), 4000);
     } catch (err) {
@@ -373,8 +395,47 @@ export function PatientCommunication() {
       {/* 2. SEND MESSAGE Card */}
       <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-2xs space-y-5">
         <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-          SEND MESSAGE
+          {channel === 'SMS' ? 'MANUAL SMS' : 'SEND MESSAGE'}
         </h2>
+
+        {channel === 'SMS' && (
+          <div className="grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4 sm:grid-cols-2">
+            <p className="sm:col-span-2 text-[11px] text-slate-500">
+              Same fields as SMART Manual SMS: patient name, phone number, and message. SMS is sent on the SMART gateway.
+            </p>
+            <label className="block text-xs font-medium text-slate-600">
+              Name
+              <select
+                value={selectedPatient?.id || ''}
+                onChange={(e) => {
+                  const next = patients.find((item) => String(item.id) === e.target.value);
+                  if (!next) return;
+                  selectPatient(next);
+                  const digits = (next.mobile || next.phone || '').replace(/\D/g, '').slice(-10);
+                  if (digits) setSmsPhone(digits);
+                }}
+                className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800"
+              >
+                <option value="">Select patient</option>
+                {(patients.length ? patients : selectedPatient ? [selectedPatient] : []).map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-xs font-medium text-slate-600">
+              Patient Phone No
+              <input
+                value={smsPhone}
+                onChange={(e) => setSmsPhone(e.target.value.replace(/[^\d]/g, '').slice(0, 10))}
+                inputMode="numeric"
+                placeholder="10 digit mobile"
+                className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800"
+              />
+            </label>
+          </div>
+        )}
 
         {/* Row 1: Message Type & Channel */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -658,14 +719,14 @@ export function PatientCommunication() {
 
           <button
             type="button"
-            disabled={sending || (channel === 'WhatsApp' && !whatsappReady)}
+            disabled={sending || (channel === 'WhatsApp' && !whatsappReady) || (channel === 'SMS' && smsDigits.length < 10)}
             onClick={handleSendMessage}
             className="flex items-center gap-2 rounded-xl bg-[#e11d48] hover:bg-[#be123c] px-6 py-2.5 text-xs font-bold uppercase tracking-wide text-white shadow-md shadow-pink-600/20 transition active:scale-[0.99] disabled:opacity-60"
           >
             <svg className="h-4 w-4 fill-current -rotate-45" viewBox="0 0 24 24">
               <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
             </svg>
-            <span>{sending ? 'SENDING...' : 'SEND MESSAGE'}</span>
+            <span>{sending ? 'SENDING...' : channel === 'SMS' ? 'SEND SMS' : 'SEND MESSAGE'}</span>
           </button>
         </div>
 

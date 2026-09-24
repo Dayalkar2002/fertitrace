@@ -122,7 +122,7 @@ export function CycleHistoryTab({ cycleId }: TabProps) {
             <p className="mb-2 text-sm font-semibold text-slate-700">Monitoring Sheet :</p>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {MONITORING_SHEET_OPTIONS.map((item) => {
-                const allowed = isMonitoringSheetAllowed(cycleType, item.value);
+                const allowed = isMonitoringSheetAllowed(cycleType, item.value, undefined);
                 return (
                   <label
                     key={item.value}

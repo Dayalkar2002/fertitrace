@@ -17,6 +17,9 @@ export interface MonitoringSheetLayout {
   hint: string;
   columns: MonitoringColumn[];
   rows: MonitoringRowDef[];
+  /** IUI sheet lists one row per visit day. Other sheets list parameters down the side. */
+  orientation?: 'parameters' | 'day-rows';
+  dayCount?: number;
 }
 
 export type MonitoringChartValues = Record<string, Record<string, string>>;
@@ -47,7 +50,7 @@ const LAYOUTS: Record<MonitoringSheetOption, MonitoringSheetLayout> = {
   Agonist: {
     option: 'Agonist',
     title: 'Agonist Cycle Monitoring Chart',
-    hint: 'Days across the top, same layout as the assignment Excel. Complete this on retrieval after the cycle type is saved.',
+    hint: 'Days across the top, same layout as the assignment Excel. Fill this on Cycle Creation after the protocol is selected.',
     columns: [...DAY_0_9, { key: 'trigger', label: 'Trigger' }, { key: 'opu', label: 'OPU' }],
     rows: [...STIM_ROWS, { key: 'gnrh', label: 'GnRH Agonist', kind: 'text' }],
   },
@@ -97,6 +100,25 @@ const LAYOUTS: Record<MonitoringSheetOption, MonitoringSheetLayout> = {
       { key: 'time', label: 'Date / Time', kind: 'text' },
     ],
   },
+  IUI: {
+    option: 'IUI',
+    title: 'IUI Monitoring Sheet',
+    hint: 'One row per visit. Columns follow the IUI monitoring Excel: endometrium, cervical mucus, and both ovaries.',
+    orientation: 'day-rows',
+    dayCount: 7,
+    columns: [
+      { key: 'date', label: 'Date' },
+      { key: 'day', label: 'Day' },
+      { key: 'endo', label: 'Endometrial Thickness' },
+      { key: 'mucus', label: 'Cxal Mucus' },
+      { key: 'rtSize', label: 'RT Ovary Follicle size' },
+      { key: 'rtNum', label: 'RT Ovary Follicle Numbers' },
+      { key: 'ltSize', label: 'LT Ovary Follicle size' },
+      { key: 'ltNum', label: 'LT Ovary Follicle Numbers' },
+      { key: 'remarks', label: 'Remarks' },
+    ],
+    rows: [],
+  },
 };
 
 export function getMonitoringSheetLayout(option: string | undefined | null): MonitoringSheetLayout | null {
@@ -104,8 +126,24 @@ export function getMonitoringSheetLayout(option: string | undefined | null): Mon
   return LAYOUTS[option as MonitoringSheetOption] ?? null;
 }
 
+export const IUI_STOP_REASONS = [
+  'Semen Sample is Unsuitable for IUI',
+  'Patient Did not Report For IUI',
+] as const;
+
 export function emptyMonitoringChart(layout: MonitoringSheetLayout): MonitoringChartValues {
   const values: MonitoringChartValues = {};
+  if (layout.orientation === 'day-rows') {
+    const count = layout.dayCount || 7;
+    for (let i = 1; i <= count; i += 1) {
+      values[`d${i}`] = {};
+      for (const col of layout.columns) {
+        values[`d${i}`][col.key] = col.key === 'day' ? String(i) : '';
+      }
+    }
+    values.meta = { terminated: '', reason: '', note: '' };
+    return values;
+  }
   for (const row of layout.rows) {
     values[row.key] = {};
     for (const col of layout.columns) values[row.key][col.key] = '';
