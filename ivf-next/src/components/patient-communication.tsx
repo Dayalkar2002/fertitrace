@@ -271,7 +271,7 @@ export function PatientCommunication() {
         const record = await sendCommunicationMessage(token, {
           patientId: selectedPatient?.id || patientId,
           patientName,
-          recipient: channel === 'SMS' ? smsDigits : mobileNo,
+          recipient: channel === 'SMS' ? smsDigits : smsDigits.length === 10 ? `91${smsDigits}` : mobileNo.replace(/\D/g, ''),
           channel,
           messageType,
           messageText: previewText,

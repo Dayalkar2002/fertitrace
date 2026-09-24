@@ -37,7 +37,24 @@ export function nukeliteConfigured(): boolean {
 function toE164India(recipient: string): string {
   const digits = recipient.replace(/\D/g, '');
   if (digits.length === 12 && digits.startsWith('91')) return digits;
+  if (digits.length === 11 && digits.startsWith('0')) return `91${digits.slice(-10)}`;
   return `91${digits.slice(-10)}`;
+}
+
+/** Campaign API validates CSV-style rows. A bare digit string is treated as a headerless upload. */
+function campaignNumberRow(payload: WhatsAppSendPayload, params: string[]) {
+  const phone = toE164India(payload.recipient);
+  const name = payload.patientName.replace(/^Mrs\.?\s+/i, '').trim() || 'Patient';
+  return {
+    phone,
+    mobile: phone,
+    number: phone,
+    name,
+    var1: params[0] || name,
+    var2: params[1] || '',
+    var3: params[2] || '',
+    var4: params[3] || '',
+  };
 }
 
 function approvedTemplateNames(): Set<string> {
@@ -153,6 +170,9 @@ function describeError(data: NukeliteJson, fallback: string, status: number, tem
   }
   if (/template not found/i.test(raw) || /no whatsapp account/i.test(raw)) {
     return `Nukelite could not send "${templateName || 'appointment_booked'}" for ${username}. The template is approved in the portal, but this send call cannot see it.`;
+  }
+  if (/no valid mobile|malformed rows/i.test(raw)) {
+    return 'Nukelite rejected the recipient as a campaign upload row. Fertitrace now sends the mobile as a phone/name row (91 + 10 digits).';
   }
   return raw;
 }
@@ -331,7 +351,7 @@ async function dispatchViaApiKey(
       broadcastNumber,
       template: templateName,
       category: 'UTILITY',
-      numbers: [toE164India(payload.recipient)],
+      numbers: [campaignNumberRow(payload, params)],
       bodyVariables: params,
       headerMediaUrl: '',
     }),
@@ -365,7 +385,7 @@ async function dispatchViaPortal(
       message: '',
       headerMediaUrl: null,
       template: templateName,
-      numbers: [{ mobile: toE164India(payload.recipient) }],
+      numbers: [campaignNumberRow(payload, params)],
       csvMode: 'bulk',
       scheduled: false,
       bodyVariables: params,
@@ -399,8 +419,17 @@ export async function dispatchNukeliteWhatsApp(payload: WhatsAppSendPayload): Pr
   try {
     const apiKey = permanentApiKey();
     if (apiKey) {
-      await dispatchViaApiKey(payload, apiKey, templateName, params);
-      return;
+      try {
+        await dispatchViaApiKey(payload, apiKey, templateName, params);
+        return;
+      } catch (campaignErr) {
+        const text = campaignErr instanceof Error ? campaignErr.message : String(campaignErr);
+        if (/no valid mobile|malformed rows|campaign upload row/i.test(text) && isJwt(token)) {
+          await dispatchViaPortal(payload, token, templateName, params);
+          return;
+        }
+        throw campaignErr;
+      }
     }
     if (isJwt(token)) {
       await dispatchViaPortal(payload, token, templateName, params);
