@@ -55,6 +55,18 @@ export const CATALOG_MODULES: QuickAccessItem[] = [
     isActive: true,
   },
   {
+    moduleKey: 'cycle_summary',
+    title: 'Cycle Summary',
+    description: 'All cycles taken by the patient',
+    route: '/cycle/summary',
+    icon: 'cycle',
+    badgeText: 'List',
+    colorTheme: 'sky',
+    orderIndex: 3,
+    isPinned: true,
+    isActive: true,
+  },
+  {
     moduleKey: 'cycle_management',
     title: 'Cycle Retrieval Screen',
     description: 'Oocyte & semen source',
@@ -273,6 +285,10 @@ function ensureCycleCreationQuickAccess(items: QuickAccessItem[]): QuickAccessIt
       ? { ...item, title: 'Cycle Retrieval Screen', route: '/cycle/entry' }
       : item
   );
+  return ensureCycleSummaryQuickAccess(withCycleCreation(patched));
+}
+
+function withCycleCreation(patched: QuickAccessItem[]): QuickAccessItem[] {
   if (patched.some((item) => item.moduleKey === 'cycle_creation' || item.route === '/cycle/creation')) {
     return patched;
   }
@@ -283,6 +299,15 @@ function ensureCycleCreationQuickAccess(items: QuickAccessItem[]): QuickAccessIt
   );
   if (retrievalIndex < 0) return [creation, ...patched];
   return [...patched.slice(0, retrievalIndex), creation, ...patched.slice(retrievalIndex)];
+}
+
+function ensureCycleSummaryQuickAccess(items: QuickAccessItem[]): QuickAccessItem[] {
+  if (items.some((item) => item.moduleKey === 'cycle_summary' || item.route === '/cycle/summary')) return items;
+  const summary = CATALOG_MODULES.find((item) => item.moduleKey === 'cycle_summary');
+  if (!summary) return items;
+  const creationIndex = items.findIndex((item) => item.moduleKey === 'cycle_creation' || item.route === '/cycle/creation');
+  if (creationIndex < 0) return [summary, ...items];
+  return [...items.slice(0, creationIndex + 1), summary, ...items.slice(creationIndex + 1)];
 }
 
 /**

@@ -85,9 +85,42 @@ body {
   background: conic-gradient(from 180deg, #14b8a6, #99f6e4, #fb7185, #14b8a6);
 }
 
+/* Summaries print on pre-printed A4 letterhead: 3in kept free at the top, 1in at the bottom. */
+@page letterhead {
+  size: A4 portrait;
+  margin: 3in 12mm 1in 12mm;
+}
+
+.a4-letterhead-page {
+  width: 210mm;
+  min-height: 297mm;
+  padding: 3in 12mm 1in 12mm;
+}
+
 @media print {
   @page {
     margin: 12mm;
+  }
+
+  .a4-letterhead {
+    page: letterhead;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .a4-letterhead-page {
+    width: auto;
+    min-height: 0;
+    padding: 0;
+    break-after: page;
+  }
+
+  .a4-letterhead-page:last-child {
+    break-after: auto;
+  }
+
+  .a4-letterhead section {
+    break-inside: avoid;
   }
 
   html,

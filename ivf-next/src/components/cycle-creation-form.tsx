@@ -21,6 +21,17 @@ import { listPatientCycles, previewCycleId, saveCycleCreation } from '@/lib/serv
 import { listDoctors, type DoctorMasterRow } from '@/lib/services/masters';
 import type { PatientCycleRow } from '@/lib/types/cycle';
 
+const CYCLE_TYPE_CARDS: Record<string, { code: string; title: string; hint: string; tone: string }> = {
+  Fresh: { code: 'FR', title: 'Fresh Cycle', hint: 'IVF / ICSI with OPU', tone: 'bg-[#6345A6]' },
+  FET: { code: 'FET', title: 'Frozen Embryo Transfer', hint: 'Thaw embryos + ET', tone: 'bg-sky-600' },
+  FrozenOocytes: { code: 'FZO', title: 'Frozen Oocyte', hint: 'Oocyte freezing', tone: 'bg-teal-600' },
+  ThawOocytes: { code: 'THO', title: 'Thaw Oocyte', hint: 'Thaw frozen oocytes', tone: 'bg-cyan-600' },
+  ER: { code: 'ER', title: 'Embryo Recipient', hint: 'Receives donated embryos', tone: 'bg-rose-500' },
+  OD: { code: 'OD', title: 'Oocyte Donor', hint: 'Donates oocytes', tone: 'bg-amber-500' },
+  OR: { code: 'OR', title: 'Oocyte Recipient', hint: 'Receives donor oocytes', tone: 'bg-orange-600' },
+  IUI: { code: 'IUI', title: 'IUI', hint: 'Insemination / HSA / SQA', tone: 'bg-emerald-600' },
+};
+
 function todayInput() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -260,6 +271,14 @@ export function CycleCreationForm() {
               </div>
               <p className="mt-0.5 text-xs text-slate-500">Saved cycles for this patient, same source as SMART Cycle List.</p>
             </div>
+            <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => router.push('/cycle/summary')}
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-purple-300 hover:text-[#6345A6] transition shadow-xs"
+            >
+              Cycle Summary
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -275,6 +294,7 @@ export function CycleCreationForm() {
               <span>+</span>
               <span>Add New</span>
             </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-slate-200">
@@ -373,35 +393,75 @@ export function CycleCreationForm() {
               </div>
             </div>
 
-            {/* Cycle Type & Treatment Type */}
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            {/* Cycle Type */}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
               <label className={labelCls}>Cycle Type</label>
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-4">
-                <select value={cycleType} onChange={(e) => setCycleType(e.target.value)} className={`${fieldCls} max-w-[260px]`}>
-                  {CYCLE_CREATION_TYPES.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-                <span className="text-sm font-medium text-slate-600">Treatment Type</span>
-                <select
-                  value={treatmentType}
-                  onChange={(e) => setTreatmentType(e.target.value)}
-                  className={`${fieldCls} ${cycleType === 'IUI' ? 'max-w-[280px]' : 'max-w-[180px]'}`}
-                >
-                  {cycleType === 'IUI'
-                    ? IUI_TREATMENT_OPTIONS.map((item) => (
-                        <option key={item.value} value={item.value}>
-                          {item.group} · {item.label}
-                        </option>
-                      ))
-                    : TREATMENT_TYPES.map((item) => (
-                        <option key={item.value} value={item.value}>
+              <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:grid-cols-4">
+                {CYCLE_CREATION_TYPES.map((item) => {
+                  const meta = CYCLE_TYPE_CARDS[item.value];
+                  const active = cycleType === item.value;
+                  return (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() => setCycleType(item.value)}
+                      className={`flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition ${
+                        active
+                          ? 'border-[#6345A6] bg-purple-50 ring-2 ring-[#6345A6]/20'
+                          : 'border-slate-200 bg-white hover:border-purple-300 hover:bg-purple-50/40'
+                      }`}
+                    >
+                      <span
+                        className={`flex h-8 w-9 shrink-0 items-center justify-center rounded-lg text-[10px] font-black text-white ${meta.tone}`}
+                      >
+                        {meta.code}
+                      </span>
+                      <span className="min-w-0">
+                        <span className={`block text-xs font-bold ${active ? 'text-[#6345A6]' : 'text-slate-800'}`}>
+                          {meta.title}
+                        </span>
+                        <span className="block text-[10px] leading-tight text-slate-500">{meta.hint}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Treatment Type */}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+              <label className={labelCls}>Treatment Type</label>
+              <div className="min-w-0 flex-1 space-y-2">
+                {(cycleType === 'IUI'
+                  ? (['Fresh', 'Frozen'] as const).map((group) => ({
+                      group,
+                      items: IUI_TREATMENT_OPTIONS.filter((item) => item.group === group),
+                    }))
+                  : [{ group: '', items: TREATMENT_TYPES }]
+                ).map(({ group, items }) => (
+                  <div key={group || 'all'} className="flex flex-wrap items-center gap-2">
+                    {group && (
+                      <span className="w-14 text-[10px] font-bold uppercase tracking-wide text-slate-400">{group}</span>
+                    )}
+                    {items.map((item) => {
+                      const active = treatmentType === item.value;
+                      return (
+                        <button
+                          key={item.value}
+                          type="button"
+                          onClick={() => setTreatmentType(item.value)}
+                          className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${
+                            active
+                              ? 'border-[#6345A6] bg-[#6345A6] text-white shadow-xs'
+                              : 'border-slate-200 bg-white text-slate-700 hover:border-purple-300 hover:text-[#6345A6]'
+                          }`}
+                        >
                           {item.label}
-                        </option>
-                      ))}
-                </select>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
               </div>
             </div>
 

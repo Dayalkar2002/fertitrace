@@ -76,7 +76,7 @@ function clampArtType(value: number): ArtCycleTypeIndex {
 }
 
 const IUI_ANALYSIS_SQL = `
-SELECT TOP 1 IUIAnalysis.IUIASpermID, IUIAnalysis.IUIADate, IUIAnalysis.IUIVDate, IUIAnalysis.IUIAIndication,
+SELECT IUIAnalysis.IUIAID, IUIAnalysis.IUIASpermID, IUIAnalysis.IUIADate, IUIAnalysis.IUIVDate, IUIAnalysis.IUIAIndication,
   IUIAnalysis.IUIACollProb, IUIAnalysis.IUIAAbstinence, IUIAnalysis.LabOptID, IUIAnalysis.MtdID,
   IUIAnalysis.IUIAContamination, IUIAnalysis.AppID, IUIAnalysis.ColID, IUIAnalysis.ViscoID,
   IUIAnalysis.IUIANMPH1, IUIAnalysis.IUIANMPH2, IUIAnalysis.LiqID, IUIAnalysis.IUIATimeOfLiq,
@@ -93,7 +93,7 @@ SELECT TOP 1 IUIAnalysis.IUIASpermID, IUIAnalysis.IUIADate, IUIAnalysis.IUIVDate
   CommonMaster_8.CommName AS IndicationName, CommonMaster_9.CommName AS CollProbName,
   CommonMaster_10.CommName AS LinName, CommonMaster_11.CommName AS LinAName,
   CommonMaster_12.CommName AS IUIAContaminationName, CommonMaster_13.CommName AS IUIIndicationName,
-  IUIAAS24Hr, IUIAAS12Hr, IUIAFreezingId
+  IUIAnalysis.IUIABRecovery, IUIAnalysis.IUIThawDate, IUIAAS24Hr, IUIAAS12Hr, IUIAFreezingId
 FROM IUIAnalysis
 INNER JOIN IUIUterusOvaries ON IUIUterusOvaries.IUIID = IUIAnalysis.IUIID
 LEFT JOIN CommonMaster ON IUIAnalysis.LabOptID = CommonMaster.CommID
@@ -111,7 +111,7 @@ LEFT JOIN CommonMaster AS CommonMaster_11 ON IUIAnalysis.IUIALinearity = CommonM
 LEFT JOIN CommonMaster AS CommonMaster_12 ON IUIAnalysis.IUIAContamination = CommonMaster_12.CommID
 LEFT JOIN CommonMaster AS CommonMaster_13 ON IUIUterusOvaries.IUIIndication = CommonMaster_13.CommID
 WHERE IUIAnalysis.IUIID = @IUIID AND IUIAnalysis.PatID = @PatID AND IUIAnalysis.SatID = @SatID
-ORDER BY IUIASpermID DESC
+ORDER BY IUIASpermID DESC, IUIAnalysis.IUIADate ASC, IUIAnalysis.IUIAID ASC
 `;
 
 export async function listIuiReportIds(patId: number, satId: number): Promise<IuiReportId[]> {

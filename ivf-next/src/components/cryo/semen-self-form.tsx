@@ -294,7 +294,7 @@ export function SemenSelfForm({ onBack, cryoType = 'Fresh' }: { onBack?: () => v
               />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Recovery (%)</label>
+              <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Trial Swim Up</label>
               <input
                 type="text"
                 value={recovery}
