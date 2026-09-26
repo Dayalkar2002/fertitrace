@@ -314,7 +314,7 @@ export function SmartAnalysisForm({
           <TextField label="Epith Cell :" value={values.beforeEpith} disabled={beforeLocked} onChange={(v) => patch({ beforeEpith: v })} />
           <TextField label="Grade4 :" value={values.beforeGrade4} disabled={beforeLocked} onChange={(v) => patch({ beforeGrade4: v })} />
           <TextField label="Round Cell :" value={values.beforeRound} disabled={beforeLocked} onChange={(v) => patch({ beforeRound: v })} />
-          <TextField label="Recovery :" value={values.recovery} disabled={beforeLocked} onChange={(v) => patch({ recovery: v })} />
+          <TextField label="Trial Swim Up :" value={values.recovery} disabled={beforeLocked} onChange={(v) => patch({ recovery: v })} />
           <label className="flex items-end gap-2 pb-1 text-xs font-semibold text-slate-700">
             <input
               type="checkbox"

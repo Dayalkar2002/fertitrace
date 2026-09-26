@@ -3,6 +3,7 @@ import type { MonitoringSheetOption } from '@/lib/cycle-utils';
 export interface MonitoringColumn {
   key: string;
   label: string;
+  group?: string;
 }
 
 export interface MonitoringRowDef {
@@ -31,6 +32,16 @@ const DAY_0_9: MonitoringColumn[] = [
   { key: 'd9', label: 'Day 9' },
 ];
 
+/** Two measurable follicles per ovary, entered as size in mm (e.g. "18 x 20"). */
+const FOLLICLE_ROWS: MonitoringRowDef[] = [
+  { key: 'folRt', label: 'Follicle Count (Rt)', kind: 'number' },
+  { key: 'folRt1', label: 'Rt Follicle 1 (mm)', kind: 'text' },
+  { key: 'folRt2', label: 'Rt Follicle 2 (mm)', kind: 'text' },
+  { key: 'folLt', label: 'Follicle Count (Lt)', kind: 'number' },
+  { key: 'folLt1', label: 'Lt Follicle 1 (mm)', kind: 'text' },
+  { key: 'folLt2', label: 'Lt Follicle 2 (mm)', kind: 'text' },
+];
+
 const STIM_ROWS: MonitoringRowDef[] = [
   { key: 'date', label: 'Date', kind: 'date' },
   { key: 'drugDose', label: 'Drug / Dose', kind: 'text' },
@@ -40,8 +51,7 @@ const STIM_ROWS: MonitoringRowDef[] = [
   { key: 'e2', label: 'Estradiol (E2)', kind: 'number' },
   { key: 'prolactin', label: 'Prolactin', kind: 'number' },
   { key: 'endo', label: 'Endo. Thickness', kind: 'text' },
-  { key: 'folRt', label: 'Follicle Count (Rt)', kind: 'number' },
-  { key: 'folLt', label: 'Follicle Count (Lt)', kind: 'number' },
+  ...FOLLICLE_ROWS,
   { key: 'rhcg', label: 'r.HCG', kind: 'text' },
   { key: 'time', label: 'Date / Time', kind: 'text' },
 ];
@@ -68,6 +78,8 @@ const LAYOUTS: Record<MonitoringSheetOption, MonitoringSheetLayout> = {
     columns: [...DAY_0_9, { key: 'prog', label: 'Prog. Conversion' }],
     rows: [
       { key: 'date', label: 'Date', kind: 'date' },
+      { key: 'drug1', label: 'Drug 1', kind: 'text' },
+      { key: 'drug2', label: 'Drug 2', kind: 'text' },
       { key: 'estrogen', label: 'Estrogen', kind: 'text' },
       { key: 'e2', label: 'Estradiol (E2)', kind: 'number' },
       { key: 'endo', label: 'Endo. Thickness', kind: 'text' },
@@ -96,7 +108,7 @@ const LAYOUTS: Record<MonitoringSheetOption, MonitoringSheetLayout> = {
       { key: 'lh', label: 'S.E. LH', kind: 'number' },
       { key: 'e2', label: 'Estradiol (E2)', kind: 'number' },
       { key: 'endo', label: 'Endo. Thickness', kind: 'text' },
-      { key: 'follicle', label: 'Follicle Count', kind: 'number' },
+      ...FOLLICLE_ROWS,
       { key: 'time', label: 'Date / Time', kind: 'text' },
     ],
   },
@@ -111,10 +123,12 @@ const LAYOUTS: Record<MonitoringSheetOption, MonitoringSheetLayout> = {
       { key: 'day', label: 'Day' },
       { key: 'endo', label: 'Endometrial Thickness' },
       { key: 'mucus', label: 'Cxal Mucus' },
-      { key: 'rtSize', label: 'RT Ovary Follicle size' },
-      { key: 'rtNum', label: 'RT Ovary Follicle Numbers' },
-      { key: 'ltSize', label: 'LT Ovary Follicle size' },
-      { key: 'ltNum', label: 'LT Ovary Follicle Numbers' },
+      { key: 'rtNum', label: 'Follicle Numbers', group: 'Right Ovary' },
+      { key: 'rtSize', label: 'Follicle 1 (mm)', group: 'Right Ovary' },
+      { key: 'rtSize2', label: 'Follicle 2 (mm)', group: 'Right Ovary' },
+      { key: 'ltNum', label: 'Follicle Numbers', group: 'Left Ovary' },
+      { key: 'ltSize', label: 'Follicle 1 (mm)', group: 'Left Ovary' },
+      { key: 'ltSize2', label: 'Follicle 2 (mm)', group: 'Left Ovary' },
       { key: 'remarks', label: 'Remarks' },
     ],
     rows: [],

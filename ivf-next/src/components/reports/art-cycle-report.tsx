@@ -15,12 +15,12 @@ import {
 import {
   CraftFooter,
   CraftHeader,
+  CraftPage,
   CraftPairs,
   CraftPaper,
   CraftSection,
 } from '@/components/reports/craft-report';
 import { useAuth } from '@/contexts/auth-context';
-import { usePatient } from '@/contexts/patient-context';
 import { ApiError } from '@/lib/api';
 import { listArtCycles, loadArtCycleSummary, type ArtCycleOption, type ArtCycleSummaryResult } from '@/lib/services/reports';
 import { ART_CYCLE_TYPES } from '@/lib/types/reports';
@@ -39,7 +39,6 @@ function artHeading(title: string): string {
 
 export function ArtCycleReport() {
   const { token } = useAuth();
-  const { selectedSatellite } = usePatient();
   const { patId, satId, patientName, ready, selectedPatient } = usePatientIds();
   const [cycles, setCycles] = useState<ArtCycleOption[]>([]);
   const [selectedId, setSelectedId] = useState('0');
@@ -110,8 +109,6 @@ export function ArtCycleReport() {
   const oocyteStraw = sectionRows(summary, 'Oocyte Straw');
   const etFrozen = sectionRows(summary, 'ET Frozen');
   const btFrozen = sectionRows(summary, 'BT Frozen');
-  const clinic = selectedSatellite?.name || 'FERTITRACE';
-
   return (
     <PatientRequired>
       <div className="print:hidden mb-3 flex flex-wrap items-center gap-4">
@@ -136,17 +133,16 @@ export function ArtCycleReport() {
       {loadingSummary && <p className="print:hidden mb-3 text-sm text-slate-500">Loading ART Cycle summary…</p>}
       {summary && !loadingSummary && (
         <CraftPaper>
+          <CraftPage>
           <CraftHeader
-            clinicName={clinic}
-            clinicLine="Clinical Laboratory Report"
             title={artHeading(summary.title)}
             reportNo={`ART/${summary.cycleId}`}
             reportedOn={fieldDate(patient, 'CycODate', 'MaxDate') || new Date().toLocaleDateString('en-GB')}
           />
 
-          <div className="space-y-3 p-4 sm:p-5">
+          <div className="mt-1.5 space-y-1.5 text-[10px] [&_div]:text-[10px] [&_p]:text-[10px] [&_table]:text-[9.5px] [&_td]:py-[2px] [&_th]:py-[3px]">
             <CraftSection no={1} title="Patient & Cycle Details" tone="navy">
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid grid-cols-2 gap-4">
                 <CraftPairs
                   columns={1}
                   items={[
@@ -170,13 +166,13 @@ export function ArtCycleReport() {
               </div>
             </CraftSection>
 
-            <div className="grid gap-3 lg:grid-cols-2">
+            <div className="grid grid-cols-2 gap-1.5">
               <CraftSection no={2} title="Follicular Phase Treatment & Stimulation" tone="teal">
                 <HtmlNote html={val(patient, 'TreatMent')} />
               </CraftSection>
               <CraftSection no={3} title="Hormone Assays" tone="blue">
                 <HormoneAssays row={patient} />
-                <div className="mt-3 space-y-1 text-[12px] text-slate-700">
+                <div className="mt-1.5 space-y-0.5 text-slate-700">
                   <div>
                     <b>Embryo Transfer Done On:</b> {fieldDate(patient, 'ETDate') || '—'}
                   </div>
@@ -187,11 +183,11 @@ export function ArtCycleReport() {
               </CraftSection>
             </div>
 
-            <div className="grid gap-3 lg:grid-cols-2">
+            <div className="grid grid-cols-2 gap-1.5">
               <CraftSection no={4} title="Gamete Distribution" tone="green">
                 <GameteTable row={patient} />
               </CraftSection>
-              <div className="space-y-3">
+              <div className="space-y-1.5">
                 <CraftSection no={5} title="Embryo Transfer Details" tone="orange">
                   <TransferTable title="" rows={etRows} />
                 </CraftSection>
@@ -202,7 +198,7 @@ export function ArtCycleReport() {
             </div>
 
             {(etFrozen.length > 0 || btFrozen.length > 0) && (
-              <div className="grid gap-3 lg:grid-cols-2">
+              <div className="grid grid-cols-2 gap-1.5">
                 {etFrozen.length > 0 && (
                   <CraftSection no={7} title="Embryos Frozen" tone="sky">
                     <TransferTable title="" rows={etFrozen} />
@@ -230,6 +226,7 @@ export function ArtCycleReport() {
           </div>
 
           <CraftFooter consultant={val(patient, 'DocName', 'RefDoctor')} date={fieldDate(patient, 'CycODate', 'MaxDate')} />
+          </CraftPage>
         </CraftPaper>
       )}
     </PatientRequired>

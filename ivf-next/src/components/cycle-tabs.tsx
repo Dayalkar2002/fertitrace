@@ -217,7 +217,7 @@ export function CycleSurvivalTab({ cycleId }: TabProps) {
           <NumField label="NMPH 1" value={form.nmph1} onChange={(v) => setForm((f) => ({ ...f, nmph1: v }))} />
           <NumField label="NMPH 2" value={form.nmph2} onChange={(v) => setForm((f) => ({ ...f, nmph2: v }))} />
           <DateField label="Date" value={form.date} onChange={(v) => setForm((f) => ({ ...f, date: v }))} />
-          <TextField label="Recovery" value={form.recovery} onChange={(v) => setForm((f) => ({ ...f, recovery: v }))} />
+          <TextField label="Trial Swim Up" value={form.recovery} onChange={(v) => setForm((f) => ({ ...f, recovery: v }))} />
           <TextField label="Antibodies" value={form.antibodies} onChange={(v) => setForm((f) => ({ ...f, antibodies: v }))} />
         </div>
         <CheckboxGroup label="SA Result" options={['positive', 'borderline', 'negative'] as const} values={form.saResult} onChange={(saResult) => setForm((f) => ({ ...f, saResult }))} />
