@@ -25,22 +25,12 @@ export interface MonitoringSheetLayout {
 
 export type MonitoringChartValues = Record<string, Record<string, string>>;
 
-const DAY_COLUMNS: MonitoringColumn[] = [
+/** Assignment Excel: Agonist / Antagonist / HRT use Day 0, 1, 6, 9 — not a 21-day strip. */
+const DAY_0_9: MonitoringColumn[] = [
   { key: 'd0', label: 'Day 0' },
-  ...Array.from({ length: 21 }, (_, i) => ({
-    key: `d${i + 1}`,
-    label: `Day ${i + 1}`,
-  })),
-];
-
-/** Two measurable follicles per ovary, entered as size in mm (e.g. "18 x 20"). */
-const FOLLICLE_ROWS: MonitoringRowDef[] = [
-  { key: 'folRt', label: 'Follicle Count (Rt)', kind: 'number' },
-  { key: 'folRt1', label: 'Rt Follicle 1 (mm)', kind: 'text' },
-  { key: 'folRt2', label: 'Rt Follicle 2 (mm)', kind: 'text' },
-  { key: 'folLt', label: 'Follicle Count (Lt)', kind: 'number' },
-  { key: 'folLt1', label: 'Lt Follicle 1 (mm)', kind: 'text' },
-  { key: 'folLt2', label: 'Lt Follicle 2 (mm)', kind: 'text' },
+  { key: 'd1', label: 'Day 1' },
+  { key: 'd6', label: 'Day 6' },
+  { key: 'd9', label: 'Day 9' },
 ];
 
 const STIM_ROWS: MonitoringRowDef[] = [
@@ -48,11 +38,12 @@ const STIM_ROWS: MonitoringRowDef[] = [
   { key: 'drugDose', label: 'Drug / Dose', kind: 'text' },
   { key: 'frequency', label: 'Frequency', kind: 'text' },
   { key: 'lh', label: 'S.E. LH', kind: 'number' },
-  { key: 'fsh', label: 'FSH', kind: 'number' },
-  { key: 'e2', label: 'Estradiol (E2)', kind: 'number' },
-  { key: 'prolactin', label: 'Prolactin', kind: 'number' },
+  { key: 'fsh', label: 'S.E. FSH', kind: 'number' },
+  { key: 'e2', label: 'S.E. Estradiol', kind: 'number' },
+  { key: 'prolactin', label: 'S.E. Prolactin', kind: 'number' },
   { key: 'endo', label: 'Endo. Thickness', kind: 'text' },
-  ...FOLLICLE_ROWS,
+  { key: 'folRt', label: 'Follicle Count (Rt)', kind: 'number' },
+  { key: 'folLt', label: 'Follicle Count (Lt)', kind: 'number' },
   { key: 'rhcg', label: 'r.HCG', kind: 'text' },
   { key: 'time', label: 'Date / Time', kind: 'text' },
 ];
@@ -62,41 +53,45 @@ const LAYOUTS: Record<MonitoringSheetOption, MonitoringSheetLayout> = {
     option: 'Agonist',
     title: 'Agonist Cycle Monitoring Chart',
     hint: 'Days across the top, same layout as the assignment Excel. Fill this on Cycle Creation after the protocol is selected.',
-    columns: [...DAY_COLUMNS, { key: 'trigger', label: 'Trigger' }, { key: 'opu', label: 'OPU' }],
+    columns: [...DAY_0_9, { key: 'trigger', label: 'Day of Trigger' }, { key: 'opu', label: 'Day of OPU' }],
     rows: [...STIM_ROWS, { key: 'gnrh', label: 'GnRH Agonist', kind: 'text' }],
   },
   Antagonist: {
     option: 'Antagonist',
     title: 'Antagonist Cycle Monitoring Chart',
     hint: 'Antagonist start is tracked beside the standard stim days.',
-    columns: [...DAY_COLUMNS, { key: 'trigger', label: 'Trigger' }, { key: 'opu', label: 'OPU' }],
+    columns: [...DAY_0_9, { key: 'trigger', label: 'Day of Trigger' }, { key: 'opu', label: 'Day of OPU' }],
     rows: [...STIM_ROWS, { key: 'antagonist', label: 'Antagonist', kind: 'text' }, { key: 'gnrh', label: 'GnRH Agonist', kind: 'text' }],
   },
   HRT: {
     option: 'HRT',
     title: 'HRT Cycle Monitoring Chart',
     hint: 'Estrogen build-up through progesterone conversion. Used for FET / recipient lining.',
-    columns: [...DAY_COLUMNS, { key: 'prog', label: 'Prog. Conversion' }],
+    columns: [...DAY_0_9, { key: 'prog', label: 'Prog. Conversion Day' }],
     rows: [
       { key: 'date', label: 'Date', kind: 'date' },
-      { key: 'drug1', label: 'Drug 1', kind: 'text' },
-      { key: 'drug2', label: 'Drug 2', kind: 'text' },
-      { key: 'estrogen', label: 'Estrogen', kind: 'text' },
-      { key: 'e2', label: 'Estradiol (E2)', kind: 'number' },
+      { key: 'drugDose', label: 'Drug / Dose', kind: 'text' },
+      { key: 'frequency', label: 'Frequency', kind: 'text' },
+      { key: 'lh', label: 'S.E. LH', kind: 'number' },
+      { key: 'fsh', label: 'S.E. FSH', kind: 'number' },
+      { key: 'e2', label: 'S.E. Estradiol', kind: 'number' },
+      { key: 'prolactin', label: 'S.E. Prolactin', kind: 'number' },
       { key: 'endo', label: 'Endo. Thickness', kind: 'text' },
-      { key: 'pessary', label: 'Progesterone pessary', kind: 'text' },
-      { key: 'dose', label: 'Dose', kind: 'text' },
+      { key: 'drug2', label: 'Drug / Dose', kind: 'text' },
+      { key: 'pessary', label: '200mg Vaginal Pessary', kind: 'text' },
       { key: 'time', label: 'Date / Time', kind: 'text' },
     ],
   },
   ModifiedHRT: {
     option: 'ModifiedHRT',
     title: 'Modified Natural Cycle Monitoring Chart',
-    hint: 'Fewer scan days, up to four drug/dose lines, then trigger and conversion.',
+    hint: 'Assignment Excel: Day 0, Day 1, Day 9, Day of Trigger, then Prog. Conversion.',
     columns: [
-      ...DAY_COLUMNS,
-      { key: 'trigger', label: 'Trigger' },
-      { key: 'prog', label: 'Prog. Conversion' },
+      { key: 'd0', label: 'Day 0' },
+      { key: 'd1', label: 'Day 1' },
+      { key: 'd9', label: 'Day 9' },
+      { key: 'trigger', label: 'Day of Trigger' },
+      { key: 'prog', label: 'Prog. Conversion Day' },
     ],
     rows: [
       { key: 'date', label: 'Date', kind: 'date' },
@@ -104,10 +99,16 @@ const LAYOUTS: Record<MonitoringSheetOption, MonitoringSheetLayout> = {
       { key: 'drug2', label: 'Drug / Dose 2', kind: 'text' },
       { key: 'drug3', label: 'Drug / Dose 3', kind: 'text' },
       { key: 'drug4', label: 'Drug / Dose 4', kind: 'text' },
+      { key: 'frequency', label: 'Frequency', kind: 'text' },
       { key: 'lh', label: 'S.E. LH', kind: 'number' },
-      { key: 'e2', label: 'Estradiol (E2)', kind: 'number' },
+      { key: 'fsh', label: 'S.E. FSH', kind: 'number' },
+      { key: 'e2', label: 'S.E. Estradiol', kind: 'number' },
+      { key: 'prolactin', label: 'S.E. Prolactin', kind: 'number' },
       { key: 'endo', label: 'Endo. Thickness', kind: 'text' },
-      ...FOLLICLE_ROWS,
+      { key: 'follicle', label: 'Follicle Count', kind: 'text' },
+      { key: 'rhcg', label: 'r.HCG', kind: 'text' },
+      { key: 'antagonist', label: 'Antagonist', kind: 'text' },
+      { key: 'gnrh', label: 'GnRH Agonist', kind: 'text' },
       { key: 'time', label: 'Date / Time', kind: 'text' },
     ],
   },
@@ -334,51 +335,23 @@ export function resolveMonSheetColumnColor(
     }
   }
 
-  // 4. Protocol & Day specific rules matching legacy Cycle.aspx.cs
+  // 4. Assignment Excel columns: Day 0 / 1 / 6 / 9 + Trigger / OPU / Prog.
   const opt = option || 'Antagonist';
 
-  // Day 0: White for all stimulation / antagonist / agonist protocols
-  if (colKey === 'd0') {
-    return MON_SHEET_COLORS.white;
-  }
+  if (colKey === 'd0') return MON_SHEET_COLORS.white;
+  if (colKey === 'd1') return MON_SHEET_COLORS.pink;
 
-  // Day 1: Pink for all stimulation cycles (Agonist, Antagonist, HRT, ModifiedHRT)
-  if (colKey === 'd1') {
-    return MON_SHEET_COLORS.pink;
-  }
-
-  // Antagonist protocol:
-  if (opt === 'Antagonist') {
+  if (opt === 'Antagonist' && colKey === 'd6') {
     const antagVal = values?.antagonist?.[colKey]?.trim();
-    if (antagVal && antagVal !== '0') {
-      let isFirst = true;
-      if (values?.antagonist) {
-        const dayNum = parseInt(colKey.replace('d', ''), 10);
-        for (let d = 1; d < dayNum; d++) {
-          const prior = values.antagonist[`d${d}`]?.trim();
-          if (prior && prior !== '0') {
-            isFirst = false;
-            break;
-          }
-        }
-      }
-      if (isFirst) return MON_SHEET_COLORS.yellow;
-    } else if (colKey === 'd6' && !hasAnyAntagonistEntered(values)) {
+    if ((antagVal && antagVal !== '0') || !hasAnyAntagonistEntered(values)) {
       return MON_SHEET_COLORS.yellow;
     }
   }
 
-  // Agonist protocol: Day 6 is yellow
-  if (opt === 'Agonist' && colKey === 'd6') {
+  if ((opt === 'Agonist' || opt === 'HRT') && colKey === 'd6') {
     return MON_SHEET_COLORS.yellow;
   }
 
-  // Modified Natural: Day 6 yellow milestone
-  if (opt === 'ModifiedHRT' && colKey === 'd6') {
-    return MON_SHEET_COLORS.yellow;
-  }
-
-  // Standard stimulation / scan day
   return MON_SHEET_COLORS.sage;
 }
 

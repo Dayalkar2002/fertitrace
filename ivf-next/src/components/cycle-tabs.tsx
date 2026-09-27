@@ -16,6 +16,7 @@ import { emptyTabMasters } from '@/lib/types/cycle-detail';
 import {
   CYCLE_CREATION_STORAGE_KEY,
   embedMonitoringSheetMarker,
+  getMonitoringSheetLabel,
   isMonitoringSheetAllowed,
   MONITORING_SHEET_OPTIONS,
   monitoringSheetHint,
@@ -395,29 +396,19 @@ export function CycleMonitoringTab({ cycleId }: TabProps) {
 
   return (
     <div className="tab-form space-y-6">
-      {/* 1. Protocol View Switcher & Clinical Color Legend */}
+      {/* 1. Protocol chosen on Cycle Creation — not switchable here */}
       <section className="rounded-xl border border-amber-200/80 bg-linear-to-r from-amber-50/70 via-stone-50/60 to-purple-50/60 p-3.5 shadow-xs">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="rounded bg-[#a66c18] px-2 py-0.5 text-xs font-bold text-white shadow-xs">
-              Protocol:
+              Protocol
             </span>
-            <div className="flex flex-wrap gap-1.5">
-              {MONITORING_SHEET_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setMonitoringSheet(opt.value)}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
-                    monitoringSheet === opt.value
-                      ? 'bg-[#a66c18] text-white shadow-xs'
-                      : 'bg-white text-slate-700 hover:bg-amber-100/60 border border-slate-200'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
+            <span className="rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-bold text-[#855512]">
+              {getMonitoringSheetLabel(monitoringSheet) || 'Not selected on Cycle Creation'}
+            </span>
+            <span className="text-[11px] text-slate-500">
+              Change this on Cycle Creation. Fresh / FZO / OD use Agonist or Antagonist; FET / THO / OR / ER use HRT or Modified Natural.
+            </span>
           </div>
           <span className="text-xs text-slate-500 font-medium">Cycle #{cycleId}</span>
         </div>
