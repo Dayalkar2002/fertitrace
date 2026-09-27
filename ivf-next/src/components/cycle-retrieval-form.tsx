@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { usePatient } from '@/contexts/patient-context';
 import { CycleRetrievalPanels } from '@/components/cycle-retrieval-panels';
@@ -62,7 +62,19 @@ export function CycleRetrievalForm({ cycleId }: CycleRetrievalFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [validationError, setValidationError] = useState('');
-  const [activeTab, setActiveTab] = useState('retrieval');
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(
+    tabParam && ['history', 'survival', 'monitoring', 'retrieval', 'outcome'].includes(tabParam)
+      ? tabParam
+      : 'retrieval'
+  );
+
+  useEffect(() => {
+    if (tabParam && ['history', 'survival', 'monitoring', 'retrieval', 'outcome'].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
 
   const [selfToSelf, setSelfToSelf] = useState<RetrievalRow[]>([emptySelfRow()]);
   const [donorToRecipient, setDonorToRecipient] = useState<RetrievalRow[]>([emptyRecipientRow()]);
@@ -281,6 +293,7 @@ export function CycleRetrievalForm({ cycleId }: CycleRetrievalFormProps) {
             monitoringSheet={config.cycle.monitoringSheet || readCreationMonitoringSheet()}
             fzoCycleId={fzoCycleId}
             fzoRecipientId={fzoRecipientId}
+            initialData={config.existingRetrieval}
             onChange={(data) => {
               retrievalPayloadRef.current = data;
             }}

@@ -48,6 +48,15 @@ export interface CycleCreationPayload {
   notes: string;
 }
 
+export interface CryoStockSummary {
+  etFrozen: number;
+  btFrozen: number;
+  totalFrozenOocytes: number;
+  miiFrozen: number;
+  miFrozen: number;
+  gvFrozen: number;
+}
+
 export interface PatientCycleRow {
   cycleId: string;
   cycleType: string;

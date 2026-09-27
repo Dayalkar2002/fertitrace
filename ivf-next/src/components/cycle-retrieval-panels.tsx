@@ -68,6 +68,7 @@ interface CycleRetrievalPanelsProps {
   monitoringSheet?: string;
   fzoCycleId?: string;
   fzoRecipientId?: number;
+  initialData?: RetrievalData | null;
   onChange?: (data: RetrievalData) => void;
 }
 
@@ -79,6 +80,7 @@ export function CycleRetrievalPanels({
   monitoringSheet = '',
   fzoCycleId = '',
   fzoRecipientId = 0,
+  initialData,
   onChange,
 }: CycleRetrievalPanelsProps) {
   const { token } = useAuth();
@@ -102,6 +104,72 @@ export function CycleRetrievalPanels({
   const [locationSaving, setLocationSaving] = useState<number | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+
+  useEffect(() => {
+    if (initialData) {
+      if (initialData.selfToSelf && initialData.selfToSelf.length > 0) {
+        setOpuRows(initialData.selfToSelf);
+      } else if (initialData.donorEggCount && initialData.donorEggCount.length > 0) {
+        setOpuRows(initialData.donorEggCount);
+      } else if (initialData.donorToSelf && initialData.donorToSelf.length > 0) {
+        setOpuRows(initialData.donorToSelf);
+      }
+      if (initialData.donorToRecipient && initialData.donorToRecipient.length > 0) {
+        setDonorRows(initialData.donorToRecipient);
+      }
+      if (initialData.freezeOocytes) {
+        setFreeze(initialData.freezeOocytes);
+      }
+      if (initialData.fetThaw) {
+        setFet(initialData.fetThaw);
+      }
+      if (initialData.thawOocytes) {
+        setThaw(initialData.thawOocytes);
+      }
+      if (initialData.embryoRecipient) {
+        setErDonor(initialData.embryoRecipient);
+      }
+      return;
+    }
+
+    if (cycleId && token) {
+      let active = true;
+      fetch(`/api/cycles/${cycleId}/retrieval-config`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((r) => r.json())
+        .then((res) => {
+          if (!active || !res?.data?.existingRetrieval) return;
+          const ex = res.data.existingRetrieval as RetrievalData;
+          if (ex.selfToSelf && ex.selfToSelf.length > 0) {
+            setOpuRows(ex.selfToSelf);
+          } else if (ex.donorEggCount && ex.donorEggCount.length > 0) {
+            setOpuRows(ex.donorEggCount);
+          } else if (ex.donorToSelf && ex.donorToSelf.length > 0) {
+            setOpuRows(ex.donorToSelf);
+          }
+          if (ex.donorToRecipient && ex.donorToRecipient.length > 0) {
+            setDonorRows(ex.donorToRecipient);
+          }
+          if (ex.freezeOocytes) {
+            setFreeze(ex.freezeOocytes);
+          }
+          if (ex.fetThaw) {
+            setFet(ex.fetThaw);
+          }
+          if (ex.thawOocytes) {
+            setThaw(ex.thawOocytes);
+          }
+          if (ex.embryoRecipient) {
+            setErDonor(ex.embryoRecipient);
+          }
+        })
+        .catch(() => {});
+      return () => {
+        active = false;
+      };
+    }
+  }, [initialData, cycleId, token]);
 
   const monthYear = new Date().toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
   const husbandSelected = semenSource.startsWith('husband');

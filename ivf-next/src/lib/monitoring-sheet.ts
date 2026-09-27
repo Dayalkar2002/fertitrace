@@ -25,11 +25,12 @@ export interface MonitoringSheetLayout {
 
 export type MonitoringChartValues = Record<string, Record<string, string>>;
 
-const DAY_0_9: MonitoringColumn[] = [
+const DAY_COLUMNS: MonitoringColumn[] = [
   { key: 'd0', label: 'Day 0' },
-  { key: 'd1', label: 'Day 1' },
-  { key: 'd6', label: 'Day 6' },
-  { key: 'd9', label: 'Day 9' },
+  ...Array.from({ length: 21 }, (_, i) => ({
+    key: `d${i + 1}`,
+    label: `Day ${i + 1}`,
+  })),
 ];
 
 /** Two measurable follicles per ovary, entered as size in mm (e.g. "18 x 20"). */
@@ -61,21 +62,21 @@ const LAYOUTS: Record<MonitoringSheetOption, MonitoringSheetLayout> = {
     option: 'Agonist',
     title: 'Agonist Cycle Monitoring Chart',
     hint: 'Days across the top, same layout as the assignment Excel. Fill this on Cycle Creation after the protocol is selected.',
-    columns: [...DAY_0_9, { key: 'trigger', label: 'Trigger' }, { key: 'opu', label: 'OPU' }],
+    columns: [...DAY_COLUMNS, { key: 'trigger', label: 'Trigger' }, { key: 'opu', label: 'OPU' }],
     rows: [...STIM_ROWS, { key: 'gnrh', label: 'GnRH Agonist', kind: 'text' }],
   },
   Antagonist: {
     option: 'Antagonist',
     title: 'Antagonist Cycle Monitoring Chart',
     hint: 'Antagonist start is tracked beside the standard stim days.',
-    columns: [...DAY_0_9, { key: 'trigger', label: 'Trigger' }, { key: 'opu', label: 'OPU' }],
+    columns: [...DAY_COLUMNS, { key: 'trigger', label: 'Trigger' }, { key: 'opu', label: 'OPU' }],
     rows: [...STIM_ROWS, { key: 'antagonist', label: 'Antagonist', kind: 'text' }, { key: 'gnrh', label: 'GnRH Agonist', kind: 'text' }],
   },
   HRT: {
     option: 'HRT',
     title: 'HRT Cycle Monitoring Chart',
     hint: 'Estrogen build-up through progesterone conversion. Used for FET / recipient lining.',
-    columns: [...DAY_0_9, { key: 'prog', label: 'Prog. Conversion' }],
+    columns: [...DAY_COLUMNS, { key: 'prog', label: 'Prog. Conversion' }],
     rows: [
       { key: 'date', label: 'Date', kind: 'date' },
       { key: 'drug1', label: 'Drug 1', kind: 'text' },
@@ -93,9 +94,7 @@ const LAYOUTS: Record<MonitoringSheetOption, MonitoringSheetLayout> = {
     title: 'Modified Natural Cycle Monitoring Chart',
     hint: 'Fewer scan days, up to four drug/dose lines, then trigger and conversion.',
     columns: [
-      { key: 'd0', label: 'Day 0' },
-      { key: 'd1', label: 'Day 1' },
-      { key: 'd9', label: 'Day 9' },
+      ...DAY_COLUMNS,
       { key: 'trigger', label: 'Trigger' },
       { key: 'prog', label: 'Prog. Conversion' },
     ],

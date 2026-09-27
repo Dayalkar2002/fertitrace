@@ -50,7 +50,7 @@ App: **http://localhost:3001**
 
 | Username | Password  |
 |----------|-----------|
-| admin    | admin123  |
+| sachin@gmail.com    | sachin  |
 | doctor   | doctor123 |
 
 When `DB_*` is set, production users authenticate via **`spUserLogin`**.

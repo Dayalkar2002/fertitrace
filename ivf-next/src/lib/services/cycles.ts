@@ -1,5 +1,6 @@
 import { apiFetch } from '@/lib/api';
 import type {
+  CryoStockSummary,
   CycleCreationPayload,
   CycleCreationResult,
   CycleEntry,
@@ -68,6 +69,37 @@ export async function listPatientCycles(
     token
   );
   return res.data || [];
+}
+
+export async function fetchCryoStockSummary(
+  token: string,
+  patId: number,
+  satId: number,
+  cycleId?: string
+): Promise<CryoStockSummary> {
+  const empty: CryoStockSummary = {
+    etFrozen: 0,
+    btFrozen: 0,
+    totalFrozenOocytes: 0,
+    miiFrozen: 0,
+    miFrozen: 0,
+    gvFrozen: 0,
+  };
+  if (!patId && !cycleId) return empty;
+  try {
+    const params = new URLSearchParams();
+    if (patId) params.set('patId', String(patId));
+    if (satId) params.set('satId', String(satId));
+    if (cycleId) params.set('cycleId', cycleId);
+    const res = await apiFetch<{ success: boolean; data: CryoStockSummary }>(
+      `/cycles/cryo-stock?${params.toString()}`,
+      {},
+      token
+    );
+    return res.data || empty;
+  } catch {
+    return empty;
+  }
 }
 
 export async function fetchCycleTypes(token: string): Promise<{

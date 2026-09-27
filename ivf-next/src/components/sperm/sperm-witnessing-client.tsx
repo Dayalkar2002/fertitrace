@@ -21,6 +21,8 @@ import {
 } from '@/lib/sperm-flow';
 import { emptySmartAnalysis, type SmartAnalysisValues } from '@/lib/sperm-analysis';
 import { SmartAnalysisForm } from '@/components/sperm/smart-analysis-form';
+import { SemenAnalysisModal } from '@/components/sperm/semen-analysis-modal';
+import { fetchCycleSemenAnalysis, type CycAnalysisRecord } from '@/lib/services/semen-analysis';
 import {
   applyLocationDetails,
   idLocationQueryType,
@@ -149,6 +151,31 @@ export function SpermWitnessingClient() {
     setPartnerDobAge(selectedPatient.age ? `${selectedPatient.age} Y` : '');
     setPartnerPhone(selectedPatient.mobile || selectedPatient.phone || '');
   }, [selectedPatient]);
+
+  // Saved SMART Semen Analysis records
+  const [semenAnalysisList, setSemenAnalysisList] = useState<CycAnalysisRecord[]>([]);
+  const [selectedAnalysisModal, setSelectedAnalysisModal] = useState<CycAnalysisRecord | null>(null);
+  const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
+  const [loadingAnalysisList, setLoadingAnalysisList] = useState(false);
+
+  useEffect(() => {
+    if (!token || !selectedPatient?.id) {
+      setSemenAnalysisList([]);
+      return;
+    }
+    setLoadingAnalysisList(true);
+    fetchCycleSemenAnalysis(token, '', Number(selectedPatient.id))
+      .then((res) => {
+        setSemenAnalysisList(res.history || (res.analysis ? [res.analysis] : []));
+      })
+      .catch((err) => {
+        console.error('Failed to load patient semen analysis list:', err);
+        setSemenAnalysisList([]);
+      })
+      .finally(() => {
+        setLoadingAnalysisList(false);
+      });
+  }, [token, selectedPatient?.id]);
 
   const cycleVisitId = !hasPatient
     ? blank
@@ -1019,6 +1046,115 @@ export function SpermWitnessingClient() {
               </div>
             </div>
           </div>
+
+          {/* 3. SAVED SEMEN ANALYSIS RECORDS (SMART DATABASE) */}
+          <div className="rounded-xl border border-slate-300/80 bg-white shadow-xs overflow-hidden">
+            <div className="bg-[#0b4a8b] px-4 py-2.5 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🔬</span>
+                <h2 className="text-xs font-bold uppercase tracking-wider">
+                  3. Saved Semen Analysis Records (SMART Database)
+                </h2>
+              </div>
+              <div className="flex items-center gap-2">
+                {semenAnalysisList.length > 0 && (
+                  <span className="rounded bg-white/20 px-2 py-0.5 text-[11px] font-semibold text-white">
+                    {semenAnalysisList.length} {semenAnalysisList.length === 1 ? 'Record' : 'Records'} Found
+                  </span>
+                )}
+                {loadingAnalysisList && (
+                  <span className="text-[11px] text-white/80 animate-pulse">Loading...</span>
+                )}
+              </div>
+            </div>
+
+            <div className="p-4">
+              {!hasPatient ? (
+                <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-xs text-slate-500">
+                  Select a patient to view saved semen analysis records.
+                </div>
+              ) : loadingAnalysisList ? (
+                <div className="flex items-center justify-center p-8 text-xs text-slate-500">
+                  <span className="mr-2">⏳</span> Loading analysis records from SMART database...
+                </div>
+              ) : semenAnalysisList.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-xs text-slate-500">
+                  No semen analysis records found in SMART database for {patientName}.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                        <th className="py-2.5 px-3">Date</th>
+                        <th className="py-2.5 px-3">Cycle ID</th>
+                        <th className="py-2.5 px-3">Sample Type</th>
+                        <th className="py-2.5 px-3">Indication</th>
+                        <th className="py-2.5 px-3 text-center bg-blue-50/50">Before Conc</th>
+                        <th className="py-2.5 px-3 text-center bg-blue-50/50">Before Motility</th>
+                        <th className="py-2.5 px-3 text-center bg-emerald-50/50">After Conc</th>
+                        <th className="py-2.5 px-3 text-center bg-emerald-50/50">After Motility</th>
+                        <th className="py-2.5 px-3">Swim Up</th>
+                        <th className="py-2.5 px-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-700">
+                      {semenAnalysisList.map((rec) => (
+                        <tr key={rec.analysisId} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-2.5 px-3 font-semibold text-slate-900">{rec.date || '—'}</td>
+                          <td className="py-2.5 px-3">
+                            <span className="inline-block rounded bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700 border border-slate-200">
+                              {rec.cycleId || '—'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 font-medium">{rec.spermType || 'Husband'}</td>
+                          <td className="py-2.5 px-3">
+                            <span className="rounded bg-blue-100/70 text-blue-800 px-2 py-0.5 text-[10px] font-bold">
+                              {rec.indication || 'ICSI'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-center font-bold text-blue-900 bg-blue-50/30">
+                            {rec.beforeSperms != null ? `${rec.beforeSperms} M/ml` : '—'}
+                          </td>
+                          <td className="py-2.5 px-3 text-center bg-blue-50/30">
+                            <span className="font-semibold text-slate-800">{rec.beforeMotility ?? '—'}%</span>
+                            {rec.beforeProgMotility != null && (
+                              <span className="text-[10px] text-slate-500 block">Prog: {rec.beforeProgMotility}%</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-center font-bold text-emerald-900 bg-emerald-50/30">
+                            {rec.afterSperms != null ? `${rec.afterSperms} M/ml` : '—'}
+                          </td>
+                          <td className="py-2.5 px-3 text-center bg-emerald-50/30">
+                            <span className="font-semibold text-slate-800">{rec.afterMotility ?? '—'}%</span>
+                            {rec.afterProgMotility != null && (
+                              <span className="text-[10px] text-slate-500 block">Prog: {rec.afterProgMotility}%</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <span className="font-medium text-slate-700">{rec.trialSwimUp || '—'}</span>
+                          </td>
+                          <td className="py-2.5 px-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedAnalysisModal(rec);
+                                setIsAnalysisModalOpen(true);
+                              }}
+                              className="inline-flex items-center gap-1 rounded bg-[#0b4a8b] hover:bg-[#083564] px-2.5 py-1 text-[11px] font-bold text-white shadow-xs transition"
+                            >
+                              <span>View Full Analysis</span>
+                              <span className="text-xs">↗</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       ) : (
         /* DOWNSTREAM WORKFLOW VIEW (Appears on clicking Accept & Continue or selecting flow) */
@@ -1038,6 +1174,18 @@ export function SpermWitnessingClient() {
               <span className="rounded-md bg-blue-50 border border-blue-200 px-2.5 py-1 text-xs font-bold text-blue-700">
                 {flow.summaryTitle || intendedUse} • {spermSource} • {sampleState}
               </span>
+              {semenAnalysisList.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedAnalysisModal(semenAnalysisList[0]);
+                    setIsAnalysisModalOpen(true);
+                  }}
+                  className="rounded-md border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800 transition flex items-center gap-1 shadow-2xs"
+                >
+                  <span>🔬 View Saved SMART Analysis ({semenAnalysisList.length})</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -1574,6 +1722,13 @@ export function SpermWitnessingClient() {
         </div>
       )}
 
+      <SemenAnalysisModal
+        isOpen={isAnalysisModalOpen}
+        onClose={() => setIsAnalysisModalOpen(false)}
+        analysis={selectedAnalysisModal}
+        patientName={patientName}
+        partnerName={selectedPatient?.partner || ''}
+      />
     </div>
   );
 }
