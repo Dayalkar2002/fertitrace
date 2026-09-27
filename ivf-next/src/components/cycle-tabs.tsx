@@ -26,6 +26,7 @@ import {
 import { CycleMonitoringChart } from '@/components/cycle-monitoring-chart';
 import { resolveMonChartCssColor } from '@/lib/monitoring-sheet';
 
+
 interface TabProps {
   cycleId: string;
 }
@@ -371,7 +372,7 @@ export function CycleMonitoringTab({ cycleId }: TabProps) {
             const created = JSON.parse(stored) as { monitoringSheet?: string };
             if (created.monitoringSheet) setMonitoringSheet(created.monitoringSheet);
           }
-        } catch {}
+        } catch { }
       }
       setForm({ day0: { ...defaultDay0(), ...data.day0 }, remDays: data.remDays?.length ? data.remDays : [defaultRemDay(1)] });
       setLoading(false);
