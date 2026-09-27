@@ -122,6 +122,7 @@ export interface MonitoringRemDay {
   hcg: boolean;
   hcgDose: number;
   ultrasound: string;
+  color?: string;
 }
 
 export interface CycleMonitoring {

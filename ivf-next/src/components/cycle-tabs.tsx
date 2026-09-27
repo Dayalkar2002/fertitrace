@@ -22,6 +22,8 @@ import {
   parseMonitoringSheet,
   stripMonitoringSheetMarker,
 } from '@/lib/cycle-utils';
+import { CycleMonitoringChart } from '@/components/cycle-monitoring-chart';
+import { resolveMonChartCssColor } from '@/lib/monitoring-sheet';
 
 interface TabProps {
   cycleId: string;
@@ -234,6 +236,117 @@ export function CycleSurvivalTab({ cycleId }: TabProps) {
   );
 }
 
+function getVisitRowVisual(r: MonitoringRemDay, isFirstAntag: boolean) {
+  const isTrigger = Boolean(r.hcg || (r.hcgDose && r.hcgDose > 0));
+  const hasAntag = Boolean(r.antaDrug1 && r.antaDrug1 > 0);
+
+  if (r.color) {
+    const hex = resolveMonChartCssColor(r.color);
+    if (hex === '#81c784' || isTrigger) {
+      return {
+        bgCls: 'bg-[#81c784]/20 hover:bg-[#81c784]/30 border-l-4 border-l-[#81c784]',
+        badge: (
+          <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold bg-[#81c784]/30 text-[#14532d] border border-[#81c784]">
+            🟢 Trigger
+          </span>
+        ),
+      };
+    }
+    if (hex === '#ef5350') {
+      return {
+        bgCls: 'bg-[#ef5350]/20 hover:bg-[#ef5350]/30 border-l-4 border-l-[#ef5350]',
+        badge: (
+          <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold bg-[#ef5350]/30 text-[#7f1d1d] border border-[#ef5350]">
+            🔴 OPU
+          </span>
+        ),
+      };
+    }
+    if (hex === '#ffeb3b') {
+      return {
+        bgCls: 'bg-[#ffeb3b]/25 hover:bg-[#ffeb3b]/35 border-l-4 border-l-[#ffeb3b]',
+        badge: (
+          <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold bg-[#ffeb3b]/40 text-[#713f12] border border-[#facc15]">
+            🟡 Antagonist
+          </span>
+        ),
+      };
+    }
+    if (hex === '#f8bbd0') {
+      return {
+        bgCls: 'bg-[#f8bbd0]/30 hover:bg-[#f8bbd0]/40 border-l-4 border-l-[#f8bbd0]',
+        badge: (
+          <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold bg-[#f8bbd0]/50 text-[#881337] border border-[#f472b6]">
+            🌸 Day 1 (Stim)
+          </span>
+        ),
+      };
+    }
+    if (hex === '#ce93d8') {
+      return {
+        bgCls: 'bg-[#ce93d8]/25 hover:bg-[#ce93d8]/35 border-l-4 border-l-[#ce93d8]',
+        badge: (
+          <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold bg-[#ce93d8]/40 text-[#4a044e] border border-[#ce93d8]">
+            🟣 Prog. Conversion
+          </span>
+        ),
+      };
+    }
+    if (hex === '#64b5f6') {
+      return {
+        bgCls: 'bg-[#64b5f6]/20 hover:bg-[#64b5f6]/30 border-l-4 border-l-[#64b5f6]',
+        badge: (
+          <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold bg-[#64b5f6]/30 text-[#1e3a8a] border border-[#64b5f6]">
+            🔵 Terminated
+          </span>
+        ),
+      };
+    }
+  }
+
+  if (isTrigger) {
+    return {
+      bgCls: 'bg-[#81c784]/20 hover:bg-[#81c784]/30 border-l-4 border-l-[#81c784]',
+      badge: (
+        <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold bg-[#81c784]/30 text-[#14532d] border border-[#81c784]">
+          🟢 Trigger ({r.hcgDose ? `${r.hcgDose}` : 'Given'})
+        </span>
+      ),
+    };
+  }
+
+  if (hasAntag || isFirstAntag) {
+    return {
+      bgCls: 'bg-[#ffeb3b]/25 hover:bg-[#ffeb3b]/35 border-l-4 border-l-[#ffeb3b]',
+      badge: (
+        <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold bg-[#ffeb3b]/40 text-[#713f12] border border-[#facc15]">
+          🟡 Antagonist
+        </span>
+      ),
+    };
+  }
+
+  if (r.day === 1) {
+    return {
+      bgCls: 'bg-[#f8bbd0]/30 hover:bg-[#f8bbd0]/40 border-l-4 border-l-[#f8bbd0]',
+      badge: (
+        <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold bg-[#f8bbd0]/50 text-[#881337] border border-[#f472b6]">
+          🌸 Day 1 (Stim)
+        </span>
+      ),
+    };
+  }
+
+  return {
+    bgCls: 'bg-[#d0e4a6]/25 hover:bg-[#d0e4a6]/35 border-l-4 border-l-[#d0e4a6]',
+    badge: (
+      <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-semibold bg-[#d0e4a6]/40 text-[#2d4a12] border border-[#a3e635]">
+        🍃 Stim Day
+      </span>
+    ),
+  };
+}
+
 export function CycleMonitoringTab({ cycleId }: TabProps) {
   const { token } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -242,11 +355,23 @@ export function CycleMonitoringTab({ cycleId }: TabProps) {
   const [success, setSuccess] = useState('');
   const [masters, setMasters] = useState<TabMasters>(emptyTabMasters);
   const [form, setForm] = useState<CycleMonitoring>({ day0: defaultDay0(), remDays: [defaultRemDay(1)] });
+  const [monitoringSheet, setMonitoringSheet] = useState<string>('Antagonist');
 
   useEffect(() => {
     if (!token) return;
-    void cycleDetail.loadMonitoring(token, cycleId).then(({ data, masters: m }) => {
+    void cycleDetail.loadMonitoring(token, cycleId).then(({ data, masters: m, monitoringSheet: ms }) => {
       if (m) setMasters(m);
+      if (ms) {
+        setMonitoringSheet(ms);
+      } else if (typeof window !== 'undefined') {
+        try {
+          const stored = sessionStorage.getItem(CYCLE_CREATION_STORAGE_KEY);
+          if (stored) {
+            const created = JSON.parse(stored) as { monitoringSheet?: string };
+            if (created.monitoringSheet) setMonitoringSheet(created.monitoringSheet);
+          }
+        } catch {}
+      }
       setForm({ day0: { ...defaultDay0(), ...data.day0 }, remDays: data.remDays?.length ? data.remDays : [defaultRemDay(1)] });
       setLoading(false);
     }).catch(() => { setError('Failed to load monitoring chart.'); setLoading(false); });
@@ -265,43 +390,110 @@ export function CycleMonitoringTab({ cycleId }: TabProps) {
 
   if (loading) return <p className="tab-loading">Loading monitoring chart…</p>;
 
+  // Check which day is first antagonist for protocol visual
+  let firstAntagFound = false;
+
   return (
     <div className="tab-form space-y-6">
-      {/* 1. SMART Filled Monitoring Sheet Grid Overview */}
+      {/* 1. Protocol View Switcher & Clinical Color Legend */}
+      <section className="rounded-xl border border-amber-200/80 bg-linear-to-r from-amber-50/70 via-stone-50/60 to-purple-50/60 p-3.5 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="rounded bg-[#a66c18] px-2 py-0.5 text-xs font-bold text-white shadow-xs">
+              Protocol:
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {MONITORING_SHEET_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setMonitoringSheet(opt.value)}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                    monitoringSheet === opt.value
+                      ? 'bg-[#a66c18] text-white shadow-xs'
+                      : 'bg-white text-slate-700 hover:bg-amber-100/60 border border-slate-200'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <span className="text-xs text-slate-500 font-medium">Cycle #{cycleId}</span>
+        </div>
+
+        {/* Clinical Color Key */}
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-amber-200/60 pt-2.5 text-[11px]">
+          <span className="font-bold text-slate-600 mr-1">Clinical Protocol Color Key:</span>
+          <span className="inline-flex items-center gap-1 rounded bg-[#ffffff] px-2 py-0.5 font-bold text-slate-800 border border-slate-300 shadow-2xs">
+            ⚪ Baseline (Day 0)
+          </span>
+          <span className="inline-flex items-center gap-1 rounded bg-[#f8bbd0] px-2 py-0.5 font-bold text-[#881337] border border-pink-300 shadow-2xs">
+            🌸 Stim Start (Day 1)
+          </span>
+          <span className="inline-flex items-center gap-1 rounded bg-[#ffeb3b] px-2 py-0.5 font-bold text-[#713f12] border border-yellow-400 shadow-2xs">
+            🟡 Antagonist (Day 6 / Antag)
+          </span>
+          <span className="inline-flex items-center gap-1 rounded bg-[#81c784] px-2 py-0.5 font-bold text-[#14532d] border border-emerald-400 shadow-2xs">
+            🟢 Trigger (r.HCG)
+          </span>
+          <span className="inline-flex items-center gap-1 rounded bg-[#ef5350] px-2 py-0.5 font-bold text-white border border-red-500 shadow-2xs">
+            🔴 OPU
+          </span>
+          <span className="inline-flex items-center gap-1 rounded bg-[#ce93d8] px-2 py-0.5 font-bold text-[#4a044e] border border-purple-300 shadow-2xs">
+            🟣 Prog. Conversion
+          </span>
+          <span className="inline-flex items-center gap-1 rounded bg-[#d0e4a6] px-2 py-0.5 font-bold text-[#2d4a12] border border-lime-300 shadow-2xs">
+            🍃 Stim Scan Days
+          </span>
+        </div>
+      </section>
+
+      {/* 2. Interactive Multi-Column Clinical Monitoring Sheet Chart */}
+      {monitoringSheet && (
+        <CycleMonitoringChart option={monitoringSheet} cycleId={cycleId} />
+      )}
+
+      {/* 3. SMART Filled Monitoring Sheet Grid Overview */}
       <section className="rounded-xl border border-purple-200 bg-white p-4 shadow-xs">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h3 className="text-sm font-bold text-purple-950 flex items-center gap-2">
-              <span>📊 Monitoring Sheet (Cycle {cycleId})</span>
+              <span>📊 Visit Records Summary (Cycle {cycleId})</span>
               <span className="rounded-full bg-purple-100 text-purple-800 px-2 py-0.5 text-xs font-semibold">
                 {form.remDays.length + (form.day0.date ? 1 : 0)} Days Recorded
               </span>
             </h3>
-            <p className="text-xs text-slate-500">Filled stimulation monitoring data loaded directly from SMART records.</p>
+            <p className="text-xs text-slate-500">Chronological stimulation visits formatted with protocol milestones and doses.</p>
           </div>
         </div>
 
-        <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <div className="overflow-x-auto rounded-lg border border-slate-200 shadow-2xs">
           <table className="min-w-full text-left text-xs border-collapse">
-            <thead className="bg-slate-100 text-slate-700 font-bold">
+            <thead className="bg-[#a66c18] text-white font-bold">
               <tr>
-                <th className="border-b border-slate-200 px-2.5 py-2">Day</th>
-                <th className="border-b border-slate-200 px-2.5 py-2">Date</th>
-                <th className="border-b border-slate-200 px-2.5 py-2">FSH Dose</th>
-                <th className="border-b border-slate-200 px-2.5 py-2">GnRHa</th>
-                <th className="border-b border-slate-200 px-2.5 py-2">E2 (pg/mL)</th>
-                <th className="border-b border-slate-200 px-2.5 py-2">LH (mIU/mL)</th>
-                <th className="border-b border-slate-200 px-2.5 py-2">Left Follicles</th>
-                <th className="border-b border-slate-200 px-2.5 py-2">Right Follicles</th>
-                <th className="border-b border-slate-200 px-2.5 py-2">Endometrium</th>
-                <th className="border-b border-slate-200 px-2.5 py-2">Trigger / HCG</th>
-                <th className="border-b border-slate-200 px-2.5 py-2">Remarks</th>
+                <th className="border-b border-amber-900/30 px-2.5 py-2">Milestone / Day</th>
+                <th className="border-b border-amber-900/30 px-2.5 py-2">Date</th>
+                <th className="border-b border-amber-900/30 px-2.5 py-2">FSH Dose</th>
+                <th className="border-b border-amber-900/30 px-2.5 py-2">GnRHa</th>
+                <th className="border-b border-amber-900/30 px-2.5 py-2">E2 (pg/mL)</th>
+                <th className="border-b border-amber-900/30 px-2.5 py-2">LH (mIU/mL)</th>
+                <th className="border-b border-amber-900/30 px-2.5 py-2">Left Follicles</th>
+                <th className="border-b border-amber-900/30 px-2.5 py-2">Right Follicles</th>
+                <th className="border-b border-amber-900/30 px-2.5 py-2">Endometrium</th>
+                <th className="border-b border-amber-900/30 px-2.5 py-2">Trigger / HCG</th>
+                <th className="border-b border-amber-900/30 px-2.5 py-2">Remarks</th>
               </tr>
             </thead>
             <tbody>
               {form.day0.date && (
-                <tr className="bg-purple-50/50 hover:bg-purple-50 transition border-b border-slate-100 font-medium">
-                  <td className="px-2.5 py-2 font-bold text-purple-900">Day 0</td>
+                <tr className="bg-white hover:bg-slate-50 transition border-b border-slate-200 font-medium border-l-4 border-l-slate-400">
+                  <td className="px-2.5 py-2 font-bold text-slate-900 flex items-center gap-1.5">
+                    <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-700 border border-slate-300">
+                      ⚪ Baseline
+                    </span>
+                    <span>Day 0</span>
+                  </td>
                   <td className="px-2.5 py-2 text-slate-700">{form.day0.date ? new Date(form.day0.date).toLocaleDateString('en-GB') : '—'}</td>
                   <td className="px-2.5 py-2 text-slate-700">{form.day0.fshDrug1Dose || '—'}</td>
                   <td className="px-2.5 py-2 text-slate-700">{form.day0.gnrha || '—'}</td>
@@ -314,29 +506,39 @@ export function CycleMonitoringTab({ cycleId }: TabProps) {
                   <td className="px-2.5 py-2 text-slate-600">{form.day0.remarks || '—'}</td>
                 </tr>
               )}
-              {form.remDays.map((r) => (
-                <tr key={r.day} className="hover:bg-slate-50/80 transition border-b border-slate-100">
-                  <td className="px-2.5 py-2 font-bold text-slate-800 font-mono">Day {r.day}</td>
-                  <td className="px-2.5 py-2 text-slate-700">{r.date ? new Date(r.date).toLocaleDateString('en-GB') : '—'}</td>
-                  <td className="px-2.5 py-2 text-slate-800">{r.fshDrug1 || r.hmgDrug1 || '—'}</td>
-                  <td className="px-2.5 py-2 text-slate-800">{r.gnrha || '—'}</td>
-                  <td className="px-2.5 py-2 text-slate-800">{r.e2 || '—'}</td>
-                  <td className="px-2.5 py-2 text-slate-800">{r.lh || '—'}</td>
-                  <td className="px-2.5 py-2 text-emerald-800 font-semibold">{r.follicleLeft || '0'}</td>
-                  <td className="px-2.5 py-2 text-emerald-800 font-semibold">{r.follicleRight || '0'}</td>
-                  <td className="px-2.5 py-2 text-purple-900 font-bold">{r.endometrium || '—'}</td>
-                  <td className="px-2.5 py-2">
-                    {r.hcg ? (
-                      <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                        Trigger ({r.hcgDose || 'Yes'})
-                      </span>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td className="px-2.5 py-2 text-slate-600 max-w-[150px] truncate" title={r.remarks}>{r.remarks || '—'}</td>
-                </tr>
-              ))}
+              {form.remDays.map((r) => {
+                const isAntagThisDay = Boolean(r.antaDrug1 && r.antaDrug1 > 0);
+                const isFirstAntag = isAntagThisDay && !firstAntagFound;
+                if (isAntagThisDay) firstAntagFound = true;
+                const visual = getVisitRowVisual(r, isFirstAntag);
+
+                return (
+                  <tr key={r.day} className={`transition border-b border-slate-100 ${visual.bgCls}`}>
+                    <td className="px-2.5 py-2 font-bold text-slate-900 font-mono flex items-center gap-1.5">
+                      {visual.badge}
+                      <span>Day {r.day}</span>
+                    </td>
+                    <td className="px-2.5 py-2 text-slate-700">{r.date ? new Date(r.date).toLocaleDateString('en-GB') : '—'}</td>
+                    <td className="px-2.5 py-2 text-slate-800 font-semibold">{r.fshDrug1 || r.hmgDrug1 || '—'}</td>
+                    <td className="px-2.5 py-2 text-slate-800">{r.gnrha || '—'}</td>
+                    <td className="px-2.5 py-2 text-slate-800">{r.e2 || '—'}</td>
+                    <td className="px-2.5 py-2 text-slate-800">{r.lh || '—'}</td>
+                    <td className="px-2.5 py-2 text-emerald-800 font-semibold">{r.follicleLeft || '0'}</td>
+                    <td className="px-2.5 py-2 text-emerald-800 font-semibold">{r.follicleRight || '0'}</td>
+                    <td className="px-2.5 py-2 text-purple-900 font-bold">{r.endometrium || '—'}</td>
+                    <td className="px-2.5 py-2">
+                      {r.hcg ? (
+                        <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                          Trigger ({r.hcgDose || 'Yes'})
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td className="px-2.5 py-2 text-slate-600 max-w-[150px] truncate" title={r.remarks}>{r.remarks || '—'}</td>
+                  </tr>
+                );
+              })}
               {!form.day0.date && form.remDays.length === 0 && (
                 <tr>
                   <td colSpan={11} className="px-3 py-6 text-center text-slate-500">

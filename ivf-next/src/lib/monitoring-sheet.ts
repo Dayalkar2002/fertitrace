@@ -144,6 +144,244 @@ export const IUI_STOP_REASONS = [
   'Patient Did not Report For IUI',
 ] as const;
 
+export interface MonSheetColorStyle {
+  bg: string;
+  text: string;
+  border: string;
+  badge: string;
+  name: string;
+  description: string;
+}
+
+/**
+ * Authentic clinical colors matching legacy Cycle.aspx.cs:
+ * White: Day 0 / Baseline
+ * Pink: Day 1 / Stimulation Start (#f8bbd0)
+ * Yellow: Antagonist Start / Day 6 (#ffeb3b)
+ * Green: Trigger / HCG Injection (#81c784)
+ * Red: OPU Ovum Pickup (#ef5350)
+ * Violet: Progesterone Conversion (#ce93d8)
+ * Blue: Terminated Cycle (#64b5f6)
+ * Sage: Standard Stimulation / Scan Days (#d0e4a6)
+ * Gold: Parameter Header Column (#a66c18)
+ */
+export const MON_SHEET_COLORS: Record<string, MonSheetColorStyle> = {
+  white: {
+    bg: '#ffffff',
+    text: '#0f172a',
+    border: '#cbd5e1',
+    badge: 'bg-white text-slate-800 border-slate-300',
+    name: 'White',
+    description: 'Day 0 / Baseline',
+  },
+  pink: {
+    bg: '#f8bbd0',
+    text: '#881337',
+    border: '#f472b6',
+    badge: 'bg-[#f8bbd0] text-[#881337] border-rose-300',
+    name: 'Pink',
+    description: 'Day 1 / Stim Start',
+  },
+  yellow: {
+    bg: '#ffeb3b',
+    text: '#713f12',
+    border: '#facc15',
+    badge: 'bg-[#ffeb3b] text-[#713f12] border-amber-300',
+    name: 'Yellow',
+    description: 'Antagonist Start / Day 6',
+  },
+  green: {
+    bg: '#81c784',
+    text: '#14532d',
+    border: '#4ade80',
+    badge: 'bg-[#81c784] text-[#14532d] border-emerald-400',
+    name: 'Green',
+    description: 'Trigger / HCG Injection',
+  },
+  red: {
+    bg: '#ef5350',
+    text: '#ffffff',
+    border: '#dc2626',
+    badge: 'bg-[#ef5350] text-white border-rose-600',
+    name: 'Red',
+    description: 'OPU (Ovum Pickup)',
+  },
+  violet: {
+    bg: '#ce93d8',
+    text: '#4a044e',
+    border: '#c084fc',
+    badge: 'bg-[#ce93d8] text-[#4a044e] border-purple-300',
+    name: 'Violet',
+    description: 'Progesterone Conversion',
+  },
+  blue: {
+    bg: '#64b5f6',
+    text: '#1e3a8a',
+    border: '#38bdf8',
+    badge: 'bg-[#64b5f6] text-[#1e3a8a] border-sky-300',
+    name: 'Blue',
+    description: 'Terminated Cycle',
+  },
+  sage: {
+    bg: '#d0e4a6',
+    text: '#2d4a12',
+    border: '#a3e635',
+    badge: 'bg-[#d0e4a6] text-[#2d4a12] border-lime-300',
+    name: 'Sage',
+    description: 'Stimulation / Monitoring Days',
+  },
+  gold: {
+    bg: '#a66c18',
+    text: '#ffffff',
+    border: '#855512',
+    badge: 'bg-[#a66c18] text-white border-[#855512]',
+    name: 'Gold',
+    description: 'Parameter Header',
+  },
+};
+
+export function resolveMonChartCssColor(raw?: string | null): string {
+  if (!raw) return '#d0e4a6';
+  const c = raw.trim();
+  if (c.startsWith('#')) return c;
+  const lower = c.toLowerCase();
+  switch (lower) {
+    case 'white':
+      return '#ffffff';
+    case 'pink':
+      return '#f8bbd0';
+    case 'yellow':
+      return '#ffeb3b';
+    case 'green':
+      return '#81c784';
+    case 'red':
+      return '#ef5350';
+    case 'blue':
+      return '#64b5f6';
+    case 'violet':
+      return '#ce93d8';
+    case 'gold':
+      return '#a66c18';
+    default:
+      return c;
+  }
+}
+
+export function getMonChartTextColor(bgColor: string): string {
+  const norm = bgColor.toLowerCase();
+  if (norm === '#ffffff' || norm === 'white') return '#0f172a';
+  if (norm === '#f8bbd0' || norm === 'pink') return '#881337';
+  if (norm === '#ffeb3b' || norm === 'yellow') return '#713f12';
+  if (norm === '#81c784' || norm === 'green') return '#14532d';
+  if (norm === '#ef5350' || norm === 'red') return '#ffffff';
+  if (norm === '#64b5f6' || norm === 'blue') return '#1e3a8a';
+  if (norm === '#ce93d8' || norm === 'violet') return '#4a044e';
+  if (norm === '#d0e4a6') return '#2d4a12';
+  if (norm === '#a66c18') return '#ffffff';
+  return '#1e293b';
+}
+
+function hasAnyAntagonistEntered(values?: MonitoringChartValues): boolean {
+  if (!values?.antagonist) return false;
+  return Object.values(values.antagonist).some(
+    (v) => v && v.trim() !== '' && v.trim() !== '0'
+  );
+}
+
+export function resolveMonSheetColumnColor(
+  option: string | undefined | null,
+  colKey: string,
+  values?: MonitoringChartValues
+): MonSheetColorStyle {
+  // 1. Check if an explicit color is stored in values (e.g. from DB CycMCRDColor)
+  const savedColor = values?.color?.[colKey] || values?._color?.[colKey];
+  if (savedColor) {
+    const hex = resolveMonChartCssColor(savedColor);
+    const text = getMonChartTextColor(hex);
+    return {
+      bg: hex,
+      text,
+      border: hex,
+      badge: '',
+      name: savedColor,
+      description: 'Saved Clinical Color',
+    };
+  }
+
+  // 2. Special explicit columns
+  if (colKey === 'trigger') return MON_SHEET_COLORS.green;
+  if (colKey === 'opu') return MON_SHEET_COLORS.red;
+  if (colKey === 'prog') return MON_SHEET_COLORS.violet;
+
+  // 3. Check cell data in current column
+  if (values) {
+    // Check if HCG / Trigger entered on this day
+    const rhcg = values.rhcg?.[colKey]?.trim();
+    if (rhcg && rhcg !== '0' && rhcg.toLowerCase() !== 'false' && rhcg.toLowerCase() !== 'no') {
+      return MON_SHEET_COLORS.green;
+    }
+
+    // Check if Progesterone entered on this day (for HRT / ModifiedHRT)
+    const pessary = values.pessary?.[colKey]?.trim();
+    const dose = values.dose?.[colKey]?.trim();
+    if (pessary || (dose && (option === 'HRT' || option === 'ModifiedHRT'))) {
+      return MON_SHEET_COLORS.violet;
+    }
+
+    // Check if Terminated
+    if (values.meta?.terminated === 'yes' && values.meta?.terminatedDay === colKey) {
+      return MON_SHEET_COLORS.blue;
+    }
+  }
+
+  // 4. Protocol & Day specific rules matching legacy Cycle.aspx.cs
+  const opt = option || 'Antagonist';
+
+  // Day 0: White for all stimulation / antagonist / agonist protocols
+  if (colKey === 'd0') {
+    return MON_SHEET_COLORS.white;
+  }
+
+  // Day 1: Pink for all stimulation cycles (Agonist, Antagonist, HRT, ModifiedHRT)
+  if (colKey === 'd1') {
+    return MON_SHEET_COLORS.pink;
+  }
+
+  // Antagonist protocol:
+  if (opt === 'Antagonist') {
+    const antagVal = values?.antagonist?.[colKey]?.trim();
+    if (antagVal && antagVal !== '0') {
+      let isFirst = true;
+      if (values?.antagonist) {
+        const dayNum = parseInt(colKey.replace('d', ''), 10);
+        for (let d = 1; d < dayNum; d++) {
+          const prior = values.antagonist[`d${d}`]?.trim();
+          if (prior && prior !== '0') {
+            isFirst = false;
+            break;
+          }
+        }
+      }
+      if (isFirst) return MON_SHEET_COLORS.yellow;
+    } else if (colKey === 'd6' && !hasAnyAntagonistEntered(values)) {
+      return MON_SHEET_COLORS.yellow;
+    }
+  }
+
+  // Agonist protocol: Day 6 is yellow
+  if (opt === 'Agonist' && colKey === 'd6') {
+    return MON_SHEET_COLORS.yellow;
+  }
+
+  // Modified Natural: Day 6 yellow milestone
+  if (opt === 'ModifiedHRT' && colKey === 'd6') {
+    return MON_SHEET_COLORS.yellow;
+  }
+
+  // Standard stimulation / scan day
+  return MON_SHEET_COLORS.sage;
+}
+
 export function emptyMonitoringChart(layout: MonitoringSheetLayout): MonitoringChartValues {
   const values: MonitoringChartValues = {};
   if (layout.orientation === 'day-rows') {
