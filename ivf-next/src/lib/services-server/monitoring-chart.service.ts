@@ -6,7 +6,11 @@ import type {
   MonitoringRemDay,
   TabMasters,
 } from '@/lib/types/cycle-detail';
-import type { MonitoringChartValues } from '@/lib/monitoring-sheet';
+import {
+  resolveMonChartCssColor,
+  type MonitoringChartValues,
+} from '@/lib/monitoring-sheet';
+import { parseMonitoringSheet } from '@/lib/cycle-utils';
 
 const defaultDay0 = (): MonitoringDay0 => ({
   date: '',
@@ -40,8 +44,23 @@ export async function getMonitoringChartForCycle(
   cycleId: string,
   patId = 0,
   satId = 0
-): Promise<{ data: CycleMonitoring; chartValues: MonitoringChartValues; masters: TabMasters }> {
+): Promise<{
+  data: CycleMonitoring;
+  chartValues: MonitoringChartValues;
+  masters: TabMasters;
+  monitoringSheet?: string;
+}> {
   const cleanId = (cycleId || '').trim();
+
+  // 0. Detect Monitoring Sheet Protocol from CycDetails
+  let monitoringSheet = '';
+  if (cleanId) {
+    const cycRes = await executeText<{ CycComments?: string }>(
+      `SELECT TOP 1 CycComments FROM CycDetails WHERE LTRIM(RTRIM(CycID)) = @CycID`,
+      buildParams('@CycID', [cleanId])
+    ).catch(() => ({ recordset: [] }));
+    monitoringSheet = parseMonitoringSheet(cycRes.recordset?.[0]?.CycComments || '');
+  }
 
   // 1. Day 0
   let day0: MonitoringDay0 = defaultDay0();
@@ -97,6 +116,7 @@ export async function getMonitoringChartForCycle(
     ).catch(() => ({ recordset: [] }));
 
     for (const r of remRes.recordset || []) {
+      const rawColor = String(r.CycMCRDColor || '').trim();
       remDays.push({
         day: Number(r.CycMCRDDay || 0),
         date: r.CycMCRDDate ? new Date(String(r.CycMCRDDate)).toISOString().split('T')[0] : '',
@@ -118,6 +138,7 @@ export async function getMonitoringChartForCycle(
         hcg: Boolean(r.CycMCRDHCG),
         hcgDose: Number(r.CycMCRDHCGDose || 0),
         ultrasound: String(r.CycMCRDUltraSound || ''),
+        color: rawColor || (Boolean(r.CycMCRDHCG) ? 'Green' : Number(r.CycMCRDDay) === 1 ? 'Pink' : ''),
       });
     }
   }
@@ -137,6 +158,10 @@ export async function getMonitoringChartForCycle(
   if (day0.fsh) setCell('fsh', 'd0', String(day0.fsh));
   if (day0.endometrium) setCell('endo', 'd0', day0.endometrium);
 
+  // Set default baseline day 0 color
+  if (!chartValues.color) chartValues.color = {};
+  chartValues.color.d0 = '#ffffff';
+
   for (const r of remDays) {
     const colKey = `d${r.day}`;
     if (r.date) setCell('date', colKey, r.date);
@@ -151,6 +176,9 @@ export async function getMonitoringChartForCycle(
     if (r.follicleLeft) setCell('folLt', colKey, String(r.follicleLeft));
     if (r.follicleRight) setCell('folRt', colKey, String(r.follicleRight));
     if (r.hcg) setCell('rhcg', colKey, r.hcgDose ? String(r.hcgDose) : 'Yes');
+    if (r.color) {
+      chartValues.color[colKey] = resolveMonChartCssColor(r.color);
+    }
   }
 
   // 4. Masters for dropdowns
@@ -190,16 +218,100 @@ export async function saveMonitoringChartForCycle(
   cycleId: string,
   patId: number,
   satId: number,
-  payload: CycleMonitoring
+  payload: CycleMonitoring & { chartValues?: MonitoringChartValues }
 ): Promise<void> {
   const cleanId = (cycleId || '').trim();
   if (!cleanId) return;
 
   const now = new Date().toISOString().split('T')[0];
 
+  // If chartValues is provided and remDays are not passed or empty, reconstruct remDays & day0
+  let effectiveRemDays = payload.remDays || [];
+  let effectiveDay0 = payload.day0;
+
+  if (payload.chartValues) {
+    const cv = payload.chartValues;
+    if (!effectiveDay0 || !effectiveDay0.date) {
+      if (cv.date?.d0 || cv.drugDose?.d0 || cv.e2?.d0 || cv.endo?.d0) {
+        effectiveDay0 = {
+          date: cv.date?.d0 || now,
+          fshDrug1: 0,
+          fshDrug1Dose: Number(cv.drugDose?.d0 || 0),
+          fshDrug2: 0,
+          fshDrug2Dose: 0,
+          hmgDrug1: 0,
+          hmgDrug1Dose: 0,
+          hmgDrug2: 0,
+          hmgDrug2Dose: 0,
+          cloDrug1: 0,
+          cloDrug1Dose: 0,
+          antaDrug1: 0,
+          antaDrug1Dose: 0,
+          othDrug1: 0,
+          othDrug1Dose: 0,
+          gnrha: Number(cv.gnrh?.d0 || 0),
+          e2: Number(cv.e2?.d0 || 0),
+          lh: Number(cv.lh?.d0 || 0),
+          fsh: Number(cv.fsh?.d0 || 0),
+          tsh: 0,
+          prol: 0,
+          prog: 0,
+          remarks: '',
+          ultrasound: '',
+          endometrium: cv.endo?.d0 || '',
+        };
+      }
+    }
+
+    if (effectiveRemDays.length === 0) {
+      const generated: MonitoringRemDay[] = [];
+      for (let i = 1; i <= 21; i++) {
+        const colKey = `d${i}`;
+        const hasDate = Boolean(cv.date?.[colKey]);
+        const hasDose = Boolean(cv.drugDose?.[colKey]);
+        const hasGnrh = Boolean(cv.gnrh?.[colKey]);
+        const hasAnta = Boolean(cv.antagonist?.[colKey]);
+        const hasE2 = Boolean(cv.e2?.[colKey]);
+        const hasLh = Boolean(cv.lh?.[colKey]);
+        const hasEndo = Boolean(cv.endo?.[colKey]);
+        const hasFol = Boolean(cv.folLt?.[colKey] || cv.folRt?.[colKey]);
+        const hasHcg = Boolean(cv.rhcg?.[colKey]);
+
+        if (hasDate || hasDose || hasGnrh || hasAnta || hasE2 || hasLh || hasEndo || hasFol || hasHcg) {
+          generated.push({
+            day: i,
+            date: cv.date?.[colKey] || '',
+            fshDrug1: Number(cv.drugDose?.[colKey] || 0),
+            fshDrug2: 0,
+            hmgDrug1: 0,
+            hmgDrug2: 0,
+            cloDrug1: 0,
+            antaDrug1: Number(cv.antagonist?.[colKey] || 0),
+            othDrug1: 0,
+            e2: Number(cv.e2?.[colKey] || 0),
+            lh: Number(cv.lh?.[colKey] || 0),
+            fsh: Number(cv.fsh?.[colKey] || 0),
+            gnrha: Number(cv.gnrh?.[colKey] || 0),
+            follicleLeft: Number(cv.folLt?.[colKey] || 0),
+            follicleRight: Number(cv.folRt?.[colKey] || 0),
+            endometrium: cv.endo?.[colKey] || '',
+            remarks: '',
+            hcg: hasHcg,
+            hcgDose: Number(cv.rhcg?.[colKey] || 0),
+            ultrasound: '',
+            color: cv.color?.[colKey] || '',
+          });
+        }
+      }
+      if (generated.length > 0) {
+        effectiveRemDays = generated;
+      }
+    }
+  }
+
   // Save Day 0
-  if (payload.day0) {
-    const d0 = payload.day0;
+  if (effectiveDay0 && (effectiveDay0.date || effectiveDay0.fshDrug1Dose)) {
+    const d0 = effectiveDay0;
     const d0Params = buildParams('@CycID,@PatID,@SatID', [cleanId, patId || 0, satId || 0]);
     await executeText(
       'DELETE FROM CycMonitoringChartCycleDay WHERE LTRIM(RTRIM(CycID)) = @CycID AND PatID = @PatID AND SatID = @SatID',
@@ -259,17 +371,18 @@ export async function saveMonitoringChartForCycle(
     );
   }
 
-  // Save Remaining Days
-  if (payload.remDays && payload.remDays.length > 0) {
+  // Save Remaining Days with CycMCRDColor
+  if (effectiveRemDays && effectiveRemDays.length > 0) {
     const remDelParams = buildParams('@CycID,@PatID,@SatID', [cleanId, patId || 0, satId || 0]);
     await executeText(
       'DELETE FROM CycMonitoringChartRemDay WHERE LTRIM(RTRIM(CycID)) = @CycID AND PatID = @PatID AND SatID = @SatID',
       remDelParams
     ).catch(() => {});
 
-    for (const r of payload.remDays) {
+    for (const r of effectiveRemDays) {
+      const resolvedColor = r.color || (r.hcg ? 'Green' : r.day === 1 ? 'Pink' : '#d0e4a6');
       const insRemParams = buildParams(
-        '@CycID,@PatID,@SatID,@CycMCRDDate,@CycMCRDDay,@CycMCRDFSHDrug1,@CycMCRDFSHDrug2,@CycMCRDHMGDrug1,@CycMCRDHMGDrug2,@CycMCRDCloDrug1,@CycMCRDAntaDrug1,@CycMCRDOthDrug1,@CycMCRDHCG,@CycMCRDHCGDose,@CycMCRDFGnRHa,@CycMCRDFE2,@CycMCRDFLH,@CycMCRDFFSH,@CycMCRDFRemarks,@CycMCRDFEndometrium,@CycMCRDFTLeft,@CycMCRDFTRight,@CycMCRDUltraSound',
+        '@CycID,@PatID,@SatID,@CycMCRDDate,@CycMCRDDay,@CycMCRDFSHDrug1,@CycMCRDFSHDrug2,@CycMCRDHMGDrug1,@CycMCRDHMGDrug2,@CycMCRDCloDrug1,@CycMCRDAntaDrug1,@CycMCRDOthDrug1,@CycMCRDHCG,@CycMCRDHCGDose,@CycMCRDFGnRHa,@CycMCRDFE2,@CycMCRDFLH,@CycMCRDFFSH,@CycMCRDFRemarks,@CycMCRDFEndometrium,@CycMCRDFTLeft,@CycMCRDFTRight,@CycMCRDUltraSound,@CycMCRDColor',
         [
           cleanId,
           patId || 0,
@@ -294,6 +407,7 @@ export async function saveMonitoringChartForCycle(
           r.follicleLeft || 0,
           r.follicleRight || 0,
           r.ultrasound || '',
+          resolvedColor,
         ]
       );
 
@@ -302,12 +416,14 @@ export async function saveMonitoringChartForCycle(
           CycID, PatID, SatID, CycMCRDDate, CycMCRDDay, CycMCRDFSHDrug1, CycMCRDFSHDrug2,
           CycMCRDHMGDrug1, CycMCRDHMGDrug2, CycMCRDCloDrug1, CycMCRDAntaDrug1, CycMCRDOthDrug1,
           CycMCRDHCG, CycMCRDHCGDose, CycMCRDFGnRHa, CycMCRDFE2, CycMCRDFLH, CycMCRDFFSH,
-          CycMCRDFRemarks, CycMCRDFEndometrium, CycMCRDFTLeft, CycMCRDFTRight, CycMCRDUltraSound
+          CycMCRDFRemarks, CycMCRDFEndometrium, CycMCRDFTLeft, CycMCRDFTRight, CycMCRDUltraSound,
+          CycMCRDColor
         ) VALUES (
           @CycID, @PatID, @SatID, @CycMCRDDate, @CycMCRDDay, @CycMCRDFSHDrug1, @CycMCRDFSHDrug2,
           @CycMCRDHMGDrug1, @CycMCRDHMGDrug2, @CycMCRDCloDrug1, @CycMCRDAntaDrug1, @CycMCRDOthDrug1,
           @CycMCRDHCG, @CycMCRDHCGDose, @CycMCRDFGnRHa, @CycMCRDFE2, @CycMCRDFLH, @CycMCRDFFSH,
-          @CycMCRDFRemarks, @CycMCRDFEndometrium, @CycMCRDFTLeft, @CycMCRDFTRight, @CycMCRDUltraSound
+          @CycMCRDFRemarks, @CycMCRDFEndometrium, @CycMCRDFTLeft, @CycMCRDFTRight, @CycMCRDUltraSound,
+          @CycMCRDColor
         )`,
         insRemParams
       );

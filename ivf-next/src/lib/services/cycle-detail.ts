@@ -44,7 +44,12 @@ export async function saveSurvival(token: string, cycleId: string, payload: Cycl
 export async function loadMonitoring(token: string, cycleId: string) {
   const res = await apiFetch<{
     success: boolean;
-    data: { data: CycleMonitoring; masters: TabMasters };
+    data: {
+      data: CycleMonitoring;
+      masters: TabMasters;
+      monitoringSheet?: string;
+      chartValues?: Record<string, Record<string, string>>;
+    };
   }>(`/cycles/${cycleId}/monitoring`, {}, token);
   return res.data;
 }
