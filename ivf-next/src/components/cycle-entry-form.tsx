@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { usePatient } from '@/contexts/patient-context';
 import { useAppDispatch } from '@/store/hooks';
@@ -12,6 +12,7 @@ import {
   CYCLE_CREATION_STORAGE_KEY,
   defaultSemenSource,
   getCycleTypeLabel,
+  MONITORING_SHEET_OPTIONS,
   oocyteSourceFromCreation,
   showDonorOocyteDetails,
   showEmbryoRecipientDetails,
@@ -19,10 +20,13 @@ import {
   showSemenDonorDetails,
 } from '@/lib/cycle-utils';
 import { CycleRetrievalPanels } from '@/components/cycle-retrieval-panels';
-import { fetchCycleTypes, saveCycleEntry, saveRetrieval } from '@/lib/services/cycles';
+import { CycleMonitoringChart } from '@/components/cycle-monitoring-chart';
+import { SemenAnalysisModal } from '@/components/sperm/semen-analysis-modal';
+import { fetchCryoStockSummary, fetchCycleTypes, listPatientCycles, saveCycleEntry, saveRetrieval } from '@/lib/services/cycles';
+import { fetchCycleSemenAnalysis, type CycAnalysisRecord } from '@/lib/services/semen-analysis';
 import { listSemenDonors } from '@/lib/services/semen-donor';
 import { listSpermIdLocations } from '@/lib/services/sperm-id-location';
-import type { CycleCreationResult, CycleEntry, RetrievalData, SourceOption } from '@/lib/types/cycle';
+import type { CryoStockSummary, CycleCreationResult, CycleEntry, PatientCycleRow, RetrievalData, SourceOption } from '@/lib/types/cycle';
 
 const DEFAULT_OOCYTE_OPTIONS: SourceOption[] = [
   {
@@ -103,6 +107,8 @@ const emptyForm = {
 
 export function CycleEntryForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryCycleId = searchParams.get('cycleId') || '';
   const dispatch = useAppDispatch();
   const { token, user } = useAuth();
   const { selectedPatient, selectedSatellite } = usePatient();
@@ -119,6 +125,18 @@ export function CycleEntryForm() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [fzoCycleId, setFzoCycleId] = useState('');
   const [fzoRecipientId, setFzoRecipientId] = useState(0);
+  const [monitoringSheet, setMonitoringSheet] = useState<string>('');
+  const [savedCycles, setSavedCycles] = useState<PatientCycleRow[]>([]);
+  const [semenAnalysis, setSemenAnalysis] = useState<CycAnalysisRecord | null>(null);
+  const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
+  const [cryoStock, setCryoStock] = useState<CryoStockSummary>({
+    etFrozen: 0,
+    btFrozen: 0,
+    totalFrozenOocytes: 0,
+    miiFrozen: 0,
+    miFrozen: 0,
+    gvFrozen: 0,
+  });
   const retrievalPayloadRef = useRef<RetrievalData>({});
 
   // Keyboard shortcut: Ctrl+S / Cmd+S to Save & Next
@@ -200,6 +218,127 @@ export function CycleEntryForm() {
       /* ignore */
     }
   }, []);
+
+  // Handle queryCycleId if passed in URL
+  useEffect(() => {
+    if (!queryCycleId) return;
+    setCreationDraft((prev) =>
+      prev
+        ? { ...prev, cycleId: queryCycleId }
+        : {
+            patientId: selectedPatient?.id || 0,
+            satelliteId: selectedSatellite?.id || selectedPatient?.satelliteId || 1,
+            cycleId: queryCycleId,
+            cycleType: 'Fresh',
+            treatmentType: 'Fresh',
+            startDate: '',
+            lmp: '',
+            expectedOpuDate: '',
+            consultantId: 0,
+            protocol: '',
+            monitoringSheet: '',
+            notes: '',
+          }
+    );
+  }, [queryCycleId, selectedPatient?.id, selectedSatellite?.id]);
+
+  const activeCycleId = queryCycleId || creationDraft?.cycleId || currentCycle?.cycleId || '';
+  const patId = selectedPatient?.id || creationDraft?.patientId || currentCycle?.patientId || 0;
+  const satId =
+    selectedSatellite?.id ||
+    selectedPatient?.satelliteId ||
+    creationDraft?.satelliteId ||
+    currentCycle?.satelliteId ||
+    0;
+
+  // Load saved cycles for patient to get protocol / monitoring sheet & support cycle selection
+  useEffect(() => {
+    if (!token || !patId) {
+      setSavedCycles([]);
+      return;
+    }
+    let cancelled = false;
+    void listPatientCycles(token, patId, satId)
+      .then((rows) => {
+        if (cancelled) return;
+        setSavedCycles(rows);
+        const current = rows.find((r) => r.cycleId === activeCycleId);
+        if (current) {
+          const oocyteSource = oocyteSourceFromCreation(current.cycleType);
+          const semenSource = defaultSemenSource(current.cycleType);
+          setForm((prev) => ({
+            ...prev,
+            oocyteSource,
+            semenSource: semenSource || prev.semenSource,
+            cycleDate: current.cycleDate || prev.cycleDate,
+          }));
+          setMonitoringSheet(current.monitoringSheet || 'Antagonist');
+        } else if (!monitoringSheet && (form.oocyteSource === 'Fresh')) {
+          setMonitoringSheet('Antagonist');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSavedCycles([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, patId, satId, activeCycleId, monitoringSheet, form.oocyteSource]);
+
+  // Sync monitoringSheet strictly with activeCycleId
+  useEffect(() => {
+    if (!activeCycleId) return;
+    const current = savedCycles.find((r) => r.cycleId === activeCycleId);
+    const resolvedSheet = current?.monitoringSheet || 'Antagonist';
+    if (resolvedSheet && resolvedSheet !== monitoringSheet) {
+      setMonitoringSheet(resolvedSheet);
+    }
+  }, [activeCycleId, savedCycles, monitoringSheet]);
+
+  // Fetch Cryo Stock Summary for this patient / cycle (matching SMART top summary bar)
+  useEffect(() => {
+    if (!token || (!patId && !activeCycleId)) {
+      setCryoStock({
+        etFrozen: 0,
+        btFrozen: 0,
+        totalFrozenOocytes: 0,
+        miiFrozen: 0,
+        miFrozen: 0,
+        gvFrozen: 0,
+      });
+      return;
+    }
+    let cancelled = false;
+    void fetchCryoStockSummary(token, patId, satId, activeCycleId)
+      .then((summary) => {
+        if (!cancelled && summary) setCryoStock(summary);
+      })
+      .catch(() => {
+        /* keep default */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, patId, satId, activeCycleId]);
+
+  // Fetch Semen Analysis details for active cycle & patient from SMART CycAnalysis
+  useEffect(() => {
+    if (!token || (!patId && !activeCycleId)) {
+      setSemenAnalysis(null);
+      return;
+    }
+    let cancelled = false;
+    void fetchCycleSemenAnalysis(token, activeCycleId, patId)
+      .then((res) => {
+        if (!cancelled) setSemenAnalysis(res.analysis || null);
+      })
+      .catch(() => {
+        if (!cancelled) setSemenAnalysis(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, patId, activeCycleId]);
 
   const prefillKey = useRef('');
   useEffect(() => {
@@ -414,14 +553,51 @@ export function CycleEntryForm() {
             <span className="font-semibold text-slate-500">Date : </span>
             <span>{new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
           </div>
-          {creationDraft?.cycleId && (
+          {activeCycleId && (
             <div className="flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700">
               <span className="font-semibold text-slate-500">Cycle ID : </span>
-              <span className="font-mono font-bold text-slate-800">{creationDraft.cycleId}</span>
+              {savedCycles.length > 1 ? (
+                <select
+                  value={activeCycleId}
+                  onChange={(e) => {
+                    const selId = e.target.value;
+                    const found = savedCycles.find((r) => r.cycleId === selId);
+                    if (found) {
+                      setCreationDraft((prev) => ({
+                        patientId: patId,
+                        satelliteId: satId,
+                        cycleId: found.cycleId,
+                        cycleType: found.cycleType || 'Fresh',
+                        treatmentType: 'Fresh',
+                        startDate: found.cycleDate || '',
+                        lmp: '',
+                        expectedOpuDate: '',
+                        consultantId: 0,
+                        protocol: found.monitoringSheet || 'Antagonist',
+                        monitoringSheet: found.monitoringSheet || 'Antagonist',
+                        notes: found.advice || '',
+                        ...(prev || {}),
+                      }));
+                      if (found.monitoringSheet) {
+                        setMonitoringSheet(found.monitoringSheet);
+                      }
+                    }
+                  }}
+                  className="font-mono font-bold text-slate-800 bg-transparent border-0 py-0 pl-0 pr-4 text-[11px] focus:ring-0 cursor-pointer"
+                >
+                  {savedCycles.map((sc) => (
+                    <option key={sc.cycleId} value={sc.cycleId}>
+                      {sc.cycleId} ({sc.typeLabel || sc.cycleType})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="font-mono font-bold text-slate-800">{activeCycleId}</span>
+              )}
               <button
                 type="button"
                 onClick={() => {
-                  void navigator.clipboard.writeText(creationDraft.cycleId);
+                  void navigator.clipboard.writeText(activeCycleId);
                   setCopiedCycleId(true);
                   setTimeout(() => setCopiedCycleId(false), 1800);
                 }}
@@ -463,27 +639,27 @@ export function CycleEntryForm() {
         <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-emerald-950 text-[11px] font-semibold">
           <span className="inline-flex items-center gap-1.5">
             <span className="text-slate-600">ET Frozen :</span>
-            <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">0</strong>
+            <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">{cryoStock.etFrozen}</strong>
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="text-slate-600">BT Frozen :</span>
-            <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">0</strong>
+            <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">{cryoStock.btFrozen}</strong>
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="text-slate-600">Total Frozen Oocytes :</span>
-            <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">0</strong>
+            <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">{cryoStock.totalFrozenOocytes}</strong>
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="text-slate-600">MII Frozen :</span>
-            <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">0</strong>
+            <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">{cryoStock.miiFrozen}</strong>
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="text-slate-600">MI Frozen :</span>
-            <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">0</strong>
+            <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">{cryoStock.miFrozen}</strong>
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="text-slate-600">GV Frozen :</span>
-            <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">0</strong>
+            <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">{cryoStock.gvFrozen}</strong>
           </span>
         </div>
         <button
@@ -602,6 +778,64 @@ export function CycleEntryForm() {
                   </label>
                 );
               }))}
+
+              {/* SMART Legacy Semen Summary Box (mirrors SMART Cycle.aspx "Semen" box) */}
+              <div className="mt-2 rounded-xl border border-emerald-300 bg-white p-3 shadow-2xs">
+                <div className="flex items-center justify-between border-b border-emerald-100 pb-2 mb-2.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-emerald-700 font-bold">🧪</span>
+                    <h3 className="text-xs font-bold text-slate-800">
+                      Semen Analysis & Preparation
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsAnalysisModalOpen(true)}
+                    className="inline-flex items-center gap-1 rounded bg-[#6345A6] px-2.5 py-1 text-[11px] font-bold text-white hover:bg-[#553890] transition shadow-2xs"
+                  >
+                    Analysis... ↗
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                  <div className="rounded bg-slate-50 p-2 border border-slate-100">
+                    <span className="block text-[10px] text-slate-500 font-semibold">Conc :</span>
+                    <strong className="text-slate-800 font-mono">
+                      {semenAnalysis ? `${semenAnalysis.beforeSperms.toFixed(2)} M/ml` : '—'}
+                    </strong>
+                  </div>
+                  <div className="rounded bg-slate-50 p-2 border border-slate-100">
+                    <span className="block text-[10px] text-slate-500 font-semibold">Motility :</span>
+                    <strong className="text-slate-800 font-mono">
+                      {semenAnalysis ? `${semenAnalysis.beforeProgMotility.toFixed(2)} %` : '—'}
+                    </strong>
+                  </div>
+                  <div className="rounded bg-slate-50 p-2 border border-slate-100">
+                    <span className="block text-[10px] text-slate-500 font-semibold">Morphology :</span>
+                    <strong className="text-slate-800 font-mono">
+                      {semenAnalysis ? `${semenAnalysis.normomorphs1} / ${semenAnalysis.normomorphs2}` : '0 / 0'}
+                    </strong>
+                  </div>
+                  <div className="rounded bg-slate-50 p-2 border border-slate-100">
+                    <span className="block text-[10px] text-slate-500 font-semibold">Date :</span>
+                    <strong className="text-slate-800">
+                      {semenAnalysis?.date || '—'}
+                    </strong>
+                  </div>
+                  <div className="rounded bg-slate-50 p-2 border border-slate-100">
+                    <span className="block text-[10px] text-slate-500 font-semibold">Trial Swim Up :</span>
+                    <strong className="text-emerald-700 font-bold">
+                      {semenAnalysis?.trialSwimUp || '—'}
+                    </strong>
+                  </div>
+                  <div className="rounded bg-slate-50 p-2 border border-slate-100">
+                    <span className="block text-[10px] text-slate-500 font-semibold">Antibodies :</span>
+                    <strong className="text-slate-800 font-medium">
+                      {semenAnalysis?.antibodies || 'nil'}
+                    </strong>
+                  </div>
+                </div>
+              </div>
 
               <div className="pt-2 text-center text-xs font-semibold text-emerald-600">
                 {creationDraft?.treatmentType
@@ -797,6 +1031,88 @@ export function CycleEntryForm() {
         </div>
         )}
 
+        {/* 5. STIMULATION MONITORING SHEET CARD */}
+        <div className="rounded-2xl border border-indigo-200 bg-white p-5 shadow-xs space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-indigo-100 pb-3">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700 text-base font-bold shadow-2xs">
+                📈
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-black uppercase tracking-wider text-slate-800">
+                    Cycle Monitoring Sheet (Stimulation Chart)
+                  </h3>
+                  {activeCycleId && (
+                    <span className="rounded-full bg-emerald-100 text-emerald-800 px-2.5 py-0.5 text-[10px] font-bold border border-emerald-300">
+                      Cycle: {activeCycleId}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Pre-retrieval stimulation observations & follicle tracking data from SMART database
+                </p>
+              </div>
+            </div>
+
+            {/* Protocol selector buttons */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-slate-500">Protocol:</span>
+              {MONITORING_SHEET_OPTIONS.map((item) => {
+                const currentCycleData = savedCycles.find((r) => r.cycleId === activeCycleId);
+                const filledSheet =
+                  currentCycleData?.monitoringSheet ||
+                  (activeCycleId ? 'Antagonist' : '');
+                const hasSavedCycle = Boolean(activeCycleId);
+                const isFilledSheet = Boolean(hasSavedCycle && item.value === filledSheet);
+                const isDisabled = hasSavedCycle && !isFilledSheet;
+                const active = (monitoringSheet || filledSheet || 'Antagonist') === item.value;
+
+                return (
+                  <button
+                    key={item.value}
+                    type="button"
+                    disabled={isDisabled}
+                    onClick={() => {
+                      if (!isDisabled) setMonitoringSheet(item.value);
+                    }}
+                    title={
+                      isDisabled
+                        ? 'Disabled: Only filled monitoring sheet data is available for this cycle'
+                        : isFilledSheet
+                        ? 'Filled monitoring sheet data from SMART database'
+                        : undefined
+                    }
+                    className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                      active
+                        ? 'bg-[#6345A6] text-white shadow-xs'
+                        : isDisabled
+                        ? 'border border-slate-200 bg-slate-100 text-slate-400 opacity-40 cursor-not-allowed pointer-events-none'
+                        : 'border border-slate-200 bg-slate-50 text-slate-700 hover:border-purple-300 hover:text-[#6345A6]'
+                    }`}
+                  >
+                    <span>{item.label}</span>
+                    {hasSavedCycle && isFilledSheet && (
+                      <span className="ml-1.5 inline-flex items-center rounded-full bg-white/20 px-1.5 py-0.2 text-[10px] font-bold text-white">
+                        ✓ Filled
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <CycleMonitoringChart
+            option={
+              monitoringSheet ||
+              savedCycles.find((r) => r.cycleId === activeCycleId)?.monitoringSheet ||
+              (activeCycleId ? 'Antagonist' : '')
+            }
+            cycleId={activeCycleId || 'draft'}
+          />
+        </div>
+
         <CycleRetrievalPanels
           cycleType={form.oocyteSource}
           semenSource={form.semenSource}
@@ -929,6 +1245,15 @@ export function CycleEntryForm() {
           </button>
         </div>
       )}
+
+      {/* Semen Analysis Detail Modal (SMART Analysis Popup) */}
+      <SemenAnalysisModal
+        isOpen={isAnalysisModalOpen}
+        onClose={() => setIsAnalysisModalOpen(false)}
+        analysis={semenAnalysis}
+        patientName={patientName}
+        partnerName={partnerName}
+      />
     </div>
   );
 }

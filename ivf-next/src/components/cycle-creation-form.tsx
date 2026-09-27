@@ -17,9 +17,9 @@ import {
   requiresMonitoringSheet,
   TREATMENT_TYPES,
 } from '@/lib/cycle-utils';
-import { listPatientCycles, previewCycleId, saveCycleCreation } from '@/lib/services/cycles';
+import { fetchCryoStockSummary, listPatientCycles, previewCycleId, saveCycleCreation } from '@/lib/services/cycles';
 import { listDoctors, type DoctorMasterRow } from '@/lib/services/masters';
-import type { PatientCycleRow } from '@/lib/types/cycle';
+import type { CryoStockSummary, PatientCycleRow } from '@/lib/types/cycle';
 
 const CYCLE_TYPE_CARDS: Record<string, { code: string; title: string; hint: string; tone: string }> = {
   Fresh: { code: 'FR', title: 'Fresh Cycle', hint: 'IVF / ICSI with OPU', tone: 'bg-[#6345A6]' },
@@ -32,6 +32,17 @@ const CYCLE_TYPE_CARDS: Record<string, { code: string; title: string; hint: stri
   IUI: { code: 'IUI', title: 'IUI', hint: 'Insemination / HSA / SQA', tone: 'bg-emerald-600' },
 };
 
+function parseCycleDateToYMD(dateStr: string): string {
+  if (!dateStr || dateStr === '—') return todayInput();
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+  return todayInput();
+}
 function todayInput() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -59,6 +70,14 @@ export function CycleCreationForm() {
   const [notes, setNotes] = useState('');
   const [doctors, setDoctors] = useState<DoctorMasterRow[]>([]);
   const [savedCycles, setSavedCycles] = useState<PatientCycleRow[]>([]);
+  const [cryoStock, setCryoStock] = useState<CryoStockSummary>({
+    etFrozen: 0,
+    btFrozen: 0,
+    totalFrozenOocytes: 0,
+    miiFrozen: 0,
+    miFrozen: 0,
+    gvFrozen: 0,
+  });
   const [loadingCycles, setLoadingCycles] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -104,6 +123,14 @@ export function CycleCreationForm() {
     if (!token || !patId) {
       setCycleId('');
       setSavedCycles([]);
+      setCryoStock({
+        etFrozen: 0,
+        btFrozen: 0,
+        totalFrozenOocytes: 0,
+        miiFrozen: 0,
+        miFrozen: 0,
+        gvFrozen: 0,
+      });
       return;
     }
     let cancelled = false;
@@ -124,6 +151,13 @@ export function CycleCreationForm() {
       })
       .finally(() => {
         if (!cancelled) setLoadingCycles(false);
+      });
+    void fetchCryoStockSummary(token, patId, satId)
+      .then((summary) => {
+        if (!cancelled && summary) setCryoStock(summary);
+      })
+      .catch(() => {
+        /* keep default */
       });
     return () => {
       cancelled = true;
@@ -181,29 +215,46 @@ export function CycleCreationForm() {
     }
   }
 
-  function openSavedCycle(row: PatientCycleRow) {
-    if (!selectedPatient) return;
-    sessionStorage.setItem(
-      CYCLE_CREATION_STORAGE_KEY,
-      JSON.stringify({
-        patientId: selectedPatient.id,
-        satelliteId: satId,
-        cycleId: row.cycleId,
-        cycleType: row.cycleType,
-        treatmentType:
-          row.cycleType === 'FET' || row.cycleType === 'FrozenOocytes' || row.cycleType === 'ThawOocytes'
-            ? 'Frozen'
-            : 'Fresh',
-        startDate: '',
-        lmp: '',
-        expectedOpuDate: '',
-        consultantId: 0,
-        protocol: '',
-        monitoringSheet: row.monitoringSheet,
-        notes: '',
-      })
-    );
-    router.push(`/cycle/entry?cycleId=${encodeURIComponent(row.cycleId)}`);
+  function selectSavedCycle(row: PatientCycleRow, redirect = true) {
+    setCycleId(row.cycleId);
+    setCycleType(row.cycleType || 'Fresh');
+    const treatType =
+      row.cycleType === 'FET' || row.cycleType === 'FrozenOocytes' || row.cycleType === 'ThawOocytes'
+        ? 'Frozen'
+        : 'Fresh';
+    setTreatmentType(treatType);
+    if (row.cycleDate) {
+      setStartDate(parseCycleDateToYMD(row.cycleDate));
+    }
+    // Select protocol so the monitoring sheet appears below it
+    const sheet = row.monitoringSheet || (row.cycleType === 'Fresh' ? 'Antagonist' : '');
+    setMonitoringSheet(sheet);
+    setNotes(row.advice || row.postTreatment || '');
+    try {
+      sessionStorage.setItem(
+        CYCLE_CREATION_STORAGE_KEY,
+        JSON.stringify({
+          patientId: selectedPatient?.id || patId,
+          satelliteId: satId,
+          cycleId: row.cycleId,
+          cycleType: row.cycleType || 'Fresh',
+          treatmentType: treatType,
+          startDate: row.cycleDate ? parseCycleDateToYMD(row.cycleDate) : startDate,
+          monitoringSheet: sheet,
+          notes: row.advice || row.postTreatment || '',
+        })
+      );
+    } catch {}
+
+    if (redirect) {
+      router.push(`/cycle/entry?cycleId=${encodeURIComponent(row.cycleId)}`);
+      return;
+    }
+
+    setToastMessage(`Loaded Cycle ${row.cycleId}. Selected protocol "${getMonitoringSheetLabel(sheet) || 'Protocol'}" and monitoring sheet below.`);
+    setTimeout(() => setToastMessage(null), 3500);
+    // Smooth scroll down to the Cycle Creation form & protocol section
+    document.getElementById('cycle-creation-form')?.scrollIntoView({ behavior: 'smooth' });
   }
 
   function handleCopyCycleId() {
@@ -234,27 +285,27 @@ export function CycleCreationForm() {
           <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-emerald-950 text-[11px] font-semibold">
             <span className="inline-flex items-center gap-1.5">
               <span className="text-slate-600">ET Frozen :</span>
-              <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">0</strong>
+              <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">{cryoStock.etFrozen}</strong>
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="text-slate-600">BT Frozen :</span>
-              <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">0</strong>
+              <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">{cryoStock.btFrozen}</strong>
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="text-slate-600">Total Frozen Oocytes :</span>
-              <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">0</strong>
+              <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">{cryoStock.totalFrozenOocytes}</strong>
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="text-slate-600">MII Frozen :</span>
-              <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">0</strong>
+              <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">{cryoStock.miiFrozen}</strong>
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="text-slate-600">MI Frozen :</span>
-              <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">0</strong>
+              <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">{cryoStock.miFrozen}</strong>
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="text-slate-600">GV Frozen :</span>
-              <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">0</strong>
+              <strong className="rounded bg-white px-2 py-0.5 border border-emerald-300 text-emerald-900">{cryoStock.gvFrozen}</strong>
             </span>
           </div>
         </div>
@@ -282,11 +333,19 @@ export function CycleCreationForm() {
             <button
               type="button"
               onClick={() => {
+                if (patId && token) {
+                  previewCycleId(token, patId, satId)
+                    .then(setCycleId)
+                    .catch(() => setCycleId(`C${patId}1`));
+                }
                 setCycleType('Fresh');
                 setTreatmentType('Fresh');
                 setMonitoringSheet('');
                 setNotes('');
                 setStartDate(todayInput());
+                setExpectedOpuDate('');
+                setToastMessage('New cycle draft started. Choose cycle type and protocol below.');
+                setTimeout(() => setToastMessage(null), 3000);
                 document.getElementById('cycle-creation-form')?.scrollIntoView({ behavior: 'smooth' });
               }}
               className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition shadow-xs active:scale-[0.99]"
@@ -325,14 +384,23 @@ export function CycleCreationForm() {
                   </tr>
                 )}
                 {savedCycles.map((row) => (
-                  <tr key={row.cycleId} className="border-t border-slate-100 hover:bg-slate-50/80 transition-colors">
+                  <tr
+                    key={row.cycleId}
+                    onClick={() => selectSavedCycle(row, true)}
+                    className="border-t border-slate-100 cursor-pointer transition-colors hover:bg-purple-50/70"
+                  >
                     <td className="px-3 py-2.5">
                       <button
                         type="button"
-                        onClick={() => openSavedCycle(row)}
-                        className="rounded-md bg-[#6345A6] px-3 py-1 text-xs font-semibold text-white hover:bg-[#553890] transition shadow-2xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          selectSavedCycle(row, true);
+                        }}
+                        className="rounded-md bg-[#6345A6] hover:bg-[#553890] px-3 py-1 text-xs font-semibold text-white transition shadow-2xs inline-flex items-center gap-1 active:scale-95"
+                        title={`Select cycle ${row.cycleId} and redirect to Cycle Retrieval`}
                       >
-                        Select
+                        <span>Select</span>
+                        <span className="text-[11px]">→</span>
                       </button>
                     </td>
                     <td className="px-3 py-2.5 font-semibold text-slate-800 font-mono">{row.cycleId}</td>
@@ -569,12 +637,23 @@ export function CycleCreationForm() {
               <div className="min-w-0 flex-1 space-y-2">
                 <div className="flex flex-wrap gap-x-6 gap-y-2">
                   {MONITORING_SHEET_OPTIONS.map((item) => {
-                    const allowed = isMonitoringSheetAllowed(cycleType, item.value, treatmentType);
+                    const isExistingCycle = Boolean(cycleId && cycleId !== 'draft' && savedCycles.some((c) => c.cycleId === cycleId));
+                    const currentSaved = savedCycles.find((c) => c.cycleId === cycleId);
+                    const filledSheet = currentSaved?.monitoringSheet || monitoringSheet || 'Antagonist';
+                    const allowed = isExistingCycle
+                      ? item.value === filledSheet
+                      : isMonitoringSheetAllowed(cycleType, item.value, treatmentType);
+                    const disabled = !allowed;
                     return (
                       <label
                         key={item.value}
-                        className={`flex items-center gap-2 text-sm font-medium transition cursor-pointer ${
-                          allowed ? 'text-slate-700 hover:text-purple-700' : 'cursor-not-allowed text-slate-400'
+                        title={
+                          isExistingCycle && disabled
+                            ? 'Disabled: Only filled monitoring sheet data is available for this cycle'
+                            : undefined
+                        }
+                        className={`flex items-center gap-2 text-sm font-medium transition ${
+                          !disabled ? 'text-slate-700 hover:text-purple-700 cursor-pointer' : 'cursor-not-allowed opacity-40 text-slate-400'
                         }`}
                       >
                         <input
@@ -582,15 +661,20 @@ export function CycleCreationForm() {
                           name="monitoringSheet"
                           value={item.value}
                           checked={monitoringSheet === item.value}
-                          disabled={!allowed}
+                          disabled={disabled}
                           onChange={() => {
-                            if (allowed) setMonitoringSheet(item.value);
+                            if (!disabled) setMonitoringSheet(item.value);
                           }}
                           className="h-4 w-4 accent-[#6345A6] disabled:cursor-not-allowed"
                         />
                         <span>{item.label}</span>
-                        {allowed && (
+                        {!disabled && (
                           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" title="Valid protocol for this cycle" />
+                        )}
+                        {isExistingCycle && !disabled && (
+                          <span className="ml-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.2">
+                            ✓ Filled
+                          </span>
                         )}
                       </label>
                     );

@@ -8,6 +8,8 @@ import {
   type MonitoringChartValues,
 } from '@/lib/monitoring-sheet';
 import { getMonitoringSheetLabel } from '@/lib/cycle-utils';
+import { useAuth } from '@/contexts/auth-context';
+import { apiFetch } from '@/lib/api';
 
 const STORAGE_PREFIX = 'fertitrace.monitoringChart';
 
@@ -21,22 +23,68 @@ export function CycleMonitoringChart({ option, cycleId }: CycleMonitoringChartPr
   const storageKey = `${STORAGE_PREFIX}.${cycleId || 'draft'}.${option || 'none'}`;
   const [values, setValues] = useState<MonitoringChartValues>({});
 
+  const { token } = useAuth();
+  const [dbLoaded, setDbLoaded] = useState(false);
+  const [loadingDb, setLoadingDb] = useState(false);
+
   useEffect(() => {
     if (!layout) {
       setValues({});
       return;
     }
+    let cancelled = false;
+
+    // 1. Initialise with session storage or empty template
     try {
       const raw = sessionStorage.getItem(storageKey);
       if (raw) {
         setValues(JSON.parse(raw) as MonitoringChartValues);
-        return;
+      } else {
+        setValues(emptyMonitoringChart(layout));
       }
     } catch {
-      /* ignore */
+      setValues(emptyMonitoringChart(layout));
     }
-    setValues(emptyMonitoringChart(layout));
-  }, [layout, storageKey]);
+
+    // 2. If valid cycle ID, fetch saved DB monitoring chart values
+    if (cycleId && cycleId !== 'draft' && token) {
+      setLoadingDb(true);
+      apiFetch<{ success: boolean; data: { chartValues?: MonitoringChartValues } }>(
+        `/cycles/${encodeURIComponent(cycleId)}/monitoring`,
+        {},
+        token
+      )
+        .then((res) => {
+          if (!cancelled && res?.data?.chartValues) {
+            const dbValues = res.data.chartValues;
+            setValues((prev) => {
+              const merged: MonitoringChartValues = { ...emptyMonitoringChart(layout), ...prev };
+              for (const [rKey, cols] of Object.entries(dbValues)) {
+                if (!merged[rKey]) merged[rKey] = {};
+                for (const [cKey, v] of Object.entries(cols)) {
+                  if (v !== '' && v !== null && v !== undefined) {
+                    merged[rKey][cKey] = String(v);
+                  }
+                }
+              }
+              try {
+                sessionStorage.setItem(storageKey, JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
+            setDbLoaded(true);
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (!cancelled) setLoadingDb(false);
+        });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [layout, storageKey, cycleId, token]);
 
   useEffect(() => {
     if (!layout || !Object.keys(values).length) return;
@@ -87,9 +135,19 @@ export function CycleMonitoringChart({ option, cycleId }: CycleMonitoringChartPr
     <section className="rounded-2xl border border-indigo-200 bg-white p-4 shadow-xs">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-600">
-            {getMonitoringSheetLabel(option)}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-600">
+              {getMonitoringSheetLabel(option)}
+            </p>
+            {cycleId && cycleId !== 'draft' && (
+              <span className="rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-[10px] font-bold border border-emerald-300">
+                Cycle: {cycleId}
+              </span>
+            )}
+            {loadingDb && (
+              <span className="text-[11px] text-slate-400 italic animate-pulse">Loading saved chart…</span>
+            )}
+          </div>
           <h3 className="text-sm font-extrabold uppercase tracking-wide text-slate-800">{layout.title}</h3>
           <p className="mt-1 text-xs text-slate-500">{layout.hint}</p>
         </div>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUser, authUnauthorizedResponse } from '@/lib/auth/verify-auth';
 import { getStoredCycle, saveStoredRetrieval, upsertCycle } from '@/lib/cycle-store';
 import { persistRetrievalFreeze } from '@/lib/services-server/oocyte-freeze.service';
+import { saveRetrievalToDb } from '@/lib/services-server/retrieval.service';
 import type { RetrievalData } from '@/lib/types/cycle';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ cycleId: string }> }) {
@@ -19,21 +20,29 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cyc
     };
     const sections = body.sections || {};
     const saved = saveStoredRetrieval(cycleId, sections);
+    const patId = Number(body.patientId) || 0;
+    const satId = Number(body.satelliteId) || 0;
+    const cycleType = body.cycleType || 'Fresh';
+
     const cycle = getStoredCycle(cycleId) || upsertCycle({
       cycleId,
-      patientId: Number(body.patientId) || 0,
-      satelliteId: Number(body.satelliteId) || 0,
-      oocyteSource: body.cycleType || 'Fresh',
+      patientId: patId,
+      satelliteId: satId,
+      oocyteSource: cycleType,
       semenSource: 'husband_fresh',
-      cycleType: body.cycleType,
+      cycleType,
       status: 'retrieval',
     });
 
+    // 1. Save to SQL Server CycRetrieval
+    await saveRetrievalToDb(cycleId, patId || cycle.patientId || 0, satId || cycle.satelliteId || 0, sections, cycleType);
+
+    // 2. Persist freeze if needed
     const freeze = await persistRetrievalFreeze({
       cycleId,
-      cycleType: body.cycleType || cycle.cycleType || cycle.oocyteSource,
-      patientId: Number(body.patientId || cycle.patientId) || 0,
-      satelliteId: Number(body.satelliteId || cycle.satelliteId) || 0,
+      cycleType: cycleType || cycle.cycleType || cycle.oocyteSource,
+      patientId: patId || cycle.patientId || 0,
+      satelliteId: satId || cycle.satelliteId || 0,
       donorName: body.donorName || '',
       sections,
     });

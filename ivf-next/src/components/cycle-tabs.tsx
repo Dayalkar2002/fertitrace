@@ -267,8 +267,91 @@ export function CycleMonitoringTab({ cycleId }: TabProps) {
 
   return (
     <div className="tab-form space-y-6">
-      <section className="rounded-xl border border-slate-200 p-4">
-        <h3 className="mb-3 font-bold">Cycle Day 0 Entry</h3>
+      {/* 1. SMART Filled Monitoring Sheet Grid Overview */}
+      <section className="rounded-xl border border-purple-200 bg-white p-4 shadow-xs">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-bold text-purple-950 flex items-center gap-2">
+              <span>📊 Monitoring Sheet (Cycle {cycleId})</span>
+              <span className="rounded-full bg-purple-100 text-purple-800 px-2 py-0.5 text-xs font-semibold">
+                {form.remDays.length + (form.day0.date ? 1 : 0)} Days Recorded
+              </span>
+            </h3>
+            <p className="text-xs text-slate-500">Filled stimulation monitoring data loaded directly from SMART records.</p>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto rounded-lg border border-slate-200">
+          <table className="min-w-full text-left text-xs border-collapse">
+            <thead className="bg-slate-100 text-slate-700 font-bold">
+              <tr>
+                <th className="border-b border-slate-200 px-2.5 py-2">Day</th>
+                <th className="border-b border-slate-200 px-2.5 py-2">Date</th>
+                <th className="border-b border-slate-200 px-2.5 py-2">FSH Dose</th>
+                <th className="border-b border-slate-200 px-2.5 py-2">GnRHa</th>
+                <th className="border-b border-slate-200 px-2.5 py-2">E2 (pg/mL)</th>
+                <th className="border-b border-slate-200 px-2.5 py-2">LH (mIU/mL)</th>
+                <th className="border-b border-slate-200 px-2.5 py-2">Left Follicles</th>
+                <th className="border-b border-slate-200 px-2.5 py-2">Right Follicles</th>
+                <th className="border-b border-slate-200 px-2.5 py-2">Endometrium</th>
+                <th className="border-b border-slate-200 px-2.5 py-2">Trigger / HCG</th>
+                <th className="border-b border-slate-200 px-2.5 py-2">Remarks</th>
+              </tr>
+            </thead>
+            <tbody>
+              {form.day0.date && (
+                <tr className="bg-purple-50/50 hover:bg-purple-50 transition border-b border-slate-100 font-medium">
+                  <td className="px-2.5 py-2 font-bold text-purple-900">Day 0</td>
+                  <td className="px-2.5 py-2 text-slate-700">{form.day0.date ? new Date(form.day0.date).toLocaleDateString('en-GB') : '—'}</td>
+                  <td className="px-2.5 py-2 text-slate-700">{form.day0.fshDrug1Dose || '—'}</td>
+                  <td className="px-2.5 py-2 text-slate-700">{form.day0.gnrha || '—'}</td>
+                  <td className="px-2.5 py-2 text-slate-700">{form.day0.e2 || '—'}</td>
+                  <td className="px-2.5 py-2 text-slate-700">{form.day0.lh || '—'}</td>
+                  <td className="px-2.5 py-2 text-slate-500">—</td>
+                  <td className="px-2.5 py-2 text-slate-500">—</td>
+                  <td className="px-2.5 py-2 text-slate-700 font-semibold">{form.day0.endometrium || '—'}</td>
+                  <td className="px-2.5 py-2 text-slate-500">—</td>
+                  <td className="px-2.5 py-2 text-slate-600">{form.day0.remarks || '—'}</td>
+                </tr>
+              )}
+              {form.remDays.map((r) => (
+                <tr key={r.day} className="hover:bg-slate-50/80 transition border-b border-slate-100">
+                  <td className="px-2.5 py-2 font-bold text-slate-800 font-mono">Day {r.day}</td>
+                  <td className="px-2.5 py-2 text-slate-700">{r.date ? new Date(r.date).toLocaleDateString('en-GB') : '—'}</td>
+                  <td className="px-2.5 py-2 text-slate-800">{r.fshDrug1 || r.hmgDrug1 || '—'}</td>
+                  <td className="px-2.5 py-2 text-slate-800">{r.gnrha || '—'}</td>
+                  <td className="px-2.5 py-2 text-slate-800">{r.e2 || '—'}</td>
+                  <td className="px-2.5 py-2 text-slate-800">{r.lh || '—'}</td>
+                  <td className="px-2.5 py-2 text-emerald-800 font-semibold">{r.follicleLeft || '0'}</td>
+                  <td className="px-2.5 py-2 text-emerald-800 font-semibold">{r.follicleRight || '0'}</td>
+                  <td className="px-2.5 py-2 text-purple-900 font-bold">{r.endometrium || '—'}</td>
+                  <td className="px-2.5 py-2">
+                    {r.hcg ? (
+                      <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                        Trigger ({r.hcgDose || 'Yes'})
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td className="px-2.5 py-2 text-slate-600 max-w-[150px] truncate" title={r.remarks}>{r.remarks || '—'}</td>
+                </tr>
+              ))}
+              {!form.day0.date && form.remDays.length === 0 && (
+                <tr>
+                  <td colSpan={11} className="px-3 py-6 text-center text-slate-500">
+                    No monitoring chart records found for this cycle yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* 2. Detailed Editing Sections */}
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+        <h3 className="mb-3 font-bold text-slate-800">Cycle Day 0 Entry</h3>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <DateField label="Day #0 Date" value={form.day0.date} onChange={(v) => setForm((f) => ({ ...f, day0: { ...f.day0, date: v } }))} />
           <SelectField label="FSH Drug #1" value={form.day0.fshDrug1} options={masters.fshDrugs} onChange={(v) => setForm((f) => ({ ...f, day0: { ...f.day0, fshDrug1: v } }))} />
@@ -280,20 +363,24 @@ export function CycleMonitoringTab({ cycleId }: TabProps) {
           <TextArea label="Remarks" value={form.day0.remarks} onChange={(v) => setForm((f) => ({ ...f, day0: { ...f.day0, remarks: v } }))} />
         </div>
       </section>
-      <section className="rounded-xl border border-slate-200 p-4">
-        <h3 className="mb-3 font-bold">Remaining Days</h3>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+        <h3 className="mb-3 font-bold text-slate-800">Remaining Days Edit / Add</h3>
         {form.remDays.map((row, i) => (
-          <div key={i} className="mb-2 grid grid-cols-2 gap-2 lg:grid-cols-6">
+          <div key={i} className="mb-3 grid grid-cols-2 gap-2 lg:grid-cols-8 border-b border-slate-100 pb-2">
             <NumField label="Day" value={row.day} onChange={(v) => updateRemDay(setForm, i, 'day', v)} />
             <DateField label="Date" value={row.date} onChange={(v) => updateRemDay(setForm, i, 'date', v)} />
+            <NumField label="FSH Dose" value={row.fshDrug1} onChange={(v) => updateRemDay(setForm, i, 'fshDrug1', v)} />
+            <NumField label="GnRHa" value={row.gnrha} onChange={(v) => updateRemDay(setForm, i, 'gnrha', v)} />
             <NumField label="E2" value={row.e2} onChange={(v) => updateRemDay(setForm, i, 'e2', v)} />
             <NumField label="L Fol" value={row.follicleLeft} onChange={(v) => updateRemDay(setForm, i, 'follicleLeft', v)} />
             <NumField label="R Fol" value={row.follicleRight} onChange={(v) => updateRemDay(setForm, i, 'follicleRight', v)} />
-            <CheckField label="HCG" checked={row.hcg} onChange={(v) => updateRemDay(setForm, i, 'hcg', v)} />
+            <TextField label="Endo" value={row.endometrium} onChange={(v) => updateRemDay(setForm, i, 'endometrium', v)} />
           </div>
         ))}
-        <button type="button" className="text-sm font-semibold text-brand-green" onClick={() => setForm((f) => ({ ...f, remDays: [...f.remDays, defaultRemDay(f.remDays.length + 1)] }))}>+ Add Day</button>
+        <button type="button" className="text-sm font-semibold text-brand-green hover:underline" onClick={() => setForm((f) => ({ ...f, remDays: [...f.remDays, defaultRemDay(f.remDays.length + 1)] }))}>+ Add Day</button>
       </section>
+
       <TabAlerts error={error} success={success} />
       <SaveButton saving={saving} label="Save Monitoring" onSave={() => void save()} />
     </div>
