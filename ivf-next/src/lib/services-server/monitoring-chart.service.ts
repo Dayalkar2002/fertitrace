@@ -152,10 +152,13 @@ export async function getMonitoringChartForCycle(
   };
 
   if (day0.date) setCell('date', 'd0', day0.date);
-  if (day0.fshDrug1Dose) setCell('drugDose', 'd0', String(day0.fshDrug1Dose));
+  if (day0.remarks?.startsWith('Drug:')) setCell('drugDose', 'd0', day0.remarks.replace(/^Drug:\s*/, ''));
+  else if (day0.fshDrug1Dose) setCell('drugDose', 'd0', String(day0.fshDrug1Dose));
+  if (day0.ultrasound) setCell('frequency', 'd0', day0.ultrasound);
   if (day0.e2) setCell('e2', 'd0', String(day0.e2));
   if (day0.lh) setCell('lh', 'd0', String(day0.lh));
   if (day0.fsh) setCell('fsh', 'd0', String(day0.fsh));
+  if (day0.prol) setCell('prolactin', 'd0', String(day0.prol));
   if (day0.endometrium) setCell('endo', 'd0', day0.endometrium);
 
   // Set default baseline day 0 color
@@ -163,21 +166,25 @@ export async function getMonitoringChartForCycle(
   chartValues.color.d0 = '#ffffff';
 
   for (const r of remDays) {
-    const colKey = `d${r.day}`;
-    if (r.date) setCell('date', colKey, r.date);
-    if (r.fshDrug1) setCell('drugDose', colKey, String(r.fshDrug1));
-    else if (r.hmgDrug1) setCell('drugDose', colKey, String(r.hmgDrug1));
-    if (r.gnrha) setCell('gnrh', colKey, String(r.gnrha));
-    if (r.antaDrug1) setCell('antagonist', colKey, String(r.antaDrug1));
-    if (r.e2) setCell('e2', colKey, String(r.e2));
-    if (r.lh) setCell('lh', colKey, String(r.lh));
-    if (r.fsh) setCell('fsh', colKey, String(r.fsh));
-    if (r.endometrium) setCell('endo', colKey, r.endometrium);
-    if (r.follicleLeft) setCell('folLt', colKey, String(r.follicleLeft));
-    if (r.follicleRight) setCell('folRt', colKey, String(r.follicleRight));
-    if (r.hcg) setCell('rhcg', colKey, r.hcgDose ? String(r.hcgDose) : 'Yes');
+    const excelCol =
+      r.day === 1 ? 'd1' : r.day === 6 ? 'd6' : r.day === 9 ? 'd9' : r.hcg ? 'trigger' : '';
+    if (!excelCol) continue;
+    if (r.date) setCell('date', excelCol, r.date);
+    if (r.remarks?.startsWith('Drug:')) setCell('drugDose', excelCol, r.remarks.replace(/^Drug:\s*/, ''));
+    else if (r.fshDrug1) setCell('drugDose', excelCol, String(r.fshDrug1));
+    else if (r.hmgDrug1) setCell('drugDose', excelCol, String(r.hmgDrug1));
+    if (r.gnrha) setCell('gnrh', excelCol, String(r.gnrha));
+    if (r.antaDrug1) setCell('antagonist', excelCol, String(r.antaDrug1));
+    if (r.e2) setCell('e2', excelCol, String(r.e2));
+    if (r.lh) setCell('lh', excelCol, String(r.lh));
+    if (r.fsh) setCell('fsh', excelCol, String(r.fsh));
+    if (r.endometrium) setCell('endo', excelCol, r.endometrium);
+    if (r.follicleLeft) setCell('folLt', excelCol, String(r.follicleLeft));
+    if (r.follicleRight) setCell('folRt', excelCol, String(r.follicleRight));
+    if (r.ultrasound) setCell('frequency', excelCol, r.ultrasound);
+    if (r.hcg) setCell('rhcg', excelCol, r.hcgDose ? String(r.hcgDose) : 'Yes');
     if (r.color) {
-      chartValues.color[colKey] = resolveMonChartCssColor(r.color);
+      chartValues.color[excelCol] = resolveMonChartCssColor(r.color);
     }
   }
 
@@ -211,6 +218,7 @@ export async function getMonitoringChartForCycle(
     },
     chartValues,
     masters,
+    monitoringSheet,
   };
 }
 
@@ -233,10 +241,12 @@ export async function saveMonitoringChartForCycle(
     const cv = payload.chartValues;
     if (!effectiveDay0 || !effectiveDay0.date) {
       if (cv.date?.d0 || cv.drugDose?.d0 || cv.e2?.d0 || cv.endo?.d0) {
+        const d0Dose = cv.drugDose?.d0 || '';
+        const d0Numeric = Number(d0Dose);
         effectiveDay0 = {
           date: cv.date?.d0 || now,
           fshDrug1: 0,
-          fshDrug1Dose: Number(cv.drugDose?.d0 || 0),
+          fshDrug1Dose: Number.isFinite(d0Numeric) ? d0Numeric : 0,
           fshDrug2: 0,
           fshDrug2Dose: 0,
           hmgDrug1: 0,
@@ -256,8 +266,8 @@ export async function saveMonitoringChartForCycle(
           tsh: 0,
           prol: 0,
           prog: 0,
-          remarks: '',
-          ultrasound: '',
+          remarks: Number.isFinite(d0Numeric) && d0Dose ? '' : d0Dose ? `Drug: ${d0Dose}` : '',
+          ultrasound: cv.frequency?.d0 || '',
           endometrium: cv.endo?.d0 || '',
         };
       }
@@ -265,40 +275,47 @@ export async function saveMonitoringChartForCycle(
 
     if (effectiveRemDays.length === 0) {
       const generated: MonitoringRemDay[] = [];
-      for (let i = 1; i <= 21; i++) {
-        const colKey = `d${i}`;
+      const excelDays: Array<{ colKey: string; day: number; hcg: boolean }> = [
+        { colKey: 'd1', day: 1, hcg: false },
+        { colKey: 'd6', day: 6, hcg: false },
+        { colKey: 'd9', day: 9, hcg: false },
+        { colKey: 'trigger', day: 10, hcg: true },
+      ];
+      for (const { colKey, day, hcg } of excelDays) {
+        const doseText = cv.drugDose?.[colKey] || cv.drug1?.[colKey] || '';
         const hasDate = Boolean(cv.date?.[colKey]);
-        const hasDose = Boolean(cv.drugDose?.[colKey]);
+        const hasDose = Boolean(doseText);
         const hasGnrh = Boolean(cv.gnrh?.[colKey]);
         const hasAnta = Boolean(cv.antagonist?.[colKey]);
         const hasE2 = Boolean(cv.e2?.[colKey]);
         const hasLh = Boolean(cv.lh?.[colKey]);
         const hasEndo = Boolean(cv.endo?.[colKey]);
-        const hasFol = Boolean(cv.folLt?.[colKey] || cv.folRt?.[colKey]);
-        const hasHcg = Boolean(cv.rhcg?.[colKey]);
+        const hasFol = Boolean(cv.folLt?.[colKey] || cv.folRt?.[colKey] || cv.follicle?.[colKey]);
+        const hasHcg = Boolean(cv.rhcg?.[colKey]) || hcg;
 
         if (hasDate || hasDose || hasGnrh || hasAnta || hasE2 || hasLh || hasEndo || hasFol || hasHcg) {
+          const numericDose = Number(doseText);
           generated.push({
-            day: i,
+            day,
             date: cv.date?.[colKey] || '',
-            fshDrug1: Number(cv.drugDose?.[colKey] || 0),
+            fshDrug1: Number.isFinite(numericDose) ? numericDose : 0,
             fshDrug2: 0,
             hmgDrug1: 0,
             hmgDrug2: 0,
             cloDrug1: 0,
-            antaDrug1: Number(cv.antagonist?.[colKey] || 0),
+            antaDrug1: Number(cv.antagonist?.[colKey] || 0) || 0,
             othDrug1: 0,
-            e2: Number(cv.e2?.[colKey] || 0),
-            lh: Number(cv.lh?.[colKey] || 0),
-            fsh: Number(cv.fsh?.[colKey] || 0),
-            gnrha: Number(cv.gnrh?.[colKey] || 0),
-            follicleLeft: Number(cv.folLt?.[colKey] || 0),
-            follicleRight: Number(cv.folRt?.[colKey] || 0),
+            e2: Number(cv.e2?.[colKey] || 0) || 0,
+            lh: Number(cv.lh?.[colKey] || 0) || 0,
+            fsh: Number(cv.fsh?.[colKey] || 0) || 0,
+            gnrha: Number(cv.gnrh?.[colKey] || 0) || 0,
+            follicleLeft: Number(cv.folLt?.[colKey] || 0) || 0,
+            follicleRight: Number(cv.folRt?.[colKey] || 0) || 0,
             endometrium: cv.endo?.[colKey] || '',
-            remarks: '',
+            remarks: Number.isFinite(numericDose) && doseText ? '' : doseText ? `Drug: ${doseText}` : '',
             hcg: hasHcg,
-            hcgDose: Number(cv.rhcg?.[colKey] || 0),
-            ultrasound: '',
+            hcgDose: Number(cv.rhcg?.[colKey] || 0) || 0,
+            ultrasound: cv.frequency?.[colKey] || '',
             color: cv.color?.[colKey] || '',
           });
         }
