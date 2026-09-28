@@ -58,13 +58,26 @@ export async function getLeftMenuItems(): Promise<LeftMenuItem[]> {
             const fallback = DEFAULT_LEFT_MENUS.find((row) => row.nodeName === 'communication');
             return fallback?.subModules ? { ...item, subModules: fallback.subModules } : item;
           });
-        return hideConsentMenu(ensureCycleCreationMenu(patched));
+        return hideConsentMenu(ensureMediaMenu(ensureCycleCreationMenu(patched)));
       }
     } catch (err) {
       console.warn('[MenuService] DB fetch failed for Left Menu, using fallback:', err);
     }
   }
-  return hideConsentMenu(DEFAULT_LEFT_MENUS);
+  return hideConsentMenu(ensureMediaMenu(DEFAULT_LEFT_MENUS));
+}
+
+function ensureMediaMenu(items: LeftMenuItem[]): LeftMenuItem[] {
+  if (items.some((item) => item.nodeName === 'media' || item.route === '/media')) {
+    return items.map((item) => (item.nodeName === 'media' ? { ...item, icon: 'media', label: 'Media' } : item));
+  }
+  const mediaItem = DEFAULT_LEFT_MENUS.find((item) => item.nodeName === 'media');
+  if (!mediaItem) return items;
+  const oocyteIndex = items.findIndex(
+    (item) => item.nodeName === 'oocyte_management' || item.route === '/oocyte-embryo'
+  );
+  if (oocyteIndex < 0) return [...items, mediaItem];
+  return [...items.slice(0, oocyteIndex + 1), mediaItem, ...items.slice(oocyteIndex + 1)];
 }
 
 function ensureCycleCreationMenu(items: LeftMenuItem[]): LeftMenuItem[] {
