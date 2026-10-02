@@ -11,9 +11,10 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const patId = Number(searchParams.get('patId') || 0);
     const satId = Number(searchParams.get('satId') || 0);
+    const cycleId = searchParams.get('cycleId')?.trim() || undefined;
 
     if (patId && satId && isDbConfigured()) {
-      const data = await getIvfIcsiOverview(patId, satId);
+      const data = await getIvfIcsiOverview(patId, satId, cycleId);
       return NextResponse.json({ success: true, data });
     }
 

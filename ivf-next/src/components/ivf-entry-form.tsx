@@ -10,6 +10,7 @@ import {
   formatCycleDate,
   ivfApi,
 } from '@/lib/services/clinical-modules';
+import { fetchCycleSemenAnalysis } from '@/lib/services/semen-analysis';
 import type { LookupItem } from '@/lib/types/master';
 
 const inputCls = 'mt-1 h-9 w-full rounded-lg border border-slate-300 px-3 text-sm';
@@ -324,12 +325,13 @@ export function IvfEntryForm() {
     setForm((f) => ({ ...f, cycId, cycleDate: selected.cycleDate }));
 
     try {
-      const [monitoring, record] = await Promise.all([
+      const [monitoring, record, semenRes] = await Promise.all([
         ivfApi.getMonitoring(token, patId, satId, String(selected.cycId), cycleDate).catch(() => null),
         ivfApi.loadRecord(token, patId, satId, String(selected.cycId), cycleDate).catch(() => ({
           data: null,
           exists: false,
         })),
+        fetchCycleSemenAnalysis(token, String(selected.cycId), patId).catch(() => ({ analysis: null, history: [] })),
       ]);
 
       let next: IvfForm = { ...defaultForm(), cycId, cycleDate: selected.cycleDate };
@@ -348,12 +350,59 @@ export function IvfEntryForm() {
       } else {
         setIsUpdate(false);
       }
+
+      // Auto-fill Semen Survival / Post-Processing analysis if not already set
+      if ((!next.semenType1 || Number(next.semenType1) === 0) && semenRes?.analysis) {
+        const a = semenRes.analysis;
+        const sc = Number(a.afterSperms || a.beforeSperms || 0);
+        const pm = Number(a.afterProgMotility || a.beforeProgMotility || 0);
+        const oocyteCount = Number(next.semenType4 || 0) || (Number(next.oiMetaII || 0) + Number(next.oiMetaI || 0) + Number(next.oiGV || 0)) || 5;
+        let vol = 0;
+        if (sc > 0 && pm > 0 && oocyteCount > 0) {
+          vol = Number((oocyteCount / (sc * (pm / 100))).toFixed(3));
+        }
+        next.semenType1 = sc;
+        next.semenType2 = pm;
+        next.semenType3 = vol;
+        next.semenType4 = oocyteCount;
+      }
+
       setForm(next);
       setShowForm(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to load cycle data.');
     } finally {
       setCycleLoading(false);
+    }
+  }
+
+  function recalculateInsemination(scVal: number, pmVal: number, nVal: number) {
+    let vol = 0;
+    if (scVal > 0 && pmVal > 0 && nVal > 0) {
+      vol = Number((nVal / (scVal * (pmVal / 100))).toFixed(3));
+    }
+    setForm((f) => ({
+      ...f,
+      semenType1: scVal,
+      semenType2: pmVal,
+      semenType4: nVal,
+      semenType3: vol,
+    }));
+  }
+
+  async function handleAutoFillSemen() {
+    if (!token || !form.cycId) return;
+    try {
+      const semenRes = await fetchCycleSemenAnalysis(token, String(form.cycId), patId);
+      if (semenRes.analysis) {
+        const a = semenRes.analysis;
+        const sc = Number(a.afterSperms || a.beforeSperms || 0);
+        const pm = Number(a.afterProgMotility || a.beforeProgMotility || 0);
+        const oocyteCount = Number(form.semenType4 || 0) || (Number(form.oiMetaII || 0) + Number(form.oiMetaI || 0) + Number(form.oiGV || 0)) || 5;
+        recalculateInsemination(sc, pm, oocyteCount);
+      }
+    } catch (e) {
+      console.error('Failed to auto-fill semen data:', e);
     }
   }
 
@@ -493,6 +542,101 @@ export function IvfEntryForm() {
                 <LookupSelect label="Media Series" name="mediaSeries" form={form} setForm={setForm} options={mediaSeries} />
                 <LookupSelect label="Incubator" name="incubatorUsed" form={form} setForm={setForm} options={incubator} />
                 <LookupSelect label="Gas" name="gas" form={form} setForm={setForm} options={gas} />
+              </div>
+            </section>
+
+            <section className="rounded-xl border border-blue-200/80 bg-blue-50/20 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <div>
+                  <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <span>🧪</span>
+                    <span>Semen Parameters &amp; Insemination Volume Calculation</span>
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Target: 1 × 10⁶ progressively motile sperm per oocyte · Formula: Insem. Vol (mL) = N ÷ [C × (PM/100)]
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAutoFillSemen}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-semibold text-[#6345A6] hover:bg-purple-100 transition shadow-2xs"
+                >
+                  <span>✨</span>
+                  <span>Auto-fill from Survival Analysis</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
+                <div>
+                  <label className={labelCls}>
+                    Sperm Conc. (SC × 10⁶/mL)
+                    <input
+                      type="number"
+                      step="any"
+                      value={Number(form.semenType1 ?? 0)}
+                      onChange={(e) =>
+                        recalculateInsemination(
+                          Number(e.target.value),
+                          Number(form.semenType2 ?? 0),
+                          Number(form.semenType4 ?? 0)
+                        )
+                      }
+                      className={inputCls}
+                      placeholder="e.g. 40"
+                    />
+                  </label>
+                </div>
+
+                <div>
+                  <label className={labelCls}>
+                    Prog. Motility (PM %)
+                    <input
+                      type="number"
+                      step="any"
+                      value={Number(form.semenType2 ?? 0)}
+                      onChange={(e) =>
+                        recalculateInsemination(
+                          Number(form.semenType1 ?? 0),
+                          Number(e.target.value),
+                          Number(form.semenType4 ?? 0)
+                        )
+                      }
+                      className={inputCls}
+                      placeholder="e.g. 90"
+                    />
+                  </label>
+                </div>
+
+                <div>
+                  <label className={labelCls}>
+                    No. of Oocytes (N)
+                    <input
+                      type="number"
+                      value={Number(form.semenType4 ?? 0)}
+                      onChange={(e) =>
+                        recalculateInsemination(
+                          Number(form.semenType1 ?? 0),
+                          Number(form.semenType2 ?? 0),
+                          Number(e.target.value)
+                        )
+                      }
+                      className={inputCls}
+                      placeholder="e.g. 5"
+                    />
+                  </label>
+                </div>
+
+                <div>
+                  <label className={labelCls}>
+                    Insem. Vol (mL / µL)
+                    <div className="mt-1 flex h-9 items-center justify-between rounded-lg border border-slate-300 bg-white px-3 text-sm font-bold text-brand-primary">
+                      <span>{Number(form.semenType3 ?? 0).toFixed(3)} mL</span>
+                      <span className="text-xs font-semibold text-slate-500">
+                        ({Math.round(Number(form.semenType3 ?? 0) * 1000)} µL)
+                      </span>
+                    </div>
+                  </label>
+                </div>
               </div>
             </section>
 

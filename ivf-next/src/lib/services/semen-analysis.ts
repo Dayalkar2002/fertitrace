@@ -5,12 +5,15 @@ export type { CycAnalysisRecord };
 
 export async function fetchCycleSemenAnalysis(
   token: string,
-  cycleId: string,
-  patId = 0
+  cycleId = '',
+  patId = 0,
+  analysisId = 0
 ): Promise<{ analysis: CycAnalysisRecord | null; history: CycAnalysisRecord[] }> {
   if (!token) return { analysis: null, history: [] };
 
   const params = new URLSearchParams();
+  params.set('action', 'analysis');
+  if (analysisId) params.set('analysisId', String(analysisId));
   if (cycleId) params.set('cycleId', cycleId);
   if (patId) params.set('patId', String(patId));
 
@@ -18,7 +21,7 @@ export async function fetchCycleSemenAnalysis(
     const res = await apiFetch<{
       success: boolean;
       data: { analysis: CycAnalysisRecord | null; history: CycAnalysisRecord[] };
-    }>(`/sperm/analysis?${params.toString()}`, {}, token);
+    }>(`/sperm?${params.toString()}`, {}, token);
 
     return res.data || { analysis: null, history: [] };
   } catch (error) {

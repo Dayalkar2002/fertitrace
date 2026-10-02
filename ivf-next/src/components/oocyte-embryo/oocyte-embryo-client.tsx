@@ -1,14 +1,16 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { usePatient } from '@/contexts/patient-context';
 import { useAuth } from '@/contexts/auth-context';
 import { usePatientIds } from '@/components/clinical/clinical-shared';
+import { useAppDispatch } from '@/store/hooks';
+import { setShowPatientModal } from '@/store/slices/uiSlice';
 import { ApiError } from '@/lib/api';
 import { loadOocyteEmbryoOverview } from '@/lib/services/oocyte-embryo';
-import { BT_EXPANSION_OPTIONS, BT_ICM_OPTIONS, ET_ACTION_OPTIONS } from '@/lib/services/iui';
+import { BT_EXPANSION_OPTIONS, BT_ICM_OPTIONS, BT_TE_OPTIONS, ET_ACTION_OPTIONS } from '@/lib/services/iui';
 import { readRetrievalSnapshot, type CycleRetrievalSnapshot } from '@/lib/cycle-snapshot';
-import type { EtEmbryoRow, LabSource, OocyteItem, SourceSummary } from '@/lib/types/oocyte-embryo';
+import type { EtEmbryoRow, LabSource, OocyteItem, PatientCycleOption, SourceSummary } from '@/lib/types/oocyte-embryo';
 
 export type OocyteEmbryoTab =
   | 'oocytes'
@@ -217,6 +219,7 @@ function overlayAllotment(summary: SourceSummary, allotted: number): SourceSumma
 }
 
 export function OocyteEmbryoClient() {
+  const dispatch = useAppDispatch();
   const { selectedPatient } = usePatient();
   const { user, token } = useAuth();
   const { patId, satId, ready } = usePatientIds();
@@ -230,6 +233,9 @@ export function OocyteEmbryoClient() {
   const [ivfSummary, setIvfSummary] = useState<SourceSummary>({ ...EMPTY_SUMMARY, source: 'IVF' });
   const [icsiSummary, setIcsiSummary] = useState<SourceSummary>({ ...EMPTY_SUMMARY, source: 'ICSI' });
   const [embryos, setEmbryos] = useState<EtEmbryoRow[]>([]);
+  const [blastocysts, setBlastocysts] = useState<EtEmbryoRow[]>([]);
+  const [cycleOptions, setCycleOptions] = useState<PatientCycleOption[]>([]);
+  const [selectedCycleId, setSelectedCycleId] = useState<string>('');
   const [summaryError, setSummaryError] = useState('');
   const [retrieval, setRetrieval] = useState<CycleRetrievalSnapshot | null>(null);
   const [labView, setLabView] = useState<LabView>('IVF');
@@ -262,20 +268,27 @@ export function OocyteEmbryoClient() {
     }
   }, []);
 
-  useEffect(() => {
+  const loadOverview = useCallback((cycleIdToLoad?: string) => {
     if (!token || !ready) return;
-    let cancelled = false;
     setSummaryError('');
     const snapshot = readRetrievalSnapshot(undefined, patId);
     setRetrieval(snapshot);
-    loadOocyteEmbryoOverview(token, patId, satId)
+    loadOocyteEmbryoOverview(token, patId, satId, cycleIdToLoad)
       .then((data) => {
-        if (cancelled) return;
         const ivf = overlayAllotment(data.ivf, snapshot?.ivfAllotted || 0);
         const icsi = overlayAllotment(data.icsi, snapshot?.icsiAllotted || 0);
         setIvfSummary(ivf);
         setIcsiSummary(icsi);
         setEmbryos(data.embryos || []);
+        setBlastocysts(data.blastocysts || []);
+        if (data.cycles && data.cycles.length > 0) {
+          setCycleOptions(data.cycles);
+        }
+        if (data.selectedCycleId) {
+          setSelectedCycleId(data.selectedCycleId);
+        } else if (cycleIdToLoad) {
+          setSelectedCycleId(cycleIdToLoad);
+        }
         const bothAllotted = (snapshot?.ivfAllotted || 0) > 0 && (snapshot?.icsiAllotted || 0) > 0;
         if (bothAllotted) {
           setLabView('BOTH');
@@ -286,23 +299,26 @@ export function OocyteEmbryoClient() {
         }
       })
       .catch((err) => {
-        if (!cancelled) setSummaryError(err instanceof ApiError ? err.message : 'Could not load IVF/ICSI summary.');
+        setSummaryError(err instanceof ApiError ? err.message : 'Could not load IVF/ICSI summary.');
       });
-    return () => {
-      cancelled = true;
-    };
   }, [token, ready, patId, satId]);
 
+  useEffect(() => {
+    loadOverview();
+  }, [loadOverview]);
+
   // Demographic details
-  const patientId = selectedPatient?.uhid || (selectedPatient?.id ? `P-2026-00${selectedPatient.id}` : 'P-2026-00125');
-  const patientName = selectedPatient?.name || 'Mrs. Anjali Sharma';
+  const patientId = selectedPatient?.uhid || (selectedPatient?.id ? `P-2026-00${selectedPatient.id}` : '');
+  const patientName = selectedPatient?.name || '';
   const summary = sourceTab === 'ICSI' ? icsiSummary : ivfSummary;
   const bothLabs = labView === 'BOTH';
-  const cycleId = summary.cycleId || retrieval?.cycleId || (selectedPatient?.id ? `C-2026-00${selectedPatient.id}` : 'C-2026-00158');
+  const cycleId = selectedCycleId || summary.cycleId || retrieval?.cycleId || '';
   const cycleType = bothLabs ? 'IVF + ICSI' : sourceTab;
   const cycleDay = 16;
   const operator = user?.userName || 'Dr. Satish Sharma (EMB-01)';
   const sourceEmbryos = embryos.filter((row) => row.source === sourceTab);
+  const sourceBlastocysts = blastocysts.filter((row) => row.source === sourceTab);
+  const displayBlastocysts = bothLabs ? blastocysts : sourceBlastocysts;
 
   const retrievedCount = summary.retrieved;
   const matureCount = summary.matureMII;
@@ -343,6 +359,32 @@ export function OocyteEmbryoClient() {
     return matchesSearch && matchesStatus;
   });
 
+  if (!selectedPatient) {
+    return (
+      <div className="mx-auto max-w-[1400px] space-y-5 font-sans text-slate-800 pb-16">
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-12 text-center shadow-xs">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-purple-50 text-purple-600 text-3xl mb-4 border border-purple-100">
+            👤
+          </div>
+          <h2 className="text-base font-bold text-slate-800">No Patient Selected</h2>
+          <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">
+            Please select a patient from the database using the button below or the top navigation bar to view and manage Oocyte and Embryo records.
+          </p>
+          <div className="mt-5">
+            <button
+              type="button"
+              onClick={() => dispatch(setShowPatientModal(true))}
+              className="inline-flex items-center gap-2 rounded-xl bg-[#6b46c1] hover:bg-[#5b37b0] px-5 py-2.5 text-xs font-bold text-white shadow-sm transition"
+            >
+              <span>Select Patient</span>
+              <span>↗</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-[1400px] space-y-5 font-sans text-slate-800 pb-16">
       
@@ -375,15 +417,41 @@ export function OocyteEmbryoClient() {
                   {cycleType}
                 </span>
               </div>
-              <div className="text-[11px] text-slate-500 mt-0.5">
-                Cycle ID: <strong className="text-slate-700 font-mono">{cycleId || '—'}</strong>
+              <div className="text-[11px] text-slate-500 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-semibold text-slate-600">Cycle:</span>
+                  {cycleOptions.length > 0 ? (
+                    <select
+                      value={selectedCycleId}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setSelectedCycleId(next);
+                        loadOverview(next);
+                      }}
+                      className="rounded-lg border border-purple-200 bg-purple-50/70 px-2 py-0.5 font-mono text-[11px] font-bold text-purple-900 shadow-2xs hover:bg-purple-100/70 focus:border-purple-400 focus:outline-none"
+                    >
+                      {cycleOptions.map((c) => (
+                        <option key={c.cycId} value={c.cycId}>
+                          {c.label || c.cycId}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <strong className="text-slate-700 font-mono">{cycleId || '—'}</strong>
+                  )}
+                </div>
                 {summary.cycleDate ? (
                   <>
-                    {' '}
-                    • Cycle date: <strong className="text-slate-700">{summary.cycleDate}</strong>
+                    <span className="text-slate-300">•</span>
+                    <div>
+                      Cycle date: <strong className="text-slate-700">{summary.cycleDate}</strong>
+                    </div>
                   </>
-                ) : null}{' '}
-                • Operator: <strong className="text-slate-700">{operator}</strong>
+                ) : null}
+                <span className="text-slate-300">•</span>
+                <div>
+                  Operator: <strong className="text-slate-700">{operator}</strong>
+                </div>
               </div>
             </div>
           </div>
@@ -842,9 +910,9 @@ export function OocyteEmbryoClient() {
               <p className="text-[11px] text-slate-500">
                 SMART BT columns: Source, Expansion grade, ICM Grade, TE Grade, Action, Location, Remarks. IVF and ICSI are listed on separate rows.
               </p>
-              {sourceEmbryos.length === 0 && !bothLabs ? (
+              {displayBlastocysts.length === 0 ? (
                 <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                  No {sourceTab} blastocyst rows yet. Add them on the BT screen.
+                  No {bothLabs ? 'IVF or ICSI' : sourceTab} blastocyst rows yet. Add them on the BT screen.
                 </p>
               ) : (
                 <div className="overflow-x-auto rounded-xl border border-slate-200">
@@ -861,13 +929,20 @@ export function OocyteEmbryoClient() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 bg-white">
-                      {(bothLabs ? embryos : sourceEmbryos).map((row) => (
+                      {displayBlastocysts.map((row) => (
                         <tr key={row.id} className="hover:bg-slate-50">
                           <td className="px-3 py-2 font-bold text-slate-800">{row.source}</td>
                           <td className="px-3 py-2 text-slate-700">{gradeLabel(BT_EXPANSION_OPTIONS, row.celler)}</td>
                           <td className="px-3 py-2 text-slate-700">{gradeLabel(BT_ICM_OPTIONS, row.grade)}</td>
-                          <td className="px-3 py-2 text-slate-700">—</td>
-                          <td className="px-3 py-2 text-slate-700">{row.actionLabel || '—'}</td>
+                          <td className="px-3 py-2 text-slate-700">{row.teGrade ? gradeLabel(BT_TE_OPTIONS, row.teGrade) : '—'}</td>
+                          <td className="px-3 py-2 text-slate-700">
+                            {row.actionLabel || '—'}
+                            {row.recipient ? (
+                              <span className="ml-1 text-[10px] text-purple-700 font-semibold">
+                                (Rec: {row.recipient})
+                              </span>
+                            ) : null}
+                          </td>
                           <td className="px-3 py-2 text-slate-600">{row.location || '—'}</td>
                           <td className="px-3 py-2 text-slate-600">{row.remark || '—'}</td>
                         </tr>
@@ -1319,7 +1394,6 @@ const SPLIT_BY_TAB: Record<OocyteEmbryoTab, { label: string; key: keyof SourceSu
     { label: 'Stuck', key: 'stuck' },
     { label: 'Keep for blastocyst', key: 'blastocyst' },
     { label: 'Discarded', key: 'discard' },
-    { label: 'Donated', key: 'donated' },
     { label: 'Donated for research', key: 'donatedForResearch' },
   ],
   'blastocyst-transfer': [
@@ -1328,7 +1402,6 @@ const SPLIT_BY_TAB: Record<OocyteEmbryoTab, { label: string; key: keyof SourceSu
     { label: 'Frozen', key: 'cryopreserved' },
     { label: 'Stuck', key: 'stuck' },
     { label: 'Discarded', key: 'discard' },
-    { label: 'Donated', key: 'donated' },
     { label: 'Donated for research', key: 'donatedForResearch' },
   ],
   cryopreservation: [
@@ -1338,7 +1411,6 @@ const SPLIT_BY_TAB: Record<OocyteEmbryoTab, { label: string; key: keyof SourceSu
   thaw: [{ label: 'Frozen available', key: 'cryopreserved' }],
   'embryo-disposition': [
     { label: 'Discarded', key: 'discard' },
-    { label: 'Donated', key: 'donated' },
     { label: 'Donated for research', key: 'donatedForResearch' },
   ],
 };

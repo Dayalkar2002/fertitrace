@@ -55,9 +55,21 @@ export async function listArtCycles(
   return res.data || [];
 }
 
-export async function loadArtCycleSummary(token: string, cycleId: string): Promise<ArtCycleSummaryResult> {
+export async function loadArtCycleSummary(
+  token: string,
+  cycleId: string,
+  overrideType?: number,
+  patName?: string
+): Promise<ArtCycleSummaryResult> {
+  const params = new URLSearchParams({ cycleId });
+  if (overrideType !== undefined && overrideType >= 0) {
+    params.set('type', String(overrideType));
+  }
+  if (patName) {
+    params.set('patName', patName);
+  }
   const res = await apiFetch<{ success: boolean; data: ArtCycleSummaryResult }>(
-    `/reports/art-cycle?cycleId=${encodeURIComponent(cycleId)}`,
+    `/reports/art-cycle?${params.toString()}`,
     {},
     token
   );

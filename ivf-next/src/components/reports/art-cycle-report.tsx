@@ -46,6 +46,7 @@ export function ArtCycleReport() {
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [error, setError] = useState('');
   const [summary, setSummary] = useState<ArtCycleSummaryResult | null>(null);
+  const [overrideType, setOverrideType] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     if (!token || !ready) return;
@@ -54,6 +55,7 @@ export function ArtCycleReport() {
     setError('');
     setSelectedId('0');
     setSummary(null);
+    setOverrideType(undefined);
     listArtCycles(token, patId, satId)
       .then((rows) => {
         if (cancelled) return;
@@ -79,7 +81,7 @@ export function ArtCycleReport() {
     let cancelled = false;
     setLoadingSummary(true);
     setError('');
-    loadArtCycleSummary(token, selectedId)
+    loadArtCycleSummary(token, selectedId, overrideType, patientName)
       .then((data) => {
         if (!cancelled) setSummary(data);
       })
@@ -95,7 +97,16 @@ export function ArtCycleReport() {
     return () => {
       cancelled = true;
     };
-  }, [token, selectedId]);
+  }, [token, selectedId, overrideType, patientName]);
+
+  function handleTypeChange(newType: number) {
+    setOverrideType(newType);
+  }
+
+  function handleCycleChange(newCycleId: string) {
+    setOverrideType(undefined);
+    setSelectedId(newCycleId);
+  }
 
   const patient =
     sectionRows(summary, 'Patient Summary')[0] ||
@@ -115,12 +126,16 @@ export function ArtCycleReport() {
         <ReportSelect
           label="Select Cycle"
           value={selectedId}
-          onChange={setSelectedId}
+          onChange={handleCycleChange}
           placeholder={loadingList ? 'Loading cycles…' : 'Select Cycle'}
           options={cycles}
           disabled={loadingList}
         />
-        <TypePills options={ART_CYCLE_TYPES} selectedIndex={summary?.type ?? 0} />
+        <TypePills
+          options={ART_CYCLE_TYPES}
+          selectedIndex={summary?.type ?? 0}
+          onChange={handleTypeChange}
+        />
         <button
           type="button"
           onClick={() => window.print()}

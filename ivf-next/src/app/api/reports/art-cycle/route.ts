@@ -13,11 +13,14 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const cycleId = (searchParams.get('cycleId') || '').trim();
+    const typeParam = searchParams.get('type');
+    const overrideType = typeParam !== null && typeParam !== '' ? Number(typeParam) : undefined;
+    const patName = (searchParams.get('patName') || '').trim();
     const patId = Number(searchParams.get('patId') || 0);
     const satId = Number(searchParams.get('satId') || 0);
 
     if (cycleId && cycleId !== '0') {
-      const data = await reportsService.loadArtCycleSummary(cycleId);
+      const data = await reportsService.loadArtCycleSummary(cycleId, overrideType, patName);
       return NextResponse.json({ success: true, data });
     }
 
