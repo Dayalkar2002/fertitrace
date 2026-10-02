@@ -59,7 +59,31 @@ export async function POST(req: NextRequest) {
       return authUnauthorizedResponse();
     }
 
+    const { searchParams } = new URL(req.url);
+    const action = searchParams.get('action') || '';
     const body = await req.json();
+
+    if (action === 'unlock' || body.action === 'unlock') {
+      if (isDbConfigured()) {
+        try {
+          await executeDRL('spUnlockCycle', [
+            { name: '@PatId', value: body.patId || 0 },
+            { name: '@CycleId', value: body.cycleId || '' },
+            { name: '@ModuleType', value: 'IUI' },
+          ]);
+          return NextResponse.json({
+            success: true,
+            message: 'IUI cycle unlocked successfully.',
+          });
+        } catch (dbErr) {
+          console.error('DB error unlocking IUI cycle:', dbErr);
+        }
+      }
+      return NextResponse.json({
+        success: true,
+        message: 'IUI cycle unlocked successfully (Demo Mode).',
+      });
+    }
 
     if (isDbConfigured()) {
       try {

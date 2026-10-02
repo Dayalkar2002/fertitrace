@@ -60,10 +60,25 @@ export function SemenAnalysisModal({
         {/* Modal Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 text-xs text-slate-700">
           {/* Top Metadata Strip */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6 rounded-xl border border-slate-200 bg-slate-50/70 p-3.5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7 rounded-xl border border-slate-200 bg-slate-50/70 p-3.5">
             <div>
               <span className="block text-[10px] font-bold uppercase text-slate-400">Sperm ID</span>
               <span className="font-bold text-slate-800">{analysis.spermType || 'Husband'}</span>
+              {analysis.freezingId && (
+                <span className="block text-[11px] font-mono font-bold text-purple-700">
+                  Id: {analysis.freezingId}
+                </span>
+              )}
+            </div>
+            <div>
+              <span className="block text-[10px] font-bold uppercase text-slate-400">Type</span>
+              <span className={`inline-block rounded px-1.5 py-0.5 text-[11px] font-bold ${
+                analysis.isFrozen
+                  ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                  : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+              }`}>
+                {analysis.isFrozen ? '❄️ Frozen' : '🌱 Fresh'}
+              </span>
             </div>
             <div>
               <span className="block text-[10px] font-bold uppercase text-slate-400">Indication</span>
@@ -87,6 +102,15 @@ export function SemenAnalysisModal({
                 ✓ {analysis.whereToUse || 'ICSI'}
               </span>
             </div>
+
+            {analysis.location && (
+              <div className="col-span-2 sm:col-span-4 lg:col-span-7 mt-1 pt-2 border-t border-slate-200/80 flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase text-slate-400">Storage Location:</span>
+                <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded border border-blue-200">
+                  📍 {analysis.location}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* 3 Main Panels */}
@@ -151,12 +175,12 @@ export function SemenAnalysisModal({
               </div>
             </div>
 
-            {/* Panel 2: Before Processing */}
+            {/* Panel 2: Before Processing / Pre Freezing */}
             <div className="rounded-xl border border-blue-200 bg-blue-50/30 p-4 space-y-3">
               <div className="flex items-center gap-2 border-b border-blue-200 pb-2">
-                <span className="text-blue-700 font-bold">🧪</span>
+                <span className="text-blue-700 font-bold">{analysis.isFrozen ? '❄️' : '🧪'}</span>
                 <h3 className="text-xs font-bold uppercase tracking-wide text-blue-900">
-                  Before Processing
+                  {analysis.isFrozen ? 'Pre Freezing' : 'Before Processing'}
                 </h3>
               </div>
               <div className="space-y-2">
@@ -201,20 +225,32 @@ export function SemenAnalysisModal({
                   <span className="font-semibold text-slate-800">{analysis.beforeEpith} / {analysis.beforeRound}</span>
                 </div>
                 <div className="flex items-center justify-between py-1">
-                  <span className="text-slate-500">Trial Swim Up</span>
-                  <span className="rounded bg-emerald-100 px-2 py-0.5 font-bold text-emerald-800 border border-emerald-300">
-                    {analysis.trialSwimUp || '—'}
-                  </span>
+                  <span className="text-slate-500">Trial Swim Up / Ham&apos;s</span>
+                  <div className="flex items-center gap-1.5">
+                    {analysis.isHams && (
+                      <span className="rounded bg-blue-100 px-2 py-0.5 text-[11px] font-bold text-blue-800 border border-blue-300">
+                        ✓ Ham&apos;s
+                      </span>
+                    )}
+                    {analysis.trialSwimUp && analysis.trialSwimUp !== "Ham's" && (
+                      <span className="rounded bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-800 border border-emerald-300">
+                        {analysis.trialSwimUp}
+                      </span>
+                    )}
+                    {!analysis.isHams && !analysis.trialSwimUp && (
+                      <span className="font-semibold text-slate-400">—</span>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Panel 3: After Processing */}
+            {/* Panel 3: After Processing / Post Thaw */}
             <div className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-4 space-y-3">
               <div className="flex items-center gap-2 border-b border-emerald-200 pb-2">
-                <span className="text-emerald-700 font-bold">✨</span>
+                <span className="text-emerald-700 font-bold">{analysis.isFrozen ? '🌡️' : '✨'}</span>
                 <h3 className="text-xs font-bold uppercase tracking-wide text-emerald-900">
-                  After Processing
+                  {analysis.isFrozen ? 'Post Thaw' : 'After Processing'}
                 </h3>
               </div>
               <div className="space-y-2">

@@ -10,6 +10,7 @@ import {
   formatCycleDate,
   icsiApi,
 } from '@/lib/services/clinical-modules';
+import { fetchCycleSemenAnalysis } from '@/lib/services/semen-analysis';
 import type { LookupItem } from '@/lib/types/master';
 
 const inputCls = 'mt-1 h-9 w-full rounded-lg border border-slate-300 px-3 text-sm';
@@ -292,12 +293,13 @@ export function IcsiEntryForm() {
     setForm((f) => ({ ...f, cycId, cycleDate: selected.cycleDate }));
 
     try {
-      const [monitoring, record] = await Promise.all([
+      const [monitoring, record, semenRes] = await Promise.all([
         icsiApi.getMonitoring(token, patId, satId, String(selected.cycId), cycleDate).catch(() => null),
         icsiApi.loadRecord(token, patId, satId, String(selected.cycId), cycleDate).catch(() => ({
           data: null,
           exists: false,
         })),
+        fetchCycleSemenAnalysis(token, String(selected.cycId), patId).catch(() => ({ analysis: null, history: [] })),
       ]);
 
       let next: IcsiForm = { ...defaultForm(), cycId, cycleDate: selected.cycleDate };
@@ -316,12 +318,41 @@ export function IcsiEntryForm() {
       } else {
         setIsUpdate(false);
       }
+
+      // Auto-fill Semen Survival / Post-Processing analysis if not already set
+      if ((!next.semenType1 || Number(next.semenType1) === 0) && semenRes?.analysis) {
+        const a = semenRes.analysis;
+        const sc = Number(a.afterSperms || a.beforeSperms || 0);
+        const pm = Number(a.afterProgMotility || a.beforeProgMotility || 0);
+        next.semenType1 = sc;
+        next.semenType2 = pm;
+      }
+
       setForm(next);
       setShowForm(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to load cycle data.');
     } finally {
       setCycleLoading(false);
+    }
+  }
+
+  async function handleAutoFillSemen() {
+    if (!token || !form.cycId) return;
+    try {
+      const semenRes = await fetchCycleSemenAnalysis(token, String(form.cycId), patId);
+      if (semenRes.analysis) {
+        const a = semenRes.analysis;
+        const sc = Number(a.afterSperms || a.beforeSperms || 0);
+        const pm = Number(a.afterProgMotility || a.beforeProgMotility || 0);
+        setForm((f) => ({
+          ...f,
+          semenType1: sc,
+          semenType2: pm,
+        }));
+      }
+    } catch {
+      // ignore
     }
   }
 
@@ -420,6 +451,79 @@ export function IcsiEntryForm() {
                 <LookupSelect label="Media Series" name="mediaSeries" form={form} setForm={setForm} options={mediaSeries} />
                 <LookupSelect label="Incubator" name="incubatorUsed" form={form} setForm={setForm} options={incubator} />
                 <LookupSelect label="Gas" name="gas" form={form} setForm={setForm} options={gas} />
+              </div>
+            </section>
+
+            <section className="rounded-xl border border-blue-200/80 bg-blue-50/20 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <div>
+                  <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <span>🧪</span>
+                    <span>Semen Parameters</span>
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Semen survival analysis parameters (Insemination Volume is Not Applicable for ICSI)
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAutoFillSemen}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-semibold text-[#6345A6] hover:bg-purple-100 transition shadow-2xs"
+                >
+                  <span>✨</span>
+                  <span>Auto-fill from Survival Analysis</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
+                <div>
+                  <label className={labelCls}>
+                    Sperm Conc. (SC × 10⁶/mL)
+                    <input
+                      type="number"
+                      step="any"
+                      value={Number(form.semenType1 ?? 0)}
+                      onChange={(e) => setForm((f) => ({ ...f, semenType1: Number(e.target.value) }))}
+                      className={inputCls}
+                    />
+                  </label>
+                </div>
+                <div>
+                  <label className={labelCls}>
+                    Progressive Motility (PM %)
+                    <input
+                      type="number"
+                      step="any"
+                      value={Number(form.semenType2 ?? 0)}
+                      onChange={(e) => setForm((f) => ({ ...f, semenType2: Number(e.target.value) }))}
+                      className={inputCls}
+                    />
+                  </label>
+                </div>
+                <div>
+                  <label className={labelCls}>
+                    Insem. Vol
+                    <input
+                      type="text"
+                      readOnly
+                      disabled
+                      value="NA"
+                      className={`${inputCls} bg-slate-100 font-semibold text-slate-400 cursor-not-allowed`}
+                    />
+                  </label>
+                </div>
+                <div>
+                  <label className={labelCls}>
+                    No. of Oocytes
+                    <input
+                      type="text"
+                      readOnly
+                      disabled
+                      value="NA"
+                      className={`${inputCls} bg-slate-100 font-semibold text-slate-400 cursor-not-allowed`}
+                    />
+                  </label>
+                </div>
               </div>
             </section>
 

@@ -96,7 +96,7 @@ export function ReportPage() {
     return (
       <div className="space-y-5">
         <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-card">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-green">Analytics</p>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-green">Clinical &amp; Lab Reports</p>
           <h1 className="mt-0.5 font-display text-lg sm:text-xl font-bold text-slate-900">Reports Hub</h1>
           <p className="mt-2 max-w-2xl text-sm text-slate-500">
             Open ART Cycle or IUI from the Reports tab in the top menu, matching SMART. Other reports

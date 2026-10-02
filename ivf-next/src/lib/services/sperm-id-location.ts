@@ -55,6 +55,7 @@ export async function listSpermIdLocations(
   input: { spermId: string; semenType: string; patId: number; satId: number; thawId?: string }
 ): Promise<SpermIdOption[]> {
   const params = new URLSearchParams({
+    action: 'id-locations',
     spermId: input.spermId,
     type: input.semenType,
     patId: String(input.patId || 0),
@@ -62,7 +63,7 @@ export async function listSpermIdLocations(
     thawId: input.thawId || 'New',
   });
   const res = await apiFetch<{ success: boolean; data: SpermIdOption[] }>(
-    `/sperm/id-locations?${params.toString()}`,
+    `/sperm?${params.toString()}`,
     {},
     token
   );
@@ -74,9 +75,9 @@ export async function loadSpermLocationDetails(
   id: string,
   spermType: string
 ): Promise<SpermLocationDetails | null> {
-  const params = new URLSearchParams({ id, spermType });
+  const params = new URLSearchParams({ action: 'location-details', id, spermType });
   const res = await apiFetch<{ success: boolean; data: SpermLocationDetails | null }>(
-    `/sperm/location-details?${params.toString()}`,
+    `/sperm?${params.toString()}`,
     {},
     token
   );

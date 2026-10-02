@@ -51,16 +51,26 @@ export function dash(text: string): string {
 export function TypePills({
   options,
   selectedIndex,
+  onChange,
 }: {
   options: readonly string[];
   selectedIndex: number;
+  onChange?: (index: number) => void;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
       {options.map((option, index) => (
-        <label key={option} className="flex items-center gap-1">
-          <input type="radio" checked={selectedIndex === index} readOnly disabled className="accent-slate-700" />
-          <span className={selectedIndex === index ? 'font-bold' : ''}>{option}</span>
+        <label key={option} className="flex items-center gap-1.5 cursor-pointer">
+          <input
+            type="radio"
+            name="artCycleTypeRadio"
+            checked={selectedIndex === index}
+            onChange={() => onChange?.(index)}
+            className="accent-[#123E73] cursor-pointer"
+          />
+          <span className={selectedIndex === index ? 'font-bold text-slate-900 underline decoration-[#123E73] decoration-2 underline-offset-2' : 'text-slate-600'}>
+            {option}
+          </span>
         </label>
       ))}
     </div>

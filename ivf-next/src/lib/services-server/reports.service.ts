@@ -197,8 +197,43 @@ export async function listArtCycles(patId: number, satId: number): Promise<ArtCy
     .filter((row): row is ArtCycleOption => row !== null);
 }
 
-async function detectArtCycleType(cycleId: string): Promise<ArtCycleTypeIndex> {
-  const rows = await trySp('spReportCycle', '@PatID', [cycleId]);
+async function detectArtCycleType(cycleId: string, patName = ''): Promise<ArtCycleTypeIndex> {
+  const cleanCycId = cycleId.includes('--') ? cycleId.split('--')[0].trim() : cycleId.trim();
+
+  // Try direct query matching spReportCycle logic without the CHARINDEX bug
+  try {
+    const outcomeResult = await executeText<{ CycOType?: string }>(
+      `SELECT CycOType FROM CycOutCome WHERE LTRIM(RTRIM(CycID)) = @cycId`,
+      [{ name: '@cycId', value: cleanCycId }]
+    );
+    const outcomeRows = outcomeResult.recordset || [];
+    if (outcomeRows.length && outcomeRows[0]?.CycOType) {
+      const cycOType = outcomeRows[0].CycOType.trim();
+      if (cycOType === 'Fresh') {
+        const redResult = await executeText<{ cnt: number }>(
+          `SELECT COUNT(*) as cnt FROM CycMonitoringChartRemDay WHERE LTRIM(RTRIM(CycID)) = @cycId AND cycMCRDColor = 'Red'`,
+          [{ name: '@cycId', value: cleanCycId }]
+        );
+        const redRows = redResult.recordset || [];
+        if (redRows[0]?.cnt && redRows[0].cnt > 0) return 0; // OP+ET
+        return 1; // OR+ET
+      } else if (cycOType === 'ER') {
+        return 3; // ER
+      } else if (cycOType === 'FET') {
+        return 2; // FET
+      } else if (cycOType === 'FrozenOocytes') {
+        return 4; // OF
+      } else {
+        return 1; // OR+ET
+      }
+    }
+  } catch (err) {
+    console.error('Error querying CycOutCome directly:', err);
+  }
+
+  // Fallback to legacy spReportCycle
+  const legacyParam = cycleId.includes('--') ? cycleId : `${cleanCycId}--${patName || 'Patient'}`;
+  const rows = await trySp('spReportCycle', '@PatID', [legacyParam]);
   const first = rows[0];
   if (!first) return 0;
   const raw = Object.values(first)[0];
@@ -209,43 +244,78 @@ function section(name: string, rows: ReportRow[]): ReportSection[] {
   return rows.length ? [{ name, rows }] : [];
 }
 
-export async function loadArtCycleSummary(cycleId: string): Promise<ArtCycleSummaryResult> {
-  const type = await detectArtCycleType(cycleId);
+export async function loadArtCycleSummary(
+  cycleId: string,
+  overrideType?: number,
+  patName = ''
+): Promise<ArtCycleSummaryResult> {
+  const cleanCycId = cycleId.includes('--') ? cycleId.split('--')[0].trim() : cycleId.trim();
+
+  // Resolve patient name if not provided
+  let resolvedPatName = patName.trim();
+  if (!resolvedPatName && cycleId.includes('--')) {
+    resolvedPatName = cycleId.split('--')[1].trim();
+  }
+  if (!resolvedPatName) {
+    try {
+      const patResult = await executeText<{ PatName: string }>(
+        `SELECT TOP 1 P.PatName FROM PatientMaster P 
+         INNER JOIN CycOutCome C ON P.PatID = C.PatID 
+         WHERE LTRIM(RTRIM(C.CycID)) = @cycId`,
+        [{ name: '@cycId', value: cleanCycId }]
+      );
+      const patRows = patResult.recordset || [];
+      if (patRows[0]?.PatName) {
+        resolvedPatName = patRows[0].PatName.trim();
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Legacy stored procedures expect @PatID in 'CycID--PatName' format
+  const legacyParam = `${cleanCycId}--${resolvedPatName || 'Patient'}`;
+
+  const type =
+    overrideType !== undefined && overrideType >= 0
+      ? clampArtType(overrideType)
+      : await detectArtCycleType(cleanCycId, resolvedPatName);
+
   const typeLabel = ART_CYCLE_TYPES[type];
   let sections: ReportSection[] = [];
 
   if (type === 0 || type === 1) {
     const flag = type === 0 ? 0 : 1;
     sections = [
-      ...section('Patient Summary', await trySp('spRptPatSummary', '@PatID,@Flag', [cycleId, flag])),
-      ...section('ET Transfer', await trySp('spRptETCeller', '@PatID', [cycleId])),
-      ...section('BT Transfer', await trySp('spRptETCeller', '@PatID,@flag', [cycleId, 'BioTransfer'])),
-      ...section('ET Frozen', await trySp('spRptETCeller', '@PatID,@flag', [cycleId, 'ETFrozen'])),
-      ...section('BT Frozen', await trySp('spRptETCeller', '@PatID,@flag', [cycleId, 'BTFrozen'])),
+      ...section('Patient Summary', await trySp('spRptPatSummary', '@PatID,@Flag', [legacyParam, flag])),
+      ...section('ET Transfer', await trySp('spRptETCeller', '@PatID', [legacyParam])),
+      ...section('BT Transfer', await trySp('spRptETCeller', '@PatID,@flag', [legacyParam, 'BioTransfer'])),
+      ...section('ET Frozen', await trySp('spRptETCeller', '@PatID,@flag', [legacyParam, 'ETFrozen'])),
+      ...section('BT Frozen', await trySp('spRptETCeller', '@PatID,@flag', [legacyParam, 'BTFrozen'])),
     ];
   } else if (type === 3) {
     sections = [
-      ...section('Embryo Summary', await trySp('spRptERSummary', '@PatID,@Flag', [cycleId, 1])),
-      ...section('ET Celler', await trySp('spETBTCeller', '@PatID', [cycleId])),
-      ...section('BT Celler', await trySp('spETBTCeller', '@PatID,@flag', [cycleId, 'BTTransfer'])),
-      ...section('ET Frozen', await trySp('spRptETCeller', '@PatID,@flag', [cycleId, 'ETFrozen'])),
-      ...section('BT Frozen', await trySp('spRptETCeller', '@PatID,@flag', [cycleId, 'BTFrozen'])),
+      ...section('Embryo Summary', await trySp('spRptERSummary', '@PatID,@Flag', [legacyParam, 1])),
+      ...section('ET Celler', await trySp('spETBTCeller', '@PatID', [legacyParam])),
+      ...section('BT Celler', await trySp('spETBTCeller', '@PatID,@flag', [legacyParam, 'BTTransfer'])),
+      ...section('ET Frozen', await trySp('spRptETCeller', '@PatID,@flag', [legacyParam, 'ETFrozen'])),
+      ...section('BT Frozen', await trySp('spRptETCeller', '@PatID,@flag', [legacyParam, 'BTFrozen'])),
     ];
   } else if (type === 4) {
     sections = [
-      ...section('Oocyte Summary', await trySp('spRptOcyteSummary2', '@PatID,@Flag', [cycleId, 1])),
-      ...section('Oocyte Straw', await trySp('spRPTOcyteSTraw', '@PatID', [cycleId])),
+      ...section('Oocyte Summary', await trySp('spRptOcyteSummary2', '@PatID,@Flag', [legacyParam, 1])),
+      ...section('Oocyte Straw', await trySp('spRPTOcyteSTraw', '@PatID', [legacyParam])),
     ];
   } else {
     sections = [
-      ...section('FET Summary', await trySp('spRptPatSummary2', '@PatID,@Flag', [cycleId, 1])),
-      ...section('Patient Transfer', await trySp('spRptPatCeller', '@PatID', [cycleId])),
-      ...section('BT Transfer', await trySp('spRptPatCeller', '@PatID,@flag', [cycleId, 'BTTransfer'])),
+      ...section('FET Summary', await trySp('spRptPatSummary2', '@PatID,@Flag', [legacyParam, 1])),
+      ...section('Patient Transfer', await trySp('spRptPatCeller', '@PatID', [legacyParam])),
+      ...section('BT Transfer', await trySp('spRptPatCeller', '@PatID,@flag', [legacyParam, 'BTTransfer'])),
     ];
   }
 
   return {
-    cycleId,
+    cycleId: cleanCycId,
     type,
     typeLabel,
     title: artTitle(type),

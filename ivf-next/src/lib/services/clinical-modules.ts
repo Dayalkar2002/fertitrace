@@ -25,30 +25,30 @@ export function toDateInput(value: unknown): string {
 export function createCycleClinicalApi(basePath: string) {
   return {
     async getLookups<T = Record<string, LookupItem[]>>(token: string): Promise<T> {
-      const res = await apiFetch<{ success: boolean; data: T }>(`${basePath}/lookups`, {}, token);
+      const res = await apiFetch<{ success: boolean; data: T }>(`${basePath}?action=lookups`, {}, token);
       return res.data;
     },
     async getCycleDates(token: string, patId: number, satId: number): Promise<CycleDateOption[]> {
       const res = await apiFetch<{ success: boolean; data: CycleDateOption[] }>(
-        `${basePath}/cycle-dates?patId=${patId}&satId=${satId}`,
+        `${basePath}?action=cycle-dates&patId=${patId}&satId=${satId}`,
         {},
         token
       );
       return res.data;
     },
     async getMonitoring(token: string, patId: number, satId: number, cycId: string, cycleDate: string) {
-      const qs = new URLSearchParams({ patId: String(patId), satId: String(satId), cycId, cycleDate });
+      const qs = new URLSearchParams({ action: 'monitoring', patId: String(patId), satId: String(satId), cycId, cycleDate });
       const res = await apiFetch<{ success: boolean; data: Record<string, unknown> | null }>(
-        `${basePath}/monitoring?${qs}`,
+        `${basePath}?${qs.toString()}`,
         {},
         token
       );
       return res.data;
     },
     async loadRecord(token: string, patId: number, satId: number, cycId: string, cycleDate: string) {
-      const qs = new URLSearchParams({ patId: String(patId), satId: String(satId), cycId, cycleDate });
+      const qs = new URLSearchParams({ action: 'load', patId: String(patId), satId: String(satId), cycId, cycleDate });
       const res = await apiFetch<{ success: boolean; data: Record<string, unknown> | null; exists: boolean }>(
-        `${basePath}/load?${qs}`,
+        `${basePath}?${qs.toString()}`,
         {},
         token
       );

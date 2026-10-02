@@ -70,7 +70,7 @@ export default function DashboardPage() {
           { moduleKey: 'oocyte_management', title: 'Oocyte & Embryo', description: 'OPU & Culturing', icon: 'embryo', route: '/oocyte-embryo', colorTheme: 'pink', orderIndex: 6, isPinned: true, isActive: true },
           { moduleKey: 'cryopreservation', title: 'Cryopreservation', description: 'Straws & Tanks', icon: 'cryo', route: '/sperm?mode=Cryopreservation', colorTheme: 'sky', orderIndex: 7, isPinned: true, isActive: true },
           { moduleKey: 'witness_system', title: 'Witness Verification', description: 'RFID & Mismatch Shield', icon: 'witness', route: '/witness', colorTheme: 'emerald', orderIndex: 8, isPinned: true, isActive: true },
-          { moduleKey: 'reports_analytics', title: 'Audit Log & Reports', description: 'Compliance Records', icon: 'reports', route: '/reports', colorTheme: 'amber', orderIndex: 9, isPinned: true, isActive: true },
+          { moduleKey: 'reports_analytics', title: 'Reports', description: 'Compliance & Summary Records', icon: 'reports', route: '/reports', colorTheme: 'amber', orderIndex: 9, isPinned: true, isActive: true },
         ];
   const [currentTime, setCurrentTime] = useState<string>('');
   const [currentDate, setCurrentDate] = useState<string>('');

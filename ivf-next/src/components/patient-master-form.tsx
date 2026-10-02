@@ -465,7 +465,9 @@ export function PatientMasterForm() {
             <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
               <div className="flex flex-col">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-700">Full Name *</span>
+                  <span className="text-xs font-semibold text-slate-700 flex items-center">
+                    Full Name <span className="text-red-500 font-bold text-sm ml-1 select-none leading-none">*</span>
+                  </span>
                   {!isUnmarried && form.husbandName.trim() && !form.name.toLowerCase().includes(form.husbandName.trim().split(/\s+/)[0].toLowerCase()) && (
                     <button
                       type="button"
@@ -574,8 +576,8 @@ export function PatientMasterForm() {
             accent="border-emerald-200/80 bg-emerald-50/20"
           >
             <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
-              <SelectField label="Satellite Center" value={form.satId} options={satellites} onChange={(v) => updateField('satId', v)} />
-              <SelectField label="Consulting Doctor" value={form.docId} options={doctors} onChange={(v) => updateField('docId', v)} />
+              <SelectField label="Satellite Center *" value={form.satId} options={satellites} onChange={(v) => updateField('satId', v)} />
+              <SelectField label="Consulting Doctor *" value={form.docId} options={doctors} onChange={(v) => updateField('docId', v)} />
               <SelectField label="Diagnosis" value={form.diagId} options={diagnosis} onChange={(v) => updateField('diagId', v)} />
               <SelectField label="Referred By" value={form.refId} options={refBy} onChange={(v) => updateField('refId', v)} />
               <Field label="ART Clinic Reg No" value={form.artClinicReg || ''} onChange={(v) => updateField('artClinicReg', v)} placeholder="ART-CLINIC-XXXX" />
@@ -590,7 +592,7 @@ export function PatientMasterForm() {
             accent="border-amber-200/80 bg-amber-50/20"
           >
             <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
-              <Field label={partnerNameLabel} value={form.husbandName} onChange={(v) => updateField('husbandName', v)} placeholder="e.g. Ferozing Saf" />
+              <Field label={`${partnerNameLabel} *`} value={form.husbandName} onChange={(v) => updateField('husbandName', v)} placeholder="e.g. Ferozing Saf" />
               <Field label={`${partnerAgeLabel} *`} type="number" value={String(form.husbandAge)} onChange={(v) => handleHusbandAgeChange(Number(v))} />
               <Field label={`${partnerDobLabel} *`} type="date" value={form.husbandDob ?? ''} onChange={handleHusbandDobChange} />
               <Field label="Partner Mobile" value={form.husbandPhone ?? ''} onChange={(v) => updateField('husbandPhone', v)} placeholder="+91 98765 00000" />
@@ -1155,6 +1157,19 @@ function SectionCard({
   );
 }
 
+function renderLabelWithAsterisk(label: React.ReactNode) {
+  if (typeof label !== 'string') return label;
+  if (!label.includes('*')) return label;
+  const parts = label.split('*');
+  return (
+    <span className="inline-flex items-center">
+      <span>{parts[0].trim()}</span>
+      <span className="text-red-500 font-bold text-sm ml-1 select-none leading-none">*</span>
+      {parts.slice(1).join('*')}
+    </span>
+  );
+}
+
 function Field({
   label,
   value,
@@ -1163,18 +1178,25 @@ function Field({
   readOnly,
   title,
   placeholder,
+  required,
 }: {
-  label: string;
+  label: React.ReactNode;
   value: string;
   onChange: (v: string) => void;
   type?: string;
   readOnly?: boolean;
   title?: string;
   placeholder?: string;
+  required?: boolean;
 }) {
   return (
     <label className="block text-xs font-semibold text-slate-700">
-      {label}
+      <span className="flex items-center">
+        {renderLabelWithAsterisk(label)}
+        {required && !String(label).includes('*') && (
+          <span className="text-red-500 font-bold text-sm ml-1 select-none leading-none">*</span>
+        )}
+      </span>
       <input
         type={type}
         value={value}
@@ -1193,15 +1215,22 @@ function SelectField({
   value,
   options,
   onChange,
+  required,
 }: {
-  label: string;
+  label: React.ReactNode;
   value: number;
   options: LookupItem[];
   onChange: (v: number) => void;
+  required?: boolean;
 }) {
   return (
     <label className="block text-xs font-semibold text-slate-700">
-      {label}
+      <span className="flex items-center">
+        {renderLabelWithAsterisk(label)}
+        {required && !String(label).includes('*') && (
+          <span className="text-red-500 font-bold text-sm ml-1 select-none leading-none">*</span>
+        )}
+      </span>
       <select
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}

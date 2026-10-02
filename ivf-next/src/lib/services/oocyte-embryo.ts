@@ -4,10 +4,18 @@ import type { OocyteEmbryoOverview } from '@/lib/types/oocyte-embryo';
 export async function loadOocyteEmbryoOverview(
   token: string,
   patId: number,
-  satId: number
+  satId: number,
+  cycleId?: string
 ): Promise<OocyteEmbryoOverview> {
+  const qs = new URLSearchParams({
+    patId: String(patId),
+    satId: String(satId),
+  });
+  if (cycleId) {
+    qs.set('cycleId', cycleId.trim());
+  }
   const res = await apiFetch<{ success: boolean; data: OocyteEmbryoOverview }>(
-    `/oocyte-embryo?patId=${patId}&satId=${satId}`,
+    `/oocyte-embryo?${qs.toString()}`,
     {},
     token
   );

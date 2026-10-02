@@ -49,7 +49,7 @@ export async function unlockIui(
   payload: { patId: number; cycleId: string; patName?: string }
 ) {
   return apiFetch<{ success: boolean; message: string }>(
-    '/iui/unlock',
+    '/iui?action=unlock',
     { method: 'POST', body: JSON.stringify(payload) },
     token
   );
@@ -109,7 +109,6 @@ export const ET_ACTION_OPTIONS = [
   { id: 3, name: 'Stuck' },
   { id: 4, name: 'KeepForBlast' },
   { id: 5, name: 'Discard' },
-  { id: 6, name: 'Donated' },
   { id: 7, name: 'DonatedForResearch' },
 ];
 
@@ -133,6 +132,8 @@ export interface EmbryoRow {
   grade?: number;
   teGrade?: number;
   action?: number;
+  recipient?: string;
+  recipientCycle?: string;
   remark?: string;
   location?: string;
   isNew?: boolean;

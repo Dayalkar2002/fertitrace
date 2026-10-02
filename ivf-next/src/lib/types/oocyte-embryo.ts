@@ -45,15 +45,27 @@ export interface EtEmbryoRow {
   source: LabSource;
   celler: string;
   grade: string;
+  teGrade?: string;
   action: number;
   actionLabel: string;
   location: string;
   remark: string;
   cycleId: string;
+  recipient?: string;
+  recipientCycle?: string;
+}
+
+export interface PatientCycleOption {
+  cycId: string;
+  cycleDate: string;
+  label: string;
 }
 
 export interface OocyteEmbryoOverview {
   ivf: SourceSummary;
   icsi: SourceSummary;
   embryos: EtEmbryoRow[];
+  blastocysts?: EtEmbryoRow[];
+  cycles?: PatientCycleOption[];
+  selectedCycleId?: string;
 }

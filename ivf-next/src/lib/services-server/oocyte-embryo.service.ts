@@ -1,4 +1,4 @@
-import { executeDRL, executeText } from '@/lib/db/spExecutor';
+import { buildParams, executeDRL, executeText } from '@/lib/db/spExecutor';
 import { isDbConfigured } from '@/lib/db/pool';
 import { formatSmartDate, rowNum, rowVal } from '@/lib/db/row';
 import type {
@@ -6,10 +6,11 @@ import type {
   LabSource,
   OocyteEmbryoOverview,
   OocyteItem,
+  PatientCycleOption,
   SourceSummary,
 } from '@/lib/types/oocyte-embryo';
 
-export type { EtEmbryoRow, LabSource, OocyteEmbryoOverview, OocyteItem, SourceSummary };
+export type { EtEmbryoRow, LabSource, OocyteEmbryoOverview, OocyteItem, PatientCycleOption, SourceSummary };
 
 export interface OocyteEmbryoData {
   patientId: string;
@@ -34,9 +35,9 @@ export interface OocyteEmbryoData {
 
 // In-memory active cycle session data mirroring the mockups
 let cycleStore: OocyteEmbryoData = {
-  patientId: 'P-2026-00125',
-  patientName: 'Mrs. Anjali Sharma',
-  cycleId: 'C-2026-00158',
+  patientId: '',
+  patientName: '',
+  cycleId: '',
   cycleType: 'IVF / ICSI',
   cycleDay: 16,
   lmp: '02-Aug-2026',
@@ -316,7 +317,6 @@ const ACTION_NAMES: Record<number, string> = {
   3: 'Stuck',
   4: 'KeepForBlast',
   5: 'Discard',
-  6: 'Donated',
   7: 'DonatedForResearch',
 };
 
@@ -342,6 +342,30 @@ const GRADE_NAMES: Record<number, string> = {
   4: 'Grade IV',
 };
 
+const BT_EXPANSION_NAMES: Record<number, string> = {
+  0: 'Select',
+  1: '1 Blastocoel cavity less than half the volume of the embryo.',
+  2: '2 Blastocoel cavity more than half the volume of the embryo.',
+  3: '3 Full blastocyst, cavity completely filling the embryo.',
+  4: '4 Expanded blastocyst, cavity larger than the embryo, with thinning of the shell.',
+  5: '5 Hatching out of the shell.',
+  6: '6 Hatched out of the shell',
+};
+
+const BT_ICM_NAMES: Record<number, string> = {
+  0: 'Select',
+  1: 'Grade A, Many Cells, tightly packed',
+  2: 'Grade B, Several Cells, loosely grouped',
+  3: 'Grade C, Very few cells',
+};
+
+const BT_TE_NAMES: Record<number, string> = {
+  0: 'Select',
+  1: 'Grade A, Many cells, forming a cohesive layer',
+  2: 'Grade B, Few Cells, forming a loose epithelium',
+  3: 'Grade C, Very few large cells',
+};
+
 function applyEtActions(summary: SourceSummary, embryos: EtEmbryoRow[]): SourceSummary {
   const rows = embryos.filter((row) => row.source === summary.source);
   if (!rows.length) return summary;
@@ -353,16 +377,37 @@ function applyEtActions(summary: SourceSummary, embryos: EtEmbryoRow[]): SourceS
     stuck: count(3),
     blastocyst: count(4),
     discard: count(5),
-    donated: count(6),
+    donated: 0,
     donatedForResearch: count(7),
   };
 }
 
-async function latestLabRow(table: 'IVF' | 'ICSI', dateCol: string, patId: number, satId: number): Promise<Record<string, unknown> | null> {
-  const params = [
+async function latestLabRow(
+  table: 'IVF' | 'ICSI',
+  dateCol: string,
+  patId: number,
+  satId: number,
+  cycleId?: string
+): Promise<Record<string, unknown> | null> {
+  const params: { name: string; value: unknown }[] = [
     { name: '@PatID', value: patId },
     { name: '@SatID', value: satId },
   ];
+
+  if (cycleId) {
+    try {
+      const result = await executeText<Record<string, unknown>>(
+        `SELECT TOP 1 * FROM ${table}
+         WHERE PatID = @PatID AND SatID = @SatID AND LTRIM(RTRIM(CycID)) = @CycID
+         ORDER BY ${dateCol} DESC`,
+        [...params, { name: '@CycID', value: cycleId.trim() }]
+      );
+      if (result.recordset?.[0]) return result.recordset[0];
+    } catch {
+      // fallback if column differing
+    }
+  }
+
   try {
     const result = await executeText<Record<string, unknown>>(
       `SELECT TOP 1 * FROM ${table}
@@ -385,17 +430,24 @@ async function latestLabRow(table: 'IVF' | 'ICSI', dateCol: string, patId: numbe
   }
 }
 
-async function loadEtEmbryos(patId: number, satId: number): Promise<EtEmbryoRow[]> {
+async function loadEtEmbryos(patId: number, satId: number, cycleId?: string): Promise<EtEmbryoRow[]> {
   try {
+    let whereClause = 'WHERE PatID = @PatID AND SatID = @SatID';
+    const params: { name: string; value: unknown }[] = [
+      { name: '@PatID', value: patId },
+      { name: '@SatID', value: satId },
+    ];
+    if (cycleId) {
+      whereClause += ' AND LTRIM(RTRIM(CycID)) = @CycID';
+      params.push({ name: '@CycID', value: cycleId.trim() });
+    }
+
     const result = await executeText<Record<string, unknown>>(
       `SELECT ETEDID, ETEDSource, ETEDCeller, ETEDGrade, ETEDAction, ETEDRemark, ETEDLocation, CycID
        FROM ETEmbryoDetailsGrid
-       WHERE PatID = @PatID AND SatID = @SatID
+       ${whereClause}
        ORDER BY ETEDSource DESC, ETEDID`,
-      [
-        { name: '@PatID', value: patId },
-        { name: '@SatID', value: satId },
-      ]
+      params
     );
     return (result.recordset || []).map((row) => {
       const sourceText = rowVal(row, 'ETEDSource').toUpperCase();
@@ -418,15 +470,102 @@ async function loadEtEmbryos(patId: number, satId: number): Promise<EtEmbryoRow[
   }
 }
 
-export async function getIvfIcsiOverview(patId: number, satId: number): Promise<OocyteEmbryoOverview> {
-  const [ivfRow, icsiRow, embryos] = await Promise.all([
-    latestLabRow('IVF', 'IVFCycleDate', patId, satId),
-    latestLabRow('ICSI', 'ICSICycleDate', patId, satId),
-    loadEtEmbryos(patId, satId),
+async function loadBtBlastocysts(patId: number, satId: number, cycleId?: string): Promise<EtEmbryoRow[]> {
+  try {
+    let whereClause = 'WHERE PatID = @PatID AND SatID = @SatID';
+    const params: { name: string; value: unknown }[] = [
+      { name: '@PatID', value: patId },
+      { name: '@SatID', value: satId },
+    ];
+    if (cycleId) {
+      whereClause += ' AND LTRIM(RTRIM(CycID)) = @CycID';
+      params.push({ name: '@CycID', value: cycleId.trim() });
+    }
+
+    const result = await executeText<Record<string, unknown>>(
+      `SELECT BTBDID, BTBDSource, BTBDCeller, BTBDGrade, BTTEGrade, BTBDAction, BTBDRemark, BTBDLocation, BTBDRecipientBT, BTBDRecipientCycleBT, CycID
+       FROM BTBlastocystDetailsGrid
+       ${whereClause}
+       ORDER BY BTBDSource DESC, BTBDID`,
+      params
+    );
+    return (result.recordset || []).map((row) => {
+      const sourceText = rowVal(row, 'BTBDSource').toUpperCase();
+      const source: LabSource = sourceText === 'ICSI' ? 'ICSI' : 'IVF';
+      const action = rowNum(row, 'BTBDAction');
+      const cellerNum = rowNum(row, 'BTBDCeller');
+      const gradeNum = rowNum(row, 'BTBDGrade');
+      const teGradeNum = rowNum(row, 'BTTEGrade');
+      return {
+        id: rowVal(row, 'BTBDID') || `BT-${source}-${rowVal(row, 'CycID')}`,
+        source,
+        celler: BT_EXPANSION_NAMES[cellerNum] || (cellerNum ? `Stage ${cellerNum}` : ''),
+        grade: BT_ICM_NAMES[gradeNum] || (gradeNum ? `ICM ${gradeNum}` : ''),
+        teGrade: BT_TE_NAMES[teGradeNum] || (teGradeNum ? `TE ${teGradeNum}` : ''),
+        action,
+        actionLabel: ACTION_NAMES[action] || 'Select',
+        location: rowVal(row, 'BTBDLocation'),
+        remark: rowVal(row, 'BTBDRemark'),
+        cycleId: rowVal(row, 'CycID'),
+        recipient: rowVal(row, 'BTBDRecipientBT'),
+        recipientCycle: rowVal(row, 'BTBDRecipientCycleBT'),
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+export async function getIvfIcsiOverview(
+  patId: number,
+  satId: number,
+  reqCycleId?: string
+): Promise<OocyteEmbryoOverview> {
+  // 1. Fetch dynamic cycle options via spCycOutComeExtDRL
+  let cycleOptions: PatientCycleOption[] = [];
+  try {
+    const cycleRes = await executeDRL<Record<string, unknown>>(
+      'spCycOutComeExtDRL',
+      buildParams('@PatID,@SatID,@QueryIndex', [patId, satId, 1])
+    );
+    cycleOptions = (cycleRes.recordset || [])
+      .map((r) => {
+        const cId = rowVal(r, 'CycID', 'CycleID').trim();
+        const cDate = formatSmartDate(r.CycODate ?? r.CycDate);
+        return {
+          cycId: cId,
+          cycleDate: cDate,
+          label: cDate ? `${cId} (${cDate})` : cId,
+        };
+      })
+      .filter((c) => c.cycId);
+  } catch {
+    // fallback if SP not available
+  }
+
+  // 2. Determine target cycleId
+  let targetCycleId = (reqCycleId || '').trim();
+  if (!targetCycleId && cycleOptions.length > 0) {
+    targetCycleId = cycleOptions[0].cycId;
+  }
+
+  // 3. Query IVF, ICSI, ET, BT aligned to this cycle
+  const [ivfRow, icsiRow, embryos, blastocysts] = await Promise.all([
+    latestLabRow('IVF', 'IVFCycleDate', patId, satId, targetCycleId),
+    latestLabRow('ICSI', 'ICSICycleDate', patId, satId, targetCycleId),
+    loadEtEmbryos(patId, satId, targetCycleId),
+    loadBtBlastocysts(patId, satId, targetCycleId),
   ]);
 
   const ivf = applyEtActions(ivfRow ? summarizeLabRow(ivfRow, 'IVF') : emptySummary('IVF'), embryos);
   const icsi = applyEtActions(icsiRow ? summarizeLabRow(icsiRow, 'ICSI') : emptySummary('ICSI'), embryos);
 
-  return { ivf, icsi, embryos };
+  return {
+    ivf,
+    icsi,
+    embryos,
+    blastocysts,
+    cycles: cycleOptions,
+    selectedCycleId: targetCycleId || ivf.cycleId || icsi.cycleId,
+  };
 }
