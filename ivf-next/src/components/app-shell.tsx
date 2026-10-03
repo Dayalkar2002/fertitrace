@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { ReactNode, useEffect, useState } from 'react';
+import { Suspense, ReactNode, useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { usePatient } from '@/contexts/patient-context';
 import { PatientContextBar } from '@/components/patient-context-bar';
@@ -10,6 +10,7 @@ import { PatientSelectModal } from '@/components/patient-select-modal';
 import { TopNav } from '@/components/top-nav';
 import { NavIcon } from '@/components/nav-icons';
 import { SmartLogo } from '@/components/smart-logo';
+import { ScreenSkeletonLoader } from '@/components/screen-skeleton-loader';
 import { SIDE_NAV_SECTIONS } from '@/lib/nav-config';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import {
@@ -35,6 +36,31 @@ export function AppShell({ children }: { children: ReactNode }) {
     patient_management: true,
     communication: true,
   });
+  const [isNavigating, setIsNavigating] = useState(false);
+
+  // Turn off skeleton when route finishes loading
+  useEffect(() => {
+    setIsNavigating(false);
+  }, [pathname, searchParams]);
+
+  // Turn on skeleton when clicking any navigation route link
+  useEffect(() => {
+    const handleLinkClick = (e: MouseEvent) => {
+      const target = (e.target as HTMLElement).closest('a');
+      if (
+        target &&
+        target.href &&
+        target.href.startsWith(window.location.origin) &&
+        !target.target &&
+        !target.href.includes('#') &&
+        target.pathname !== window.location.pathname
+      ) {
+        setIsNavigating(true);
+      }
+    };
+    document.addEventListener('click', handleLinkClick);
+    return () => document.removeEventListener('click', handleLinkClick);
+  }, []);
 
   useEffect(() => {
     async function loadMenus() {
@@ -372,8 +398,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           )}
 
-          {/* Main Workspace */}
-          <main className="flex-1 p-5 md:p-6 bg-[#f4f6fa] print:bg-white print:p-0">{children}</main>
+          {/* Main Workspace with Instant Skeleton Loading & Top Progress Line */}
+          <main className="relative flex-1 p-5 md:p-6 bg-[#f4f6fa] print:bg-white print:p-0">
+            {isNavigating && (
+              <div className="fixed top-0 left-0 right-0 z-[9999] h-1 bg-gradient-to-r from-[#6345A6] via-[#7c3aed] to-emerald-400 animate-pulse shadow-xs" />
+            )}
+            <Suspense fallback={<ScreenSkeletonLoader />}>
+              {isNavigating ? <ScreenSkeletonLoader /> : children}
+            </Suspense>
+          </main>
         </div>
       </div>
 

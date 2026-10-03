@@ -1,18 +1,28 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
+import type { AuthUser } from '@/lib/types/auth';
 
 export function LoginForm() {
+  const router = useRouter();
   const { login, loading, error, clearError } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{ username?: string; password?: string }>({});
+  const [successUser, setSuccessUser] = useState<AuthUser | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (loading) return;
+    if (loading || successUser) return;
 
     const nextErrors: { username?: string; password?: string } = {};
     if (!username.trim()) nextErrors.username = 'Username or email is required.';
@@ -21,7 +31,11 @@ export function LoginForm() {
     if (Object.keys(nextErrors).length) return;
 
     try {
-      await login(username.trim(), password);
+      const user = await login(username.trim(), password);
+      setSuccessUser(user);
+      setTimeout(() => {
+        router.push('/dashboard');
+      }, 1800);
     } catch {
       // error state handled in context
     }
@@ -214,6 +228,56 @@ export function LoginForm() {
           © 2025 FERTITRACE. All rights reserved.
         </div>
       </div>
+
+      {/* Login Successful Modal Popup - Centered on Viewport via Portal */}
+      {successUser && mounted && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-[320px] rounded-2xl bg-white px-6 py-7 text-center shadow-2xl ring-1 ring-black/5 animate-in zoom-in-95 duration-150">
+            {/* Green Circular Outline with Checkmark - Animated & Moving */}
+            <div className="relative mx-auto mb-4 flex h-14 w-14 items-center justify-center">
+              {/* Soft expanding green ripple ring behind circle */}
+              <div className="absolute inset-0 rounded-full border-2 border-emerald-400/40 animate-checkmark-ripple pointer-events-none" />
+
+              {/* Moving checkmark container with lively bounce & moving tick */}
+              <div className="animate-checkmark-container flex items-center justify-center">
+                <svg
+                  className="h-14 w-14 overflow-visible"
+                  viewBox="0 0 52 52"
+                  fill="none"
+                >
+                  <circle
+                    cx="26"
+                    cy="26"
+                    r="23"
+                    stroke="#22c55e"
+                    strokeWidth="2.5"
+                    className="animate-checkmark-circle"
+                  />
+                  <path
+                    d="M15 27.5 L22.5 35 L37 19"
+                    stroke="#22c55e"
+                    strokeWidth="2.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="animate-checkmark-tick"
+                  />
+                </svg>
+              </div>
+            </div>
+
+            {/* Title */}
+            <h3 className="text-[17px] font-bold text-slate-800">
+              Login Successful
+            </h3>
+
+            {/* Subtitle */}
+            <p className="mt-1 text-xs text-slate-500">
+              Redirecting to dashboard...
+            </p>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

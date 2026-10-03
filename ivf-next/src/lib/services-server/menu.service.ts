@@ -52,6 +52,9 @@ export async function getLeftMenuItems(): Promise<LeftMenuItem[]> {
             if (item.nodeName === 'cycle_management') {
               return { ...item, label: 'Cycle Retrieval Screen', route: '/cycle/entry' };
             }
+            if (item.nodeName === 'reports_analytics' || item.route === '/reports' || item.label.toLowerCase().includes('report')) {
+              return { ...item, label: 'Report' };
+            }
             if (item.nodeName !== 'communication' || (item.subModules && item.subModules.length > 0)) {
               return item;
             }

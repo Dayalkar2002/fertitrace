@@ -20,7 +20,6 @@ import {
   showSemenDonorDetails,
 } from '@/lib/cycle-utils';
 import { CycleRetrievalPanels } from '@/components/cycle-retrieval-panels';
-import { CycleMonitoringChart } from '@/components/cycle-monitoring-chart';
 import { SemenAnalysisModal } from '@/components/sperm/semen-analysis-modal';
 import { fetchCryoStockSummary, fetchCycleTypes, listPatientCycles, saveCycleEntry, saveRetrieval } from '@/lib/services/cycles';
 import { fetchCycleSemenAnalysis, type CycAnalysisRecord } from '@/lib/services/semen-analysis';
@@ -1031,87 +1030,6 @@ export function CycleEntryForm() {
         </div>
         )}
 
-        {/* 5. STIMULATION MONITORING SHEET CARD */}
-        <div className="rounded-2xl border border-indigo-200 bg-white p-5 shadow-xs space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-indigo-100 pb-3">
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700 text-base font-bold shadow-2xs">
-                📈
-              </span>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-black uppercase tracking-wider text-slate-800">
-                    Cycle Monitoring Sheet (Stimulation Chart)
-                  </h3>
-                  {activeCycleId && (
-                    <span className="rounded-full bg-emerald-100 text-emerald-800 px-2.5 py-0.5 text-[10px] font-bold border border-emerald-300">
-                      Cycle: {activeCycleId}
-                    </span>
-                  )}
-                </div>
-                <p className="text-[11px] text-slate-500">
-                  Pre-retrieval stimulation observations & follicle tracking data from SMART database
-                </p>
-              </div>
-            </div>
-
-            {/* Protocol selector buttons */}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold text-slate-500">Protocol:</span>
-              {MONITORING_SHEET_OPTIONS.map((item) => {
-                const currentCycleData = savedCycles.find((r) => r.cycleId === activeCycleId);
-                const filledSheet =
-                  currentCycleData?.monitoringSheet ||
-                  (activeCycleId ? 'Antagonist' : '');
-                const hasSavedCycle = Boolean(activeCycleId);
-                const isFilledSheet = Boolean(hasSavedCycle && item.value === filledSheet);
-                const isDisabled = hasSavedCycle && !isFilledSheet;
-                const active = (monitoringSheet || filledSheet || 'Antagonist') === item.value;
-
-                return (
-                  <button
-                    key={item.value}
-                    type="button"
-                    disabled={isDisabled}
-                    onClick={() => {
-                      if (!isDisabled) setMonitoringSheet(item.value);
-                    }}
-                    title={
-                      isDisabled
-                        ? 'Disabled: Only filled monitoring sheet data is available for this cycle'
-                        : isFilledSheet
-                        ? 'Filled monitoring sheet data from SMART database'
-                        : undefined
-                    }
-                    className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
-                      active
-                        ? 'bg-[#6345A6] text-white shadow-xs'
-                        : isDisabled
-                        ? 'border border-slate-200 bg-slate-100 text-slate-400 opacity-40 cursor-not-allowed pointer-events-none'
-                        : 'border border-slate-200 bg-slate-50 text-slate-700 hover:border-purple-300 hover:text-[#6345A6]'
-                    }`}
-                  >
-                    <span>{item.label}</span>
-                    {hasSavedCycle && isFilledSheet && (
-                      <span className="ml-1.5 inline-flex items-center rounded-full bg-white/20 px-1.5 py-0.2 text-[10px] font-bold text-white">
-                        ✓ Filled
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <CycleMonitoringChart
-            option={
-              monitoringSheet ||
-              savedCycles.find((r) => r.cycleId === activeCycleId)?.monitoringSheet ||
-              (activeCycleId ? 'Antagonist' : '')
-            }
-            cycleId={activeCycleId || 'draft'}
-          />
-        </div>
 
         <CycleRetrievalPanels
           cycleType={form.oocyteSource}

@@ -31,7 +31,7 @@ interface AuthContextValue {
   loading: boolean;
   hydrated: boolean;
   error: string | null;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<AuthUser>;
   logout: () => void;
   clearError: () => void;
 }
@@ -97,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [dispatch]);
 
   const login = useCallback(
-    async (username: string, password: string) => {
+    async (username: string, password: string): Promise<AuthUser> => {
       setLoading(true);
       setError(null);
       dispatch(setAuthLoading(true));
@@ -116,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setToken(res.token);
         setUser(res.user);
         dispatch(setCredentials({ user: res.user, token: res.token }));
-        router.push('/dashboard');
+        return res.user;
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Login failed.';
         setError(message);
@@ -127,7 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         dispatch(setAuthLoading(false));
       }
     },
-    [router, dispatch]
+    [dispatch]
   );
 
   const logout = useCallback(() => {

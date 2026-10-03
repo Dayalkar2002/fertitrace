@@ -288,6 +288,8 @@ function summarizeLabRow(row: Record<string, unknown>, source: LabSource): Sourc
     cycleDate: formatSmartDate(rowVal(row, source === 'IVF' ? 'IVFCycleDate' : 'ICSICycleDate')),
     retrieved: matureMII + metaI + gv + degenerated,
     matureMII,
+    metaI,
+    gv,
     immature: metaI + gv,
     degenerated,
     fertilized2PN: field(row, prefix, 'FMetaII2PN') + field(row, prefix, 'FMetaI2PN') + field(row, prefix, 'FGV2PN'),
