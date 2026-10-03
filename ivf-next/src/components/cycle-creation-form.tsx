@@ -215,11 +215,12 @@ export function CycleCreationForm() {
     }
   }
 
-  function selectSavedCycle(row: PatientCycleRow, redirect = true) {
+  function selectSavedCycle(row: PatientCycleRow, redirect = false) {
     setCycleId(row.cycleId);
-    setCycleType(row.cycleType || 'Fresh');
+    const resolvedType = row.cycleType || 'Fresh';
+    setCycleType(resolvedType);
     const treatType =
-      row.cycleType === 'FET' || row.cycleType === 'FrozenOocytes' || row.cycleType === 'ThawOocytes'
+      resolvedType === 'FET' || resolvedType === 'FrozenOocytes' || resolvedType === 'ThawOocytes'
         ? 'Frozen'
         : 'Fresh';
     setTreatmentType(treatType);
@@ -227,7 +228,12 @@ export function CycleCreationForm() {
       setStartDate(parseCycleDateToYMD(row.cycleDate));
     }
     // Select protocol so the monitoring sheet appears below it
-    const sheet = row.monitoringSheet || (row.cycleType === 'Fresh' ? 'Antagonist' : '');
+    let sheet = row.monitoringSheet;
+    if (!sheet) {
+      if (resolvedType === 'IUI') sheet = 'IUI';
+      else if (resolvedType === 'FET' || resolvedType === 'ThawOocytes' || resolvedType === 'ER') sheet = 'HRT';
+      else sheet = 'Antagonist';
+    }
     setMonitoringSheet(sheet);
     setNotes(row.advice || row.postTreatment || '');
     try {
@@ -237,7 +243,7 @@ export function CycleCreationForm() {
           patientId: selectedPatient?.id || patId,
           satelliteId: satId,
           cycleId: row.cycleId,
-          cycleType: row.cycleType || 'Fresh',
+          cycleType: resolvedType,
           treatmentType: treatType,
           startDate: row.cycleDate ? parseCycleDateToYMD(row.cycleDate) : startDate,
           monitoringSheet: sheet,
@@ -251,10 +257,16 @@ export function CycleCreationForm() {
       return;
     }
 
-    setToastMessage(`Loaded Cycle ${row.cycleId}. Selected protocol "${getMonitoringSheetLabel(sheet) || 'Protocol'}" and monitoring sheet below.`);
+    setToastMessage(`Loaded Cycle ${row.cycleId}. Dropping down to Cycle Monitoring Sheet.`);
     setTimeout(() => setToastMessage(null), 3500);
-    // Smooth scroll down to the Cycle Creation form & protocol section
-    document.getElementById('cycle-creation-form')?.scrollIntoView({ behavior: 'smooth' });
+
+    // Smooth scroll down to the Cycle Monitoring Sheet section
+    setTimeout(() => {
+      const el = document.getElementById('cycle-monitoring-section');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 120);
   }
 
   function handleCopyCycleId() {
@@ -383,37 +395,53 @@ export function CycleCreationForm() {
                     </td>
                   </tr>
                 )}
-                {savedCycles.map((row) => (
-                  <tr
-                    key={row.cycleId}
-                    onClick={() => selectSavedCycle(row, true)}
-                    className="border-t border-slate-100 cursor-pointer transition-colors hover:bg-purple-50/70"
-                  >
-                    <td className="px-3 py-2.5">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          selectSavedCycle(row, true);
-                        }}
-                        className="rounded-md bg-[#6345A6] hover:bg-[#553890] px-3 py-1 text-xs font-semibold text-white transition shadow-2xs inline-flex items-center gap-1 active:scale-95"
-                        title={`Select cycle ${row.cycleId} and redirect to Cycle Retrieval`}
-                      >
-                        <span>Select</span>
-                        <span className="text-[11px]">→</span>
-                      </button>
-                    </td>
-                    <td className="px-3 py-2.5 font-semibold text-slate-800 font-mono">{row.cycleId}</td>
-                    <td className="px-3 py-2.5 text-slate-700">{row.typeLabel}</td>
-                    <td className="px-3 py-2.5 text-slate-600">{row.cycleDate || '—'}</td>
-                    <td className="max-w-[220px] truncate px-3 py-2.5 text-slate-600" title={row.postTreatment}>
-                      {row.postTreatment || '—'}
-                    </td>
-                    <td className="max-w-[220px] truncate px-3 py-2.5 text-slate-600" title={row.advice}>
-                      {row.advice || '—'}
-                    </td>
-                  </tr>
-                ))}
+                {savedCycles.map((row) => {
+                  const isSelected = row.cycleId === cycleId;
+                  return (
+                    <tr
+                      key={row.cycleId}
+                      onClick={() => selectSavedCycle(row, false)}
+                      className={`border-t border-slate-100 cursor-pointer transition-colors ${
+                        isSelected ? 'bg-purple-100/60 ring-1 ring-purple-300' : 'hover:bg-purple-50/70'
+                      }`}
+                    >
+                      <td className="px-3 py-2.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            selectSavedCycle(row, false);
+                          }}
+                          className={`rounded-md px-3 py-1 text-xs font-semibold transition shadow-2xs inline-flex items-center gap-1 active:scale-95 ${
+                            isSelected
+                              ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                              : 'bg-[#6345A6] hover:bg-[#553890] text-white'
+                          }`}
+                          title={`Select cycle ${row.cycleId} and view monitoring sheet below`}
+                        >
+                          <span>{isSelected ? 'Viewing' : 'Select'}</span>
+                          <span className="text-[11px]">{isSelected ? '✓' : '↓'}</span>
+                        </button>
+                      </td>
+                      <td className="px-3 py-2.5 font-semibold text-slate-800 font-mono">
+                        {row.cycleId}
+                        {isSelected && (
+                          <span className="ml-2 rounded-full bg-purple-200 text-purple-900 px-2 py-0.5 text-[10px] font-bold">
+                            Active
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-slate-700">{row.typeLabel}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{row.cycleDate || '—'}</td>
+                      <td className="max-w-[220px] truncate px-3 py-2.5 text-slate-600" title={row.postTreatment}>
+                        {row.postTreatment || '—'}
+                      </td>
+                      <td className="max-w-[220px] truncate px-3 py-2.5 text-slate-600" title={row.advice}>
+                        {row.advice || '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -684,7 +712,88 @@ export function CycleCreationForm() {
               </div>
             </div>
 
-            {monitoringSheet ? <CycleMonitoringChart option={monitoringSheet} cycleId={cycleId || 'draft'} /> : null}
+            {/* Dedicated Cycle Monitoring Sheet Section */}
+            <div
+              id="cycle-monitoring-section"
+              className="scroll-mt-6 rounded-2xl border-2 border-purple-200 bg-slate-50/60 p-4 sm:p-6 shadow-xs space-y-4"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-purple-100 pb-3">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#6345A6] text-white text-base shadow-2xs">
+                    📊
+                  </span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-slate-900">
+                        Cycle Monitoring Sheet
+                      </h3>
+                      {cycleId && (
+                        <span className="rounded-full bg-purple-100 px-2.5 py-0.5 font-mono text-xs font-bold text-purple-800 border border-purple-200">
+                          {cycleId}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      Protocol:{' '}
+                      <strong className="text-purple-900">
+                        {getMonitoringSheetLabel(monitoringSheet) || 'Select protocol above'}
+                      </strong>{' '}
+                      · Review stimulation & follicle development, then proceed to retrieval.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Top Next Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const targetId = cycleId || (savedCycles[0]?.cycleId ?? '');
+                    if (targetId) {
+                      router.push(`/cycle/entry?cycleId=${encodeURIComponent(targetId)}`);
+                    } else {
+                      router.push('/cycle/entry');
+                    }
+                  }}
+                  className="flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:shadow transition active:scale-95"
+                  title="Proceed to Cycle Retrieval Screen"
+                >
+                  <span>Next: Go to Cycle Retrieval Screen</span>
+                  <span className="text-base font-black">→</span>
+                </button>
+              </div>
+
+              {monitoringSheet ? (
+                <CycleMonitoringChart option={monitoringSheet} cycleId={cycleId || 'draft'} />
+              ) : (
+                <div className="p-8 text-center text-xs text-slate-500 bg-white rounded-xl border border-dashed border-slate-300">
+                  Select a protocol above or click &quot;Select&quot; on a saved cycle to view its monitoring sheet.
+                </div>
+              )}
+
+              {/* Bottom Next Button after viewing the monitoring sheet */}
+              {monitoringSheet && (
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-purple-100 pt-3">
+                  <p className="text-xs text-slate-500">
+                    Finished reviewing monitoring sheet? Proceed directly to cycle retrieval.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const targetId = cycleId || (savedCycles[0]?.cycleId ?? '');
+                      if (targetId) {
+                        router.push(`/cycle/entry?cycleId=${encodeURIComponent(targetId)}`);
+                      } else {
+                        router.push('/cycle/entry');
+                      }
+                    }}
+                    className="flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-6 py-2.5 text-sm font-bold text-white shadow-sm transition active:scale-95"
+                  >
+                    <span>Next: Go to Cycle Retrieval Screen</span>
+                    <span className="text-base font-black">→</span>
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Notes with Real-time Character Counter */}
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start">

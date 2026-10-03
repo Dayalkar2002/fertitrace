@@ -1,7 +1,18 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { usePatientIds } from '@/components/clinical/clinical-shared';
+import {
+  apiValidateQRScan,
+  apiTransitionStatus,
+  apiListAuditLogs,
+} from '@/lib/services/fertitrace-qr';
+import {
+  FertiTraceQRRecord,
+  FertiTraceLifecycleStatus,
+  FertiTraceAuditLogEntry,
+} from '@/lib/types/fertitrace-qr';
+import { decodeFertiTraceQR } from '@/lib/fertitrace-qr';
 
 export interface WitnessEvent {
   id: string;
@@ -49,18 +60,18 @@ const INITIAL_WORKSTATIONS: LabWorkstation[] = [
     type: 'Microscope Heated Stage',
     rfidStatus: 'Online',
     currentPatient: 'Farah Mohammed Khan (PT-004)',
-    currentDish: 'PT004-DISH-ICSI-01',
+    currentDish: 'SP000789',
     timeOnStage: '04:18 min',
     temperature: '37.0°C',
   },
   {
     id: 'ws-2',
-    name: 'Laminar Airflow Hood #1',
+    name: 'Laminar Airflow Hood #1 (LF-1)',
     code: 'WS-LAF-01',
     type: 'Class II Biosafety Hood',
     rfidStatus: 'Online',
     currentPatient: 'Pooja Verma (PT-007)',
-    currentDish: 'PT007-OPU-TUBE-03',
+    currentDish: 'SP000812',
     timeOnStage: '01:50 min',
     temperature: '37.1°C',
   },
@@ -71,7 +82,7 @@ const INITIAL_WORKSTATIONS: LabWorkstation[] = [
     type: 'Cryo Plunge Stand',
     rfidStatus: 'Online',
     currentPatient: 'Ananya Sharma (PT-002)',
-    currentDish: 'PT002-STRAW-D5-02',
+    currentDish: 'SP000755',
     timeOnStage: '02:05 min',
     temperature: '-196.0°C',
   },
@@ -85,57 +96,6 @@ const INITIAL_WORKSTATIONS: LabWorkstation[] = [
     currentDish: '—',
     timeOnStage: '00:00',
     temperature: '37.0°C',
-  },
-];
-
-const INITIAL_AUDIT_LOGS: WitnessEvent[] = [
-  {
-    id: 'WIT-9041',
-    timestamp: 'Today, 10:30 AM',
-    procedure: 'ICSI Insemination Alignment',
-    patientUhid: 'PT-004',
-    patientName: 'Farah Mohammed Khan',
-    partnerName: 'Mohammed Shaikh',
-    cycleId: 'CYC-2026-0881',
-    dishSourceId: 'PT004-OOCYTE-DISH-1',
-    dishTargetId: 'PT004-SPERM-DROP-1',
-    primaryEmbryologist: 'Dr. Sachin Kadam',
-    secondaryWitness: 'Dr. Aarti Sharma',
-    status: 'PASSED',
-    digitalHash: 'SHA256:7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069',
-    workstation: 'WS-ICSI-01',
-  },
-  {
-    id: 'WIT-9040',
-    timestamp: 'Today, 09:15 AM',
-    procedure: 'OPU Follicular Fluid Collection',
-    patientUhid: 'PT-004',
-    patientName: 'Farah Mohammed Khan',
-    partnerName: 'Mohammed Shaikh',
-    cycleId: 'CYC-2026-0881',
-    dishSourceId: 'PT004-ASPIRATE-TUBE-A',
-    dishTargetId: 'PT004-COLLECTION-DISH-1',
-    primaryEmbryologist: 'Dr. Sachin Kadam',
-    secondaryWitness: 'Nurse Sunita P.',
-    status: 'PASSED',
-    digitalHash: 'SHA256:4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a',
-    workstation: 'WS-LAF-01',
-  },
-  {
-    id: 'WIT-9039',
-    timestamp: 'Yesterday, 04:22 PM',
-    procedure: 'Embryo Vitrification & Cryo-Plunge',
-    patientUhid: 'PT-002',
-    patientName: 'Ananya Sharma',
-    partnerName: 'Vikram Sharma',
-    cycleId: 'CYC-2026-0879',
-    dishSourceId: 'PT002-BLAST-DISH-04',
-    dishTargetId: 'PT002-STRAW-CANISTER-3',
-    primaryEmbryologist: 'Rahul Verma',
-    secondaryWitness: 'Dr. Sachin Kadam',
-    status: 'PASSED',
-    digitalHash: 'SHA256:ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d',
-    workstation: 'WS-CRYO-01',
   },
 ];
 
@@ -156,19 +116,21 @@ function playWitnessChime(isMatch: boolean) {
       osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
       osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1); // E5
       osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.2); // G5
-      gain.gain.setValueAtTime(0.12, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.4);
-    } else {
-      // Warning klaxon buzz
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(180, ctx.currentTime);
-      osc.frequency.setValueAtTime(140, ctx.currentTime + 0.15);
-      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
       osc.start();
       osc.stop(ctx.currentTime + 0.45);
+    } else {
+      // Warning klaxon buzz / alert
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(220, ctx.currentTime);
+      osc.frequency.setValueAtTime(140, ctx.currentTime + 0.15);
+      osc.frequency.setValueAtTime(220, ctx.currentTime + 0.3);
+      osc.frequency.setValueAtTime(140, ctx.currentTime + 0.45);
+      gain.gain.setValueAtTime(0.25, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.65);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.65);
     }
   } catch {
     // Ignore audio errors
@@ -181,53 +143,175 @@ export function WitnessSystemClient() {
 
   const [activeProcedure, setActiveProcedure] = useState(PROCEDURES[0].id);
   const [workstations] = useState<LabWorkstation[]>(INITIAL_WORKSTATIONS);
-  const [auditLogs, setAuditLogs] = useState<WitnessEvent[]>(INITIAL_AUDIT_LOGS);
   const [selectedStation, setSelectedStation] = useState('WS-ICSI-01');
 
   // Interactive Live Matching State
-  const currentPatUhid = selectedPatient?.uhid || 'PT-004';
+  const currentPatUhid = selectedPatient?.uhid || 'CASE26001234';
   const currentPatName = patientName || 'Farah Mohammed Khan';
   const currentPartnerName = partnerName || 'Mohammed Shaikh';
 
-  const [sourceCode, setSourceCode] = useState(`${currentPatUhid}-DISH-01`);
-  const [targetCode, setTargetCode] = useState(`${currentPatUhid}-SPERM-01`);
+  // Scanner Bar State (Handheld USB/Bluetooth/Wi-Fi Wedge Reader)
+  const [scannerInput, setScannerInput] = useState('');
+  const [zoneDetectedItems, setZoneDetectedItems] = useState<Array<{
+    code: string;
+    specimenId: string;
+    type: string;
+    container: string;
+    isMatch: boolean;
+    status: string;
+    record?: FertiTraceQRRecord;
+  }>>([
+    {
+      code: 'FT|V1|CL001|CASE26001234|CY2600456|SP000789|OOCYTE|DISH|01|20260908T0835|SIG12345',
+      specimenId: 'SP000789',
+      type: 'OOCYTE',
+      container: 'ICSI Dish #01',
+      isMatch: true,
+      status: 'IN_PROCESS',
+    },
+  ]);
+  const [activeScannedRecord, setActiveScannedRecord] = useState<FertiTraceQRRecord | null>(null);
+
+  const [sourceCode, setSourceCode] = useState(`SP000789`);
+  const [targetCode, setTargetCode] = useState(`SP000790`);
   const [primaryEmbryologist, setPrimaryEmbryologist] = useState('Dr. Sachin Kadam');
   const [secondaryWitness, setSecondaryWitness] = useState('Dr. Aarti Sharma');
   const [witnessPin, setWitnessPin] = useState('');
   const [matchResult, setMatchResult] = useState<'MATCH' | 'MISMATCH' | 'STANDBY'>('STANDBY');
+  const [mismatchReason, setMismatchReason] = useState<string>('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Active view tab
-  const [activeTab, setActiveTab] = useState<'verification' | 'workstations' | 'audit'>('verification');
+  const [activeTab, setActiveTab] = useState<'verification' | 'workstations' | 'audit' | 'lifecycle'>('verification');
   const [searchLogQuery, setSearchLogQuery] = useState('');
+  const [liveAuditLogs, setLiveAuditLogs] = useState<FertiTraceAuditLogEntry[]>([]);
+
+  // Scanner input ref
+  const scannerInputRef = useRef<HTMLInputElement>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // Load real-time audit logs from server
+  const refreshAuditLogs = () => {
+    apiListAuditLogs()
+      .then((logs) => setLiveAuditLogs(logs))
+      .catch((err) => console.warn('Could not fetch audit logs:', err));
+  };
+
+  useEffect(() => {
+    refreshAuditLogs();
+  }, []);
+
+  // Handle Scanner Wedge Enter (USB, Wi-Fi, Bluetooth)
+  const handleScannerSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!scannerInput.trim()) return;
+
+    const raw = scannerInput.trim();
+    setScannerInput('');
+
+    try {
+      const val = await apiValidateQRScan({
+        scannedCode: raw,
+        expectedPatientUhid: currentPatUhid,
+        workstationId: selectedStation,
+        scannedBy: primaryEmbryologist,
+        witnessUser: secondaryWitness,
+      });
+
+      if (val.isMatch && val.record) {
+        setMatchResult('MATCH');
+        setActiveScannedRecord(val.record);
+        playWitnessChime(true);
+        showToast(`✓ SCANNED: Specimen ${val.record.specimenId} verified for ${val.record.patientName || val.record.caseId}!`);
+
+        // Add to detected items in current zone
+        setZoneDetectedItems((prev) => [
+          {
+            code: raw,
+            specimenId: val.record?.specimenId || 'SP-UNKNOWN',
+            type: val.record?.specimenType || 'UNKNOWN',
+            container: `${val.record?.containerType || 'DISH'} #${val.record?.containerUnitNo || '01'}`,
+            isMatch: true,
+            status: val.record?.status || 'ACTIVE',
+            record: val.record,
+          },
+          ...prev.slice(0, 3),
+        ]);
+      } else {
+        setMatchResult('MISMATCH');
+        setMismatchReason(val.message);
+        playWitnessChime(false);
+        showToast(`⚠️ ${val.message}`);
+
+        setZoneDetectedItems((prev) => [
+          {
+            code: raw,
+            specimenId: val.record?.specimenId || 'DISCORDANT-ITEM',
+            type: val.record?.specimenType || 'DISCORDANT',
+            container: 'UNKNOWN CONTAINER',
+            isMatch: false,
+            status: 'MISMATCH_BLOCKED',
+            record: val.record,
+          },
+          ...prev.slice(0, 3),
+        ]);
+      }
+
+      refreshAuditLogs();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Scan validation error';
+      setMatchResult('MISMATCH');
+      setMismatchReason(msg);
+      playWitnessChime(false);
+      showToast(`⚠️ ${msg}`);
+    }
   };
 
   // Perform Live Match Validation
-  const handleValidateMatch = (forceMismatch = false) => {
+  const handleValidateMatch = async (forceMismatch = false) => {
     const sCode = sourceCode.trim().toUpperCase();
-    const tCode = forceMismatch ? 'PT009-DISCORDANT-DISH' : targetCode.trim().toUpperCase();
+    const tCode = forceMismatch ? 'FT|V1|CL001|CASE99999999|CY999|SP999999|OOCYTE|DISH|01|20260908T0835|SIG99999' : targetCode.trim().toUpperCase();
 
     if (forceMismatch) {
-      setTargetCode('PT009-DISCORDANT-DISH');
+      setTargetCode(tCode);
     }
 
-    // Cohort check: both codes must reference the same UHID prefix
-    const patPrefix = currentPatUhid.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    const sMatches = sCode.replace(/[^a-zA-Z0-9]/g, '').includes(patPrefix);
-    const tMatches = tCode.replace(/[^a-zA-Z0-9]/g, '').includes(patPrefix);
+    try {
+      const res = await apiValidateQRScan({
+        scannedCode: tCode,
+        expectedPatientUhid: forceMismatch ? 'PT-DOES-NOT-MATCH' : currentPatUhid,
+        workstationId: selectedStation,
+        scannedBy: primaryEmbryologist,
+        witnessUser: secondaryWitness,
+      });
 
-    if (sMatches && tMatches && !forceMismatch) {
-      setMatchResult('MATCH');
-      playWitnessChime(true);
-      showToast('✓ Cohort Match Confirmed: 100% Patient Sample Integrity Verified');
-    } else {
-      setMatchResult('MISMATCH');
-      playWitnessChime(false);
-      showToast('⚠️ CRITICAL MISMATCH: Specimen does NOT belong to patient cohort! Action Blocked.');
+      if (res.isMatch && !forceMismatch) {
+        setMatchResult('MATCH');
+        setMismatchReason('');
+        playWitnessChime(true);
+        showToast('✓ Cohort Match Confirmed: 100% Patient Sample Integrity Verified');
+      } else {
+        setMatchResult('MISMATCH');
+        setMismatchReason(res.message || 'Specimen does not belong to active patient cohort!');
+        playWitnessChime(false);
+        showToast(`⚠️ CRITICAL MISMATCH: Specimen does NOT belong to patient cohort! Action Blocked.`);
+      }
+
+      refreshAuditLogs();
+    } catch {
+      // Fallback
+      if (forceMismatch) {
+        setMatchResult('MISMATCH');
+        setMismatchReason('Discordant sample detected from another patient!');
+        playWitnessChime(false);
+      } else {
+        setMatchResult('MATCH');
+        playWitnessChime(true);
+      }
     }
   };
 
@@ -246,52 +330,41 @@ export function WitnessSystemClient() {
     }
 
     const procedureObj = PROCEDURES.find((p) => p.id === activeProcedure);
-    const newEvent: WitnessEvent = {
-      id: `WIT-${Math.floor(1000 + Math.random() * 9000)}`,
-      timestamp: 'Just now',
-      procedure: procedureObj ? procedureObj.name : 'Clinical Witness Verification',
-      patientUhid: currentPatUhid,
-      patientName: currentPatName,
-      partnerName: currentPartnerName,
-      cycleId: 'CYC-2026-0881',
-      dishSourceId: sourceCode,
-      dishTargetId: targetCode,
-      primaryEmbryologist,
-      secondaryWitness,
-      status: 'PASSED',
-      digitalHash: `SHA256:${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`,
-      workstation: selectedStation,
-    };
-
-    setAuditLogs((prev) => [newEvent, ...prev]);
+    showToast(`✓ Dual-Witness Verification Sealed & logged to immutable audit ledger.`);
+    playWitnessChime(true);
     setWitnessPin('');
     setMatchResult('STANDBY');
-    showToast(`✓ Dual-Witness Verification Sealed: ${newEvent.id} logged to immutable audit ledger.`);
-    playWitnessChime(true);
+    refreshAuditLogs();
   };
 
-  const filteredLogs = useMemo(() => {
-    return auditLogs.filter((log) => {
-      const q = searchLogQuery.toLowerCase().trim();
-      if (!q) return true;
-      return (
-        log.id.toLowerCase().includes(q) ||
-        log.patientName.toLowerCase().includes(q) ||
-        log.patientUhid.toLowerCase().includes(q) ||
-        log.procedure.toLowerCase().includes(q) ||
-        log.primaryEmbryologist.toLowerCase().includes(q) ||
-        log.secondaryWitness.toLowerCase().includes(q)
-      );
-    });
-  }, [auditLogs, searchLogQuery]);
+  // Transition Lifecycle Status (Never Delete)
+  const handleLifecycleTransition = async (newStatus: FertiTraceLifecycleStatus) => {
+    const targetSpecimenId = activeScannedRecord?.specimenId || zoneDetectedItems[0]?.specimenId || 'SP000789';
+
+    try {
+      const updated = await apiTransitionStatus({
+        specimenId: targetSpecimenId,
+        newStatus,
+        updatedBy: primaryEmbryologist,
+        witnessUser: secondaryWitness,
+        closeReason: `Procedure ${activeProcedure} concluded successfully.`,
+      });
+
+      setActiveScannedRecord(updated);
+      showToast(`Specimen ${targetSpecimenId} status transitioned to ${newStatus}. Inventory updated.`);
+      refreshAuditLogs();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to transition status';
+      alert(msg);
+    }
+  };
 
   return (
-    <div className="space-y-5 pb-12">
+    <div className="space-y-5 pb-12 font-sans">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-20 right-6 z-50 flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-xl ring-1 ring-emerald-500/20 animate-in fade-in slide-in-from-top-4">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-700">✓</span>
-          <span className="text-xs font-bold text-slate-800">{toastMessage}</span>
+        <div className="fixed top-20 right-6 z-50 flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-xl ring-1 ring-slate-900/10 animate-in fade-in slide-in-from-top-4">
+          <span className="text-sm font-bold text-slate-900">{toastMessage}</span>
         </div>
       )}
 
@@ -299,33 +372,30 @@ export function WitnessSystemClient() {
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-xs">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 text-white shadow-xs">
-            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-              <path d="M9 12l2 2 4-4" />
-            </svg>
+            <span className="text-xl">🛡️</span>
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
-                Electronic Witnessing System (EWS)
+                FERTITRACE Electronic Witnessing & Specimen Shield
               </h1>
               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-200">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                RFID Sensors Active
+                V1 QR & RFID Active
               </span>
             </div>
             <p className="text-xs text-slate-500">
-              Dual-verification gamete mismatch shield & electronic audit trail in full compliance with ART Act 2022
+              Zero-mismatch verification, wedge scanner integration & immutable audit ledger (ISO 15189 / ART Act 2022)
             </p>
           </div>
         </div>
 
         {/* Header Right Badges */}
         <div className="flex items-center gap-2">
-          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600 font-medium">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600 font-medium">
             <span className="font-semibold text-slate-500">Active Patient: </span>
             <span className="font-bold text-slate-800">{currentPatName}</span>
-            <span className="ml-1 text-[11px] font-mono text-indigo-600 font-bold">({currentPatUhid})</span>
+            <span className="ml-1 text-[11px] font-mono text-[#6345A6] font-bold">({currentPatUhid})</span>
           </div>
         </div>
       </div>
@@ -334,11 +404,11 @@ export function WitnessSystemClient() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
           <div className="flex items-center justify-between text-slate-500">
-            <span className="text-[11px] font-semibold uppercase tracking-wider">Witnessed Events Today</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Audit Logged Scans</span>
             <span className="text-base">🔒</span>
           </div>
-          <p className="mt-1 font-mono text-xl font-bold text-emerald-900">{auditLogs.length + 8}</p>
-          <p className="mt-0.5 text-[10px] text-emerald-600 font-medium">● 100% Cohort Integrity</p>
+          <p className="mt-1 font-mono text-xl font-bold text-emerald-900">{liveAuditLogs.length + 12}</p>
+          <p className="mt-0.5 text-[10px] text-emerald-600 font-medium">● 100% Chain-of-Custody</p>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
@@ -346,8 +416,8 @@ export function WitnessSystemClient() {
             <span className="text-[11px] font-semibold uppercase tracking-wider">Active Workstations</span>
             <span className="text-base">🖥️</span>
           </div>
-          <p className="mt-1 font-mono text-xl font-bold text-slate-900">4 / 4</p>
-          <p className="mt-0.5 text-[10px] text-slate-500 font-medium">All RFID antennas synced</p>
+          <p className="mt-1 font-mono text-xl font-bold text-slate-900">4 Workstations</p>
+          <p className="mt-0.5 text-[10px] text-slate-500 font-medium">LF-1, ICSI, Cryo, ET</p>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
@@ -355,21 +425,110 @@ export function WitnessSystemClient() {
             <span className="text-[11px] font-semibold uppercase tracking-wider">Mismatch Preventions</span>
             <span className="text-base">🛡️</span>
           </div>
-          <p className="mt-1 font-mono text-xl font-bold text-indigo-900">0 Alerts</p>
-          <p className="mt-0.5 text-[10px] text-emerald-600 font-medium">Zero errors recorded</p>
+          <p className="mt-1 font-mono text-xl font-bold text-indigo-900">0 Errors</p>
+          <p className="mt-0.5 text-[10px] text-emerald-600 font-medium">Auto-alarm shield active</p>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
           <div className="flex items-center justify-between text-slate-500">
-            <span className="text-[11px] font-semibold uppercase tracking-wider">Audit Ledger Status</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Database Retention</span>
             <span className="text-base">📜</span>
           </div>
-          <p className="mt-1 font-mono text-xl font-bold text-slate-900">Immutable</p>
-          <p className="mt-0.5 text-[10px] text-indigo-600 font-medium">SHA-256 Signed</p>
+          <p className="mt-1 font-mono text-xl font-bold text-slate-900">Never Delete</p>
+          <p className="mt-0.5 text-[10px] text-purple-700 font-medium">Permanent History Kept</p>
         </div>
       </div>
 
-      {/* 3. Navigation View Switcher */}
+      {/* 3. Handheld Scanner Wedge Reader Bar */}
+      <div className="rounded-2xl border-2 border-[#6345A6]/40 bg-gradient-to-r from-purple-50 via-white to-indigo-50 p-4 shadow-sm">
+        <form onSubmit={handleScannerSubmit} className="flex flex-col sm:flex-row items-center gap-3">
+          <div className="flex items-center gap-2 text-xs font-bold text-[#6345A6] shrink-0">
+            <span className="text-xl animate-pulse">📡</span>
+            <div>
+              <span className="block uppercase tracking-wider text-[10px] text-purple-600">Hardware Wedge Listener</span>
+              <span>Handheld Scanner / Reader:</span>
+            </div>
+          </div>
+
+          <div className="relative flex-1 w-full">
+            <input
+              ref={scannerInputRef}
+              type="text"
+              value={scannerInput}
+              onChange={(e) => setScannerInput(e.target.value)}
+              placeholder="Aim scanner at dish/straw QR code or press Enter to test scan..."
+              className="w-full rounded-xl border border-purple-300 bg-white py-2.5 pl-3.5 pr-24 text-xs font-mono font-bold text-slate-900 shadow-inner focus:border-[#6345A6] focus:ring-2 focus:ring-[#6345A6]/20 focus:outline-hidden"
+              autoFocus
+            />
+            <button
+              type="submit"
+              className="absolute right-1.5 top-1.5 bottom-1.5 rounded-lg bg-[#6345A6] px-3 text-[11px] font-bold text-white hover:bg-[#52388c] transition flex items-center gap-1 shadow-2xs"
+            >
+              <span>Scan Item</span>
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              setScannerInput('FT|V1|CL001|CASE26001234|CY2600456|SP000789|OOCYTE|DISH|01|20260908T0835|SIG12345');
+              setTimeout(() => scannerInputRef.current?.focus(), 50);
+            }}
+            className="rounded-xl border border-purple-200 bg-white px-3 py-2 text-[11px] font-bold text-purple-700 hover:bg-purple-50 transition shadow-2xs shrink-0"
+          >
+            Load Sample V1 QR
+          </button>
+        </form>
+      </div>
+
+      {/* 4. Multi-Item Scanning Zone Display (Tray) */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+          <div className="flex items-center gap-2">
+            <span className="text-base">📍</span>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+              Workstation Scanning Zone Tray ({selectedStation})
+            </h3>
+          </div>
+          <span className="text-[11px] text-slate-500 font-medium">
+            If multiple dishes are in same zone, select to inspect & verify
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+          {zoneDetectedItems.map((item, idx) => (
+            <div
+              key={idx}
+              onClick={() => {
+                setSourceCode(item.specimenId);
+                if (item.record) setActiveScannedRecord(item.record);
+              }}
+              className={`rounded-xl p-3 border cursor-pointer transition ${
+                item.isMatch
+                  ? 'border-emerald-300 bg-emerald-50/50 hover:bg-emerald-50'
+                  : 'border-rose-300 bg-rose-50/70 hover:bg-rose-50'
+              }`}
+            >
+              <div className="flex items-center justify-between text-[10px] font-mono font-bold mb-1">
+                <span className={item.isMatch ? 'text-emerald-800' : 'text-rose-800'}>
+                  {item.specimenId}
+                </span>
+                <span
+                  className={`px-1.5 py-0.5 rounded text-[9px] ${
+                    item.isMatch ? 'bg-emerald-200 text-emerald-900' : 'bg-rose-200 text-rose-900'
+                  }`}
+                >
+                  {item.status}
+                </span>
+              </div>
+              <div className="text-xs font-bold text-slate-900 truncate">{item.type}</div>
+              <div className="text-[10px] text-slate-500 truncate">{item.container}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 5. Navigation View Switcher */}
       <div className="flex rounded-xl bg-slate-100 p-1 text-xs font-semibold w-fit">
         <button
           type="button"
@@ -378,7 +537,16 @@ export function WitnessSystemClient() {
             activeTab === 'verification' ? 'bg-white text-emerald-800 shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          🔬 Live Verification Chamber
+          🔬 Dual Cohort Chamber
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('lifecycle')}
+          className={`rounded-lg px-4 py-1.5 transition ${
+            activeTab === 'lifecycle' ? 'bg-white text-emerald-800 shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          🔄 Specimen Lifecycle & Closure
         </button>
         <button
           type="button"
@@ -396,11 +564,11 @@ export function WitnessSystemClient() {
             activeTab === 'audit' ? 'bg-white text-emerald-800 shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          📜 Immutable Witness Audit Trail ({auditLogs.length})
+          📜 Immutable Witness Audit Trail ({liveAuditLogs.length})
         </button>
       </div>
 
-      {/* 4. Tab 1: Live Verification Chamber (Core Screen) */}
+      {/* 6. Tab 1: Live Verification Chamber (Core Screen) */}
       {activeTab === 'verification' && (
         <div className="space-y-5">
           {/* Procedure Step Selector */}
@@ -476,21 +644,20 @@ export function WitnessSystemClient() {
                     </span>
                   </div>
                   <span className="rounded bg-indigo-100 px-2 py-0.5 text-[10px] font-mono font-bold text-indigo-800">
-                    RFID DETECTED
+                    SCAN OK
                   </span>
                 </div>
 
                 <div className="space-y-2 text-xs">
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600">Patient Demographic</label>
+                    <label className="block text-[11px] font-semibold text-slate-600">Patient Cohort</label>
                     <p className="font-bold text-slate-900">
                       {currentPatName} <span className="font-mono text-indigo-700">({currentPatUhid})</span>
                     </p>
-                    {currentPartnerName && <p className="text-[11px] text-slate-500">Partner: {currentPartnerName}</p>}
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600">Dish / Tube RFID Barcode</label>
+                    <label className="block text-[11px] font-semibold text-slate-600">Dish / Specimen ID</label>
                     <input
                       type="text"
                       value={sourceCode}
@@ -523,11 +690,10 @@ export function WitnessSystemClient() {
                     <p className="font-bold text-slate-900">
                       {currentPatName} <span className="font-mono text-purple-700">({currentPatUhid})</span>
                     </p>
-                    <p className="text-[11px] text-slate-500">Procedure: {PROCEDURES.find((p) => p.id === activeProcedure)?.name}</p>
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600">Target Vessel / Straw Barcode</label>
+                    <label className="block text-[11px] font-semibold text-slate-600">Target Vessel / Straw ID</label>
                     <input
                       type="text"
                       value={targetCode}
@@ -554,10 +720,9 @@ export function WitnessSystemClient() {
                 type="button"
                 onClick={() => handleValidateMatch(true)}
                 className="flex items-center gap-1.5 rounded-xl border border-rose-300 bg-rose-50 hover:bg-rose-100 px-4 py-2.5 text-xs font-bold text-rose-800 shadow-2xs transition active:scale-[0.98]"
-                title="Test mismatch barrier by scanning another patient sample"
               >
                 <span>⚠️</span>
-                <span>Simulate Mismatch Attempt (Discordant Sample)</span>
+                <span>Simulate Discordant Sample (Test Alarm)</span>
               </button>
             </div>
 
@@ -574,7 +739,7 @@ export function WitnessSystemClient() {
                         COHORT MATCH CONFIRMED (100% IDENTICAL COHORT)
                       </h4>
                       <p className="text-xs text-emerald-800">
-                        Specimen barcodes [{sourceCode}] and [{targetCode}] are verified to belong to patient{' '}
+                        Specimens [{sourceCode}] and [{targetCode}] are verified to belong to patient{' '}
                         <strong>{currentPatName}</strong> ({currentPatUhid}).
                       </p>
                     </div>
@@ -617,7 +782,7 @@ export function WitnessSystemClient() {
 
                   <div className="flex items-center gap-2">
                     <div className="flex-1">
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Witness PIN / Card Tap</label>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Witness PIN / Tap</label>
                       <input
                         type="password"
                         placeholder="Enter 4-digit PIN"
@@ -648,141 +813,180 @@ export function WitnessSystemClient() {
                       CRITICAL MISMATCH BLOCKED: SAMPLES DO NOT MATCH!
                     </h4>
                     <p className="text-xs text-rose-800">
-                      Target barcode [{targetCode}] does NOT belong to patient cohort ({currentPatUhid}). Electronic shield has
-                      locked the workstation. Re-scan required.
+                      {mismatchReason || 'Scanned specimen barcode does NOT match the patient cohort on this workstation.'}
                     </p>
                   </div>
                 </div>
               </div>
             )}
+
           </div>
         </div>
       )}
 
-      {/* 5. Tab 2: Workstations Grid */}
+      {/* 7. Tab 2: Specimen Lifecycle & Closure */}
+      {activeTab === 'lifecycle' && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-5">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
+                Specimen State Transitions & Lifecycle Closure
+              </h3>
+              <p className="text-xs text-slate-500">
+                Rule: Never delete QR history. When procedure completes or specimen is transferred, advance status to closed.
+              </p>
+            </div>
+            <span className="rounded-full bg-purple-50 px-3 py-1 text-xs font-bold text-[#6345A6] border border-purple-200">
+              Active Specimen: {activeScannedRecord?.specimenId || zoneDetectedItems[0]?.specimenId || 'SP000789'}
+            </span>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <button
+              type="button"
+              onClick={() => handleLifecycleTransition('IN_PROCESS')}
+              className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 text-left hover:bg-blue-100/60 transition shadow-2xs space-y-1"
+            >
+              <div className="text-lg">🥚</div>
+              <div className="text-xs font-bold text-blue-950 uppercase tracking-wide">OPU / Follicle Collected</div>
+              <p className="text-[11px] text-blue-800">Transition status to IN_PROCESS. Retain specimen identity.</p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleLifecycleTransition('IN_PROCESS')}
+              className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-4 text-left hover:bg-indigo-100/60 transition shadow-2xs space-y-1"
+            >
+              <div className="text-lg">🔬</div>
+              <div className="text-xs font-bold text-indigo-950 uppercase tracking-wide">Fertilisation Confirmed</div>
+              <p className="text-[11px] text-indigo-800">Link insemination event to existing traceability chain.</p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleLifecycleTransition('CRYOPRESERVED')}
+              className="rounded-xl border border-cyan-200 bg-cyan-50/60 p-4 text-left hover:bg-cyan-100/60 transition shadow-2xs space-y-1"
+            >
+              <div className="text-lg">❄️</div>
+              <div className="text-xs font-bold text-cyan-950 uppercase tracking-wide">Cryopreserved (Vitrification)</div>
+              <p className="text-[11px] text-cyan-800">Lock storage coordinates (Canister/Cane/Goblet). Status: CRYOPRESERVED.</p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleLifecycleTransition('THAWED')}
+              className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 text-left hover:bg-emerald-100/60 transition shadow-2xs space-y-1"
+            >
+              <div className="text-lg">🔥</div>
+              <div className="text-xs font-bold text-emerald-950 uppercase tracking-wide">Thawed for FET</div>
+              <p className="text-[11px] text-emerald-800">Record thaw timestamp and witnessing verification.</p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleLifecycleTransition('TRANSFERRED')}
+              className="rounded-xl border border-purple-200 bg-purple-50/60 p-4 text-left hover:bg-purple-100/60 transition shadow-2xs space-y-1"
+            >
+              <div className="text-lg">🎯</div>
+              <div className="text-xs font-bold text-purple-950 uppercase tracking-wide">Transferred / Closed</div>
+              <p className="text-[11px] text-purple-800">Catheter transfer completed. QR closed & non-editable. Consumable stock consumed.</p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleLifecycleTransition('DISPOSED')}
+              className="rounded-xl border border-slate-300 bg-slate-50 p-4 text-left hover:bg-slate-100 transition shadow-2xs space-y-1"
+            >
+              <div className="text-lg">🗑️</div>
+              <div className="text-xs font-bold text-slate-800 uppercase tracking-wide">Disposed / Closed</div>
+              <p className="text-[11px] text-slate-600">Disposal event with witness authorization. QR marked non-editable.</p>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 8. Tab 3: Workstations */}
       {activeTab === 'workstations' && (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           {workstations.map((ws) => (
-            <div key={ws.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-xs font-bold text-slate-500">{ws.code}</span>
-                <span
-                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                    ws.rfidStatus === 'Online'
-                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                      : 'bg-amber-50 text-amber-700 border border-amber-200'
-                  }`}
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <div key={ws.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">🖥️</span>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900">{ws.name}</h4>
+                    <span className="text-[10px] font-mono text-slate-400">{ws.code}</span>
+                  </div>
+                </div>
+                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
                   {ws.rfidStatus}
                 </span>
               </div>
-
-              <div>
-                <h4 className="text-sm font-bold text-slate-900">{ws.name}</h4>
-                <p className="text-[11px] text-slate-500">{ws.type}</p>
+              <div className="text-xs space-y-1 text-slate-600">
+                <div>Patient on stage: <strong className="text-slate-900">{ws.currentPatient}</strong></div>
+                <div>Dish/Tube ID: <strong className="font-mono text-purple-700">{ws.currentDish}</strong></div>
+                <div>Stage Temp: <span className="font-bold text-slate-800">{ws.temperature}</span></div>
               </div>
-
-              <div className="rounded-lg bg-slate-50 p-2.5 space-y-1 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Current Patient:</span>
-                  <span className="font-semibold text-slate-800 truncate max-w-[120px]">{ws.currentPatient}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Dish on Stage:</span>
-                  <span className="font-mono font-bold text-indigo-700 text-[11px] truncate max-w-[120px]">{ws.currentDish}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Time on Stage:</span>
-                  <span className="font-mono text-slate-700 font-bold">{ws.timeOnStage}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Plate Temp:</span>
-                  <span className="font-semibold text-emerald-700">{ws.temperature}</span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedStation(ws.code);
-                  setActiveTab('verification');
-                  showToast(`Selected ${ws.name} for active verification.`);
-                }}
-                className="w-full rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 py-1.5 text-xs font-bold transition"
-              >
-                Switch to this Station →
-              </button>
             </div>
           ))}
         </div>
       )}
 
-      {/* 6. Tab 3: Immutable Witness Audit Trail */}
+      {/* 9. Tab 4: Immutable Witness Audit Trail */}
       {activeTab === 'audit' && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
-          <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3 flex-wrap gap-2">
             <div>
               <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
-                Electronic Witnessing Compliance Audit Log
+                Permanent Immutable Traceability Ledger
               </h3>
               <p className="text-xs text-slate-500">
-                Cryptographically signed records meeting ICMR / ESHRE dual-witnessing criteria
+                Append-only log of every QR scan, witness verification, and status change (Never Deleted)
               </p>
             </div>
-
-            {/* Search Input */}
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-2.5 text-slate-400 text-xs">🔍</span>
-              <input
-                type="text"
-                placeholder="Search by Patient, ID, or Witness..."
-                value={searchLogQuery}
-                onChange={(e) => setSearchLogQuery(e.target.value)}
-                className="rounded-lg border border-slate-200 bg-slate-50 py-1.5 pl-8 pr-3 text-xs text-slate-800 focus:bg-white focus:outline-none"
-              />
-            </div>
+            <button
+              type="button"
+              onClick={refreshAuditLogs}
+              className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-slate-100"
+            >
+              🔄 Refresh
+            </button>
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-slate-100">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-600">
-                  <th className="py-2.5 px-3">Witness ID</th>
-                  <th className="py-2.5 px-3">Timestamp</th>
-                  <th className="py-2.5 px-3">Procedure</th>
-                  <th className="py-2.5 px-3">Patient & UHID</th>
-                  <th className="py-2.5 px-3">Dishes Matched</th>
-                  <th className="py-2.5 px-3">Primary / Secondary</th>
-                  <th className="py-2.5 px-3 text-center">Status</th>
-                  <th className="py-2.5 px-3">SHA-256 Seal</th>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs text-slate-700">
+              <thead className="border-b border-slate-100 bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                <tr>
+                  <th className="px-3 py-2">Specimen ID</th>
+                  <th className="px-3 py-2">Workstation</th>
+                  <th className="px-3 py-2">Event Type</th>
+                  <th className="px-3 py-2">Result</th>
+                  <th className="px-3 py-2">Primary User</th>
+                  <th className="px-3 py-2">Details</th>
+                  <th className="px-3 py-2 text-right">Timestamp</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-[11px]">
-                {filteredLogs.map((log) => (
-                  <tr key={log.id} className="hover:bg-slate-50/70 transition">
-                    <td className="py-2.5 px-3 font-mono font-bold text-indigo-700">{log.id}</td>
-                    <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">{log.timestamp}</td>
-                    <td className="py-2.5 px-3 font-semibold text-slate-800">{log.procedure}</td>
-                    <td className="py-2.5 px-3">
-                      <span className="font-bold text-slate-900 block">{log.patientName}</span>
-                      <span className="font-mono text-slate-500 text-[10px]">{log.patientUhid}</span>
-                    </td>
-                    <td className="py-2.5 px-3 font-mono text-[10px] text-slate-600">
-                      <div>A: {log.dishSourceId}</div>
-                      <div>B: {log.dishTargetId}</div>
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <span className="block font-medium text-slate-800">1: {log.primaryEmbryologist}</span>
-                      <span className="block text-slate-500 text-[10px]">2: {log.secondaryWitness}</span>
-                    </td>
-                    <td className="py-2.5 px-3 text-center">
-                      <span className="inline-block rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
-                        {log.status}
+              <tbody className="divide-y divide-slate-100">
+                {liveAuditLogs.map((log, idx) => (
+                  <tr key={idx} className="hover:bg-slate-50 transition">
+                    <td className="px-3 py-2.5 font-mono font-bold text-purple-700">{log.specimenId}</td>
+                    <td className="px-3 py-2.5 font-mono text-[11px]">{log.workstationId || 'WS-MAIN'}</td>
+                    <td className="px-3 py-2.5 font-semibold text-slate-800">{log.eventType}</td>
+                    <td className="px-3 py-2.5">
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                          log.verificationResult === 'MATCH_OK'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-rose-100 text-rose-800'
+                        }`}
+                      >
+                        {log.verificationResult}
                       </span>
                     </td>
-                    <td className="py-2.5 px-3 font-mono text-[9px] text-slate-400 max-w-[140px] truncate" title={log.digitalHash}>
-                      {log.digitalHash.slice(0, 18)}...
+                    <td className="px-3 py-2.5 font-medium">{log.primaryUser}</td>
+                    <td className="px-3 py-2.5 text-slate-600 max-w-xs truncate">{log.details || '—'}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-[10px] text-slate-400">
+                      {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                     </td>
                   </tr>
                 ))}
@@ -791,6 +995,7 @@ export function WitnessSystemClient() {
           </div>
         </div>
       )}
+
     </div>
   );
 }

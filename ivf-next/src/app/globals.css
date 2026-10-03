@@ -140,3 +140,117 @@ body {
     overflow: visible !important;
   }
 }
+
+/* Skeleton Loading Shimmer Animation */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+  background-color: #f1f5f9;
+}
+
+.skeleton-shimmer::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.45) 20%,
+    rgba(255, 255, 255, 0.75) 60%,
+    rgba(255, 255, 255, 0)
+  );
+  animation: shimmer 1.8s infinite;
+  content: '';
+}
+
+/* Animated Moving Green Tick & Circle */
+@keyframes checkmark-circle-draw {
+  0% {
+    stroke-dashoffset: 150;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes checkmark-tick-draw {
+  0% {
+    stroke-dashoffset: 45;
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+
+@keyframes checkmark-container-bounce {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  30% {
+    transform: translateY(-5px) scale(1.08);
+  }
+  60% {
+    transform: translateY(2px) scale(0.97);
+  }
+}
+
+@keyframes checkmark-tick-moving {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-2px) scale(1.12);
+  }
+}
+
+@keyframes checkmark-ripple {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.45);
+    opacity: 0;
+  }
+}
+
+.animate-checkmark-circle {
+  stroke-dasharray: 150;
+  stroke-dashoffset: 150;
+  animation: checkmark-circle-draw 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+}
+
+.animate-checkmark-tick {
+  stroke-dasharray: 45;
+  stroke-dashoffset: 45;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: 
+    checkmark-tick-draw 0.45s 0.35s cubic-bezier(0.65, 0, 0.45, 1) forwards,
+    checkmark-tick-moving 1.4s 0.8s ease-in-out infinite;
+}
+
+.animate-checkmark-container {
+  animation: checkmark-container-bounce 1.6s 0.6s ease-in-out infinite;
+}
+
+.animate-checkmark-ripple {
+  animation: checkmark-ripple 1.6s ease-out infinite;
+}
+
+
+

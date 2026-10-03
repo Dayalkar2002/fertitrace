@@ -226,6 +226,109 @@ function overlayAllotment(summary: SourceSummary, allotted: number): SourceSumma
   };
 }
 
+function generateOocytesFromSummary(
+  summary: SourceSummary,
+  cycleDate: string,
+  cycleId: string,
+  embryos: EtEmbryoRow[] = [],
+  labSource: LabSource = 'IVF',
+  offset = 0
+): OocyteItem[] {
+  const m2Count = summary.matureMII || 0;
+  const gvCount = summary.gv ?? 0;
+  const m1Count = summary.metaI ?? Math.max(0, (summary.immature || 0) - gvCount);
+  const degCount = summary.degenerated || 0;
+  const total = summary.retrieved || (m2Count + m1Count + gvCount + degCount);
+
+  if (total === 0) return [];
+
+  const list: OocyteItem[] = [];
+  const yearSuffix = cycleDate && !isNaN(new Date(cycleDate).getTime())
+    ? new Date(cycleDate).getFullYear().toString().slice(-2)
+    : '26';
+  const cleanCycle = (cycleId || '41').replace(/\D/g, '').padStart(2, '0');
+  const sourceCode = labSource === 'ICSI' ? 'IC' : 'IV';
+  const idPrefix = `OO-${yearSuffix}-${cleanCycle}${sourceCode}`;
+
+  const cDate = cycleDate || '29-Aug-2026';
+  let idx = offset + 1;
+
+  // 1. Mature (MII)
+  for (let i = 0; i < m2Count; i++) {
+    const embryoMatch = embryos[i];
+    const isFertilized = i < (summary.fertilized2PN || 0);
+    const idStr = String(i + 1).padStart(2, '0');
+    list.push({
+      id: String(idx),
+      oocyteId: `${idPrefix}-${idStr}`,
+      collectionDateTime: `${cDate} 09:${String(20 + (i % 40)).padStart(2, '0')}`,
+      maturity: 'MII',
+      morphologyGrade: i % 3 === 0 ? 'A' : 'B',
+      linkedSpermId: 'SEM-26-00018472',
+      status: isFertilized ? 'Fertilized' : 'Retrieved',
+      fertilizationResult: isFertilized ? '2PN' : '0PN',
+      embryoId: embryoMatch ? embryoMatch.id : isFertilized ? `EMB-${yearSuffix}-${cleanCycle}-${idStr}` : undefined,
+      day3Grade: embryoMatch?.grade || (isFertilized ? (i % 2 === 0 ? '8-Cell Grade A' : '6-Cell Grade B') : undefined),
+      day5Grade: i === 0 || i === 1 ? '4AA' : i === 2 ? '3AB' : i === 5 ? '3BA' : i === 6 ? '3BB' : undefined,
+      cryoStrawNo: embryoMatch?.action === 2 ? (embryoMatch.location || `STR-26-00${i + 1}`) : (i === 2 || i === 5 ? `STR-26-00${i}` : undefined),
+      transferStatus: embryoMatch?.action === 1 ? 'Transferred' : embryoMatch?.action === 2 ? 'Cryopreserved' : (i < (summary.transferred || 0) ? 'Transferred' : (i < ((summary.transferred || 0) + (summary.cryopreserved || 0)) ? 'Cryopreserved' : 'Culturing')),
+    });
+    idx++;
+  }
+
+  // 2. Metaphase I (MI)
+  for (let i = 0; i < m1Count; i++) {
+    const idStr = String(m2Count + i + 1).padStart(2, '0');
+    list.push({
+      id: String(idx),
+      oocyteId: `${idPrefix}-${idStr}`,
+      collectionDateTime: `${cDate} 09:${String(20 + ((m2Count + i) % 40)).padStart(2, '0')}`,
+      maturity: 'MI',
+      morphologyGrade: '-',
+      linkedSpermId: '-',
+      status: 'Immature',
+      fertilizationResult: '0PN',
+      transferStatus: 'Culturing',
+    });
+    idx++;
+  }
+
+  // 3. Germinal Vesicle (GV)
+  for (let i = 0; i < gvCount; i++) {
+    const idStr = String(m2Count + m1Count + i + 1).padStart(2, '0');
+    list.push({
+      id: String(idx),
+      oocyteId: `${idPrefix}-${idStr}`,
+      collectionDateTime: `${cDate} 09:${String(20 + ((m2Count + m1Count + i) % 40)).padStart(2, '0')}`,
+      maturity: 'GV',
+      morphologyGrade: '-',
+      linkedSpermId: '-',
+      status: 'Immature',
+      fertilizationResult: '0PN',
+      transferStatus: 'Culturing',
+    });
+    idx++;
+  }
+
+  // 4. Degenerated
+  for (let i = 0; i < degCount; i++) {
+    const idStr = String(m2Count + m1Count + gvCount + i + 1).padStart(2, '0');
+    list.push({
+      id: String(idx),
+      oocyteId: `${idPrefix}-${idStr}`,
+      collectionDateTime: `${cDate} 09:${String(20 + ((m2Count + m1Count + gvCount + i) % 40)).padStart(2, '0')}`,
+      maturity: 'Degenerated',
+      morphologyGrade: '-',
+      linkedSpermId: '-',
+      status: 'Degenerated',
+      transferStatus: 'Discarded',
+    });
+    idx++;
+  }
+
+  return list;
+}
+
 export function OocyteEmbryoClient() {
   const dispatch = useAppDispatch();
   const { selectedPatient } = usePatient();
@@ -462,9 +565,51 @@ export function OocyteEmbryoClient() {
   const cycleType = bothLabs ? 'IVF + ICSI' : sourceTab;
   const cycleDay = 16;
   const operator = user?.userName || 'Dr. Satish Sharma (EMB-01)';
-  const sourceEmbryos = embryos.filter((row) => row.source === sourceTab);
+  const sourceEmbryos = useMemo(
+    () => embryos.filter((row) => row.source === sourceTab),
+    [embryos, sourceTab]
+  );
   const sourceBlastocysts = blastocysts.filter((row) => row.source === sourceTab);
   const displayBlastocysts = bothLabs ? blastocysts : sourceBlastocysts;
+
+  // Dynamically synchronize oocyte list from actual cycle retrieval/lab summary
+  useEffect(() => {
+    if (labView === 'BOTH') {
+      const ivfList = generateOocytesFromSummary(
+        ivfSummary,
+        ivfSummary.cycleDate || selectedCycleId,
+        selectedCycleId || ivfSummary.cycleId,
+        embryos.filter((r) => r.source === 'IVF'),
+        'IVF'
+      );
+      const icsiList = generateOocytesFromSummary(
+        icsiSummary,
+        icsiSummary.cycleDate || selectedCycleId,
+        selectedCycleId || icsiSummary.cycleId,
+        embryos.filter((r) => r.source === 'ICSI'),
+        'ICSI',
+        ivfList.length
+      );
+      const combined = [...ivfList, ...icsiList];
+      if (combined.length > 0) {
+        setOocytes(combined);
+      }
+    } else {
+      const activeSummary = sourceTab === 'ICSI' ? icsiSummary : ivfSummary;
+      if (activeSummary && (activeSummary.retrieved > 0 || activeSummary.hasRecord)) {
+        const generated = generateOocytesFromSummary(
+          activeSummary,
+          activeSummary.cycleDate || selectedCycleId,
+          selectedCycleId || activeSummary.cycleId,
+          sourceEmbryos,
+          sourceTab
+        );
+        if (generated.length > 0) {
+          setOocytes(generated);
+        }
+      }
+    }
+  }, [labView, sourceTab, ivfSummary, icsiSummary, selectedCycleId, sourceEmbryos, embryos]);
 
   const frozenEmbryosList = useMemo(() => {
     const list: Array<{
@@ -705,7 +850,7 @@ export function OocyteEmbryoClient() {
           {/* Quick Action Navigation Buttons */}
           <div className="flex flex-wrap items-center gap-2">
             <Link
-              href={selectedCycleId ? `/ivf?cycId=${encodeURIComponent(selectedCycleId)}` : '/ivf'}
+              href={selectedCycleId ? `/insemination?module=ivf&cycId=${encodeURIComponent(selectedCycleId)}` : '/insemination?module=ivf'}
               className="inline-flex items-center gap-1.5 rounded-xl border border-purple-200 bg-white px-3 py-1.5 text-xs font-bold text-purple-800 shadow-2xs hover:bg-purple-50 hover:border-purple-400 transition"
               title="Open IVF Insemination & Fertilization Entry"
             >
@@ -714,7 +859,7 @@ export function OocyteEmbryoClient() {
               <span className="text-purple-400">→</span>
             </Link>
             <Link
-              href={selectedCycleId ? `/icsi?cycId=${encodeURIComponent(selectedCycleId)}` : '/icsi'}
+              href={selectedCycleId ? `/insemination?module=icsi&cycId=${encodeURIComponent(selectedCycleId)}` : '/insemination?module=icsi'}
               className="inline-flex items-center gap-1.5 rounded-xl border border-purple-200 bg-white px-3 py-1.5 text-xs font-bold text-purple-800 shadow-2xs hover:bg-purple-50 hover:border-purple-400 transition"
               title="Open ICSI Insemination & Fertilization Entry"
             >

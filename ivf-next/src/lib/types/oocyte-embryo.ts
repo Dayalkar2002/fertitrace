@@ -24,6 +24,8 @@ export interface SourceSummary {
   cycleDate: string;
   retrieved: number;
   matureMII: number;
+  metaI?: number;
+  gv?: number;
   immature: number;
   degenerated: number;
   fertilized2PN: number;

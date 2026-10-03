@@ -3,6 +3,7 @@
 import { Suspense } from 'react';
 import { AppShell } from '@/components/app-shell';
 import { RequireAuth } from '@/components/require-auth';
+import { ScreenSkeletonLoader } from '@/components/screen-skeleton-loader';
 import { PatientProvider } from '@/contexts/patient-context';
 
 function AppLayoutInner({ children }: { children: React.ReactNode }) {
@@ -17,7 +18,13 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading…</div>}>
+    <Suspense
+      fallback={
+        <div className="p-6">
+          <ScreenSkeletonLoader />
+        </div>
+      }
+    >
       <AppLayoutInner>{children}</AppLayoutInner>
     </Suspense>
   );
