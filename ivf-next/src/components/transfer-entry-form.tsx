@@ -24,6 +24,7 @@ import {
   PROTOCOL_OPTIONS,
 } from '@/lib/services/iui';
 import type { LookupItem } from '@/lib/types/master';
+import { CryoLocationModal } from '@/components/cryo-location-modal';
 
 const inputCls = 'mt-1 h-9 w-full rounded-lg border border-slate-300 px-3 text-sm';
 const labelCls = 'text-xs font-medium text-slate-600';
@@ -35,29 +36,6 @@ type ModuleKind = 'et' | 'bt';
 interface TransferEntryFormProps {
   module: ModuleKind;
 }
-
-const CRYO_PALETTE = [
-  { code: 'BL', name: 'BL-BLUE', bg: '#0000FF', fg: '#FFA500' },
-  { code: 'PK', name: 'PK-PINK', bg: '#FFC0CB', fg: '#008000' },
-  { code: 'BK', name: 'BK-BLACK', bg: '#000000', fg: '#FFFFFF' },
-  { code: 'BR', name: 'BR-BROWN', bg: '#8B4513', fg: '#0000FF' },
-  { code: 'GN', name: 'GN-GREEN', bg: '#008000', fg: '#FF0000' },
-  { code: 'RD', name: 'RD-RED', bg: '#FF0000', fg: '#008000' },
-  { code: 'WT', name: 'WT-WHITE', bg: '#FFFFFF', fg: '#000000', border: true },
-  { code: 'YL', name: 'YL-YELLOW', bg: '#FFFF00', fg: '#8A2BE2' },
-  { code: 'GY', name: 'GY-GRAY', bg: '#808080', fg: '#0000FF' },
-  { code: 'OR', name: 'OR-ORANGE', bg: '#FFA500', fg: '#00BFFF' },
-  { code: 'VT', name: 'VT-VIOLET', bg: '#8A2BE2', fg: '#008000' },
-  { code: 'CR', name: 'CR-CRIMSON', bg: '#DC143C', fg: '#FFFF00' },
-  { code: 'MR', name: 'MR-MAROON', bg: '#800000', fg: '#008000' },
-  { code: 'OL', name: 'OL-OLIVE', bg: '#808000', fg: '#FFFFFF' },
-  { code: 'LM', name: 'LM-LIME', bg: '#32CD32', fg: '#8A2BE2' },
-  { code: 'AQ', name: 'AQ-AQUA', bg: '#00FFFF', fg: '#8A2BE2' },
-  { code: 'GD', name: 'GD-GOLD', bg: '#FFD700', fg: '#C0C0C0' },
-  { code: 'SL', name: 'SL-SILVER', bg: '#C0C0C0', fg: '#FFD700' },
-  { code: 'FU', name: 'FU-FUCHSIA', bg: '#FF00FF', fg: '#0000FF' },
-  { code: 'TL', name: 'TL-TEAL', bg: '#008080', fg: '#FF0000' },
-];
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -224,20 +202,6 @@ export function TransferEntryForm({ module }: TransferEntryFormProps) {
   // Location Modal State
   const [showLocModal, setShowLocModal] = useState(false);
   const [locRowIndex, setLocRowIndex] = useState<number | null>(null);
-  const [locType, setLocType] = useState<'Straw' | 'Cryovial'>('Straw');
-  const [strawECC, setStrawECC] = useState('');
-  const [strawEC, setStrawEC] = useState('');
-  const [strawGO, setStrawGO] = useState('');
-  const [strawVE, setStrawVE] = useState('');
-  const [strawVI, setStrawVI] = useState('');
-  const [strawST, setStrawST] = useState('');
-  const [cryoCC, setCryoCC] = useState('');
-  const [cryoC, setCryoC] = useState('');
-  const [cryoCH, setCryoCH] = useState('');
-  const [cryoCV, setCryoCV] = useState('');
-  const [cryoColor, setCryoColor] = useState('');
-  const [activeColorField, setActiveColorField] = useState<'GO' | 'VE' | 'VI' | 'ST' | 'CV_COLOR'>('GO');
-  const [locModalError, setLocModalError] = useState('');
 
   // Row Generator State
   const [genIvfCount, setGenIvfCount] = useState(0);
@@ -298,83 +262,69 @@ export function TransferEntryForm({ module }: TransferEntryFormProps) {
 
   function openLocationModal(index: number) {
     setLocRowIndex(index);
-    setLocModalError('');
-    const loc = gridRows[index]?.location || '';
-    if (loc.includes('/CH-')) {
-      setLocType('Cryovial');
-      const m = loc.match(/CC-([^/]*)\/C-([^/]*)\/CH-([^/]*)\/CV-([^-]*)-?(.*)/i);
-      if (m) {
-        setCryoCC(m[1] || '');
-        setCryoC(m[2] || '');
-        setCryoCH(m[3] || '');
-        setCryoCV(m[4] || '');
-        setCryoColor(m[5] || '');
-      } else {
-        setCryoCC('');
-        setCryoC('');
-        setCryoCH('');
-        setCryoCV('');
-        setCryoColor('');
-      }
-      setActiveColorField('CV_COLOR');
-    } else {
-      setLocType('Straw');
-      const m = loc.match(/CC-([^/]*)\/C-([^/]*)\/GO-([^/]*)\/VE-([^/]*)\/VI-([^/]*)\/ST-([^/]*)/i);
-      if (m) {
-        setStrawECC(m[1] || '');
-        setStrawEC(m[2] || '');
-        setStrawGO(m[3] || '');
-        setStrawVE(m[4] || '');
-        setStrawVI(m[5] || '');
-        setStrawST(m[6] || '');
-      } else {
-        setStrawECC('');
-        setStrawEC('');
-        setStrawGO('');
-        setStrawVE('');
-        setStrawVI('');
-        setStrawST('');
-      }
-      setActiveColorField('GO');
-    }
     setShowLocModal(true);
   }
 
-  function handleSelectColor(code: string) {
-    if (locType === 'Straw') {
-      if (activeColorField === 'GO') setStrawGO(code);
-      else if (activeColorField === 'VE') setStrawVE(code);
-      else if (activeColorField === 'VI') setStrawVI(code);
-      else if (activeColorField === 'ST') setStrawST(code);
-    } else {
-      setCryoColor(code);
-    }
-  }
-
-  function handleApplyLocation() {
-    setLocModalError('');
-    let finalLoc = '';
-    if (locType === 'Straw') {
-      finalLoc = `CC-${strawECC.trim().toUpperCase()}/C-${strawEC.trim().toUpperCase()}/GO-${strawGO.trim().toUpperCase()}/VE-${strawVE.trim().toUpperCase()}/VI-${strawVI.trim().toUpperCase()}/ST-${strawST.trim().toUpperCase()}`;
-    } else {
-      finalLoc = `CC-${cryoCC.trim().toUpperCase()}/C-${cryoC.trim().toUpperCase()}/CH-${cryoCH.trim().toUpperCase()}/CV-${cryoCV.trim().toUpperCase()}-${cryoColor.trim().toUpperCase()}`;
-    }
-
-    // 5-embryo maximum validation
-    const otherRows = gridRows.filter((_, i) => i !== locRowIndex);
-    const count = otherRows.filter((r) => (r.location || '').trim().toUpperCase() === finalLoc).length;
-    if (count >= 5) {
-      setLocModalError(`Location ${finalLoc} can not be used more than 5`);
-      return;
-    }
-
+  function handleApplyLocation(finalLoc: string) {
     if (locRowIndex !== null) {
       setGridRows((rows) =>
-        rows.map((r, i) => (i === locRowIndex ? { ...r, location: finalLoc } : r))
+        rows.map((r, i) =>
+          i === locRowIndex
+            ? {
+                ...r,
+                location: finalLoc,
+                action: r.action === 0 && finalLoc ? 2 : r.action, // Default to Freeze (2) when location is assigned!
+              }
+            : r
+        )
       );
     }
     setShowLocModal(false);
   }
+
+  const onCycleChange = useCallback(
+    async (nextCycId: string, availableDates?: CycleDateOption[]) => {
+      if (!token || !nextCycId) {
+        setShowForm(false);
+        setCycId('');
+        return;
+      }
+      const datesList = availableDates || cycleDates;
+      const selected = datesList.find((c) => String(c.cycId) === nextCycId);
+      if (!selected) return;
+
+      setLoading(true);
+      setError('');
+      setCycId(nextCycId);
+      setCycleDate(selected.cycleDate);
+      const formatted = formatCycleDate(selected.cycleDate);
+
+      try {
+        const res = await api.loadRecord(token, patId, satId, nextCycId, formatted);
+        if (res.exists && res.data) {
+          const applied = applyTransferRecord(module, defaultTransfer(), defaultSummary(), [], res.data);
+          setRecordId(applied.recordId);
+          setTransfer(applied.transfer);
+          setSummary(applied.summary);
+          setGridRows(applied.rows);
+          setIsUpdate(true);
+        } else {
+          setRecordId('');
+          setTransfer(defaultTransfer());
+          setSummary(defaultSummary());
+          setGridRows([]);
+          setIsUpdate(false);
+        }
+        setShowForm(true);
+        setActiveTab('transfer');
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : 'Failed to load record.');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [token, cycleDates, patId, satId, api, module]
+  );
 
   const init = useCallback(async () => {
     if (!token || !ready) {
@@ -390,56 +340,27 @@ export function TransferEntryForm({ module }: TransferEntryFormProps) {
       ]);
       setCycleDates(dates);
       setDoctors(lookups.doctors || []);
+
+      // Auto-load cycId if passed in URL query param or if single cycle
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const urlCycId = params.get('cycId');
+        if (urlCycId && dates.some((d) => String(d.cycId) === urlCycId)) {
+          void onCycleChange(urlCycId, dates);
+        } else if (dates.length === 1) {
+          void onCycleChange(String(dates[0].cycId), dates);
+        }
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : `Failed to load ${module.toUpperCase()} module.`);
     } finally {
       setLoading(false);
     }
-  }, [token, ready, patId, satId, api, module]);
+  }, [token, ready, patId, satId, api, module, onCycleChange]);
 
   useEffect(() => {
     void init();
   }, [init]);
-
-  async function onCycleChange(nextCycId: string) {
-    if (!token || !nextCycId) {
-      setShowForm(false);
-      setCycId('');
-      return;
-    }
-    const selected = cycleDates.find((c) => String(c.cycId) === nextCycId);
-    if (!selected) return;
-
-    setLoading(true);
-    setError('');
-    setCycId(nextCycId);
-    setCycleDate(selected.cycleDate);
-    const formatted = formatCycleDate(selected.cycleDate);
-
-    try {
-      const res = await api.loadRecord(token, patId, satId, nextCycId, formatted);
-      if (res.exists && res.data) {
-        const applied = applyTransferRecord(module, defaultTransfer(), defaultSummary(), [], res.data);
-        setRecordId(applied.recordId);
-        setTransfer(applied.transfer);
-        setSummary(applied.summary);
-        setGridRows(applied.rows);
-        setIsUpdate(true);
-      } else {
-        setRecordId('');
-        setTransfer(defaultTransfer());
-        setSummary(defaultSummary());
-        setGridRows([]);
-        setIsUpdate(false);
-      }
-      setShowForm(true);
-      setActiveTab('transfer');
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to load record.');
-    } finally {
-      setLoading(false);
-    }
-  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -888,267 +809,15 @@ export function TransferEntryForm({ module }: TransferEntryFormProps) {
         )}
 
         {/* SMART CRYO LOCATION COORDINATES MODAL */}
-        {showLocModal && locRowIndex !== null && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-2xs">
-            <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl animate-in fade-in zoom-in-95">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wide">
-                  Cryo Location Coordinates · Row #{locRowIndex + 1}
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setShowLocModal(false)}
-                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                >
-                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              </div>
-
-              {locModalError && (
-                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs font-bold text-red-700">
-                  {locModalError}
-                </div>
-              )}
-
-              <div className="mt-4 space-y-4">
-                {/* Straw vs Cryovial toggle */}
-                <div className="flex items-center gap-6">
-                  <span className="text-xs font-bold text-slate-600">Cryopreservation:</span>
-                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="locType"
-                      value="Straw"
-                      checked={locType === 'Straw'}
-                      onChange={() => setLocType('Straw')}
-                      className="text-purple-600"
-                    />
-                    Straw
-                  </label>
-                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="locType"
-                      value="Cryovial"
-                      checked={locType === 'Cryovial'}
-                      onChange={() => setLocType('Cryovial')}
-                      className="text-purple-600"
-                    />
-                    Cryovial
-                  </label>
-                </div>
-
-                {/* Coordinate Inputs */}
-                {locType === 'Straw' ? (
-                  <div className="grid grid-cols-3 gap-2.5 text-xs sm:grid-cols-6">
-                    <div>
-                      <span className="block text-[10px] font-bold uppercase text-slate-500">Cryocan</span>
-                      <div className="mt-0.5 flex items-center">
-                        <span className="rounded-l-lg border border-r-0 border-slate-300 bg-slate-100 px-1.5 py-1.5 text-[11px] font-bold text-slate-600">CC-</span>
-                        <input
-                          value={strawECC}
-                          onChange={(e) => setStrawECC(e.target.value.toUpperCase())}
-                          placeholder="A1"
-                          className="h-8 w-full rounded-r-lg border border-slate-300 px-1 text-center font-bold text-xs uppercase"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <span className="block text-[10px] font-bold uppercase text-slate-500">Canister</span>
-                      <div className="mt-0.5 flex items-center">
-                        <span className="rounded-l-lg border border-r-0 border-slate-300 bg-slate-100 px-1.5 py-1.5 text-[11px] font-bold text-slate-600">C-</span>
-                        <input
-                          value={strawEC}
-                          onChange={(e) => setStrawEC(e.target.value.toUpperCase())}
-                          placeholder="1"
-                          className="h-8 w-full rounded-r-lg border border-slate-300 px-1 text-center font-bold text-xs uppercase"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <span className="block text-[10px] font-bold uppercase text-slate-500">Goblet</span>
-                      <div className="mt-0.5 flex items-center">
-                        <span className="rounded-l-lg border border-r-0 border-slate-300 bg-slate-100 px-1.5 py-1.5 text-[11px] font-bold text-slate-600">GO-</span>
-                        <input
-                          value={strawGO}
-                          onFocus={() => setActiveColorField('GO')}
-                          onChange={(e) => setStrawGO(e.target.value.toUpperCase())}
-                          placeholder="BL"
-                          className={`h-8 w-full rounded-r-lg border px-1 text-center font-bold text-xs uppercase ${activeColorField === 'GO' ? 'border-purple-600 ring-2 ring-purple-100' : 'border-slate-300'}`}
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <span className="block text-[10px] font-bold uppercase text-slate-500">Vesitube</span>
-                      <div className="mt-0.5 flex items-center">
-                        <span className="rounded-l-lg border border-r-0 border-slate-300 bg-slate-100 px-1.5 py-1.5 text-[11px] font-bold text-slate-600">VE-</span>
-                        <input
-                          value={strawVE}
-                          onFocus={() => setActiveColorField('VE')}
-                          onChange={(e) => setStrawVE(e.target.value.toUpperCase())}
-                          placeholder="PK"
-                          className={`h-8 w-full rounded-r-lg border px-1 text-center font-bold text-xs uppercase ${activeColorField === 'VE' ? 'border-purple-600 ring-2 ring-purple-100' : 'border-slate-300'}`}
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <span className="block text-[10px] font-bold uppercase text-slate-500">Visotube</span>
-                      <div className="mt-0.5 flex items-center">
-                        <span className="rounded-l-lg border border-r-0 border-slate-300 bg-slate-100 px-1.5 py-1.5 text-[11px] font-bold text-slate-600">VI-</span>
-                        <input
-                          value={strawVI}
-                          onFocus={() => setActiveColorField('VI')}
-                          onChange={(e) => setStrawVI(e.target.value.toUpperCase())}
-                          placeholder="WT"
-                          className={`h-8 w-full rounded-r-lg border px-1 text-center font-bold text-xs uppercase ${activeColorField === 'VI' ? 'border-purple-600 ring-2 ring-purple-100' : 'border-slate-300'}`}
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <span className="block text-[10px] font-bold uppercase text-slate-500">Straw</span>
-                      <div className="mt-0.5 flex items-center">
-                        <span className="rounded-l-lg border border-r-0 border-slate-300 bg-slate-100 px-1.5 py-1.5 text-[11px] font-bold text-slate-600">ST-</span>
-                        <input
-                          value={strawST}
-                          onFocus={() => setActiveColorField('ST')}
-                          onChange={(e) => setStrawST(e.target.value.toUpperCase())}
-                          placeholder="RD"
-                          className={`h-8 w-full rounded-r-lg border px-1 text-center font-bold text-xs uppercase ${activeColorField === 'ST' ? 'border-purple-600 ring-2 ring-purple-100' : 'border-slate-300'}`}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-2.5 text-xs sm:grid-cols-5">
-                    <div>
-                      <span className="block text-[10px] font-bold uppercase text-slate-500">Cryocan</span>
-                      <div className="mt-0.5 flex items-center">
-                        <span className="rounded-l-lg border border-r-0 border-slate-300 bg-slate-100 px-1.5 py-1.5 text-[11px] font-bold text-slate-600">CC-</span>
-                        <input
-                          value={cryoCC}
-                          onChange={(e) => setCryoCC(e.target.value.toUpperCase())}
-                          placeholder="A1"
-                          className="h-8 w-full rounded-r-lg border border-slate-300 px-1 text-center font-bold text-xs uppercase"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <span className="block text-[10px] font-bold uppercase text-slate-500">Canister</span>
-                      <div className="mt-0.5 flex items-center">
-                        <span className="rounded-l-lg border border-r-0 border-slate-300 bg-slate-100 px-1.5 py-1.5 text-[11px] font-bold text-slate-600">C-</span>
-                        <input
-                          value={cryoC}
-                          onChange={(e) => setCryoC(e.target.value.toUpperCase())}
-                          placeholder="1"
-                          className="h-8 w-full rounded-r-lg border border-slate-300 px-1 text-center font-bold text-xs uppercase"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <span className="block text-[10px] font-bold uppercase text-slate-500">Holder</span>
-                      <div className="mt-0.5 flex items-center">
-                        <span className="rounded-l-lg border border-r-0 border-slate-300 bg-slate-100 px-1.5 py-1.5 text-[11px] font-bold text-slate-600">CH-</span>
-                        <input
-                          value={cryoCH}
-                          onChange={(e) => setCryoCH(e.target.value.toUpperCase())}
-                          placeholder="H1"
-                          className="h-8 w-full rounded-r-lg border border-slate-300 px-1 text-center font-bold text-xs uppercase"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <span className="block text-[10px] font-bold uppercase text-slate-500">Cryovial</span>
-                      <div className="mt-0.5 flex items-center">
-                        <span className="rounded-l-lg border border-r-0 border-slate-300 bg-slate-100 px-1.5 py-1.5 text-[11px] font-bold text-slate-600">CV-</span>
-                        <input
-                          value={cryoCV}
-                          onChange={(e) => setCryoCV(e.target.value.toUpperCase())}
-                          placeholder="V1"
-                          className="h-8 w-full rounded-r-lg border border-slate-300 px-1 text-center font-bold text-xs uppercase"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <span className="block text-[10px] font-bold uppercase text-slate-500">Vial Color</span>
-                      <input
-                        value={cryoColor}
-                        onFocus={() => setActiveColorField('CV_COLOR')}
-                        onChange={(e) => setCryoColor(e.target.value.toUpperCase())}
-                        placeholder="Color"
-                        className="mt-0.5 h-8 w-full rounded-lg border border-slate-300 px-1 text-center font-bold text-xs uppercase"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Color Palette */}
-                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-                  <div className="mb-2 flex items-center justify-between text-xs">
-                    <span className="font-bold text-slate-700 uppercase tracking-wide">
-                      Select Color for {activeColorField}:
-                    </span>
-                    <span className="text-[11px] text-slate-500">Click field above, then click color</span>
-                  </div>
-                  <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-5">
-                    {CRYO_PALETTE.map((c) => (
-                      <button
-                        key={c.code}
-                        type="button"
-                        onClick={() => handleSelectColor(c.code)}
-                        style={{ backgroundColor: c.bg, color: c.fg }}
-                        className="rounded-lg border border-slate-300 px-2 py-1 text-[11px] font-black uppercase shadow-2xs transition hover:scale-105 active:scale-95"
-                      >
-                        {c.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Live Coordinate Preview */}
-                <div className="rounded-xl border border-purple-200 bg-purple-50/60 p-3 text-xs">
-                  <span className="font-bold text-slate-600">Generated Coordinate: </span>
-                  <span className="font-mono font-bold text-purple-900">
-                    {locType === 'Straw'
-                      ? `CC-${strawECC || '…'}/C-${strawEC || '…'}/GO-${strawGO || '…'}/VE-${strawVE || '…'}/VI-${strawVI || '…'}/ST-${strawST || '…'}`
-                      : `CC-${cryoCC || '…'}/C-${cryoC || '…'}/CH-${cryoCH || '…'}/CV-${cryoCV || '…'}-${cryoColor || '…'}`}
-                  </span>
-                  <div className="mt-1 text-[11px] text-slate-500">
-                    Rule: maximum 5 embryos per unique location.
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-5 flex justify-end gap-2 border-t border-slate-100 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setShowLocModal(false)}
-                  className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleApplyLocation}
-                  className="rounded-xl bg-purple-700 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-purple-800"
-                >
-                  Apply Location
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <CryoLocationModal
+          isOpen={showLocModal && locRowIndex !== null}
+          onClose={() => setShowLocModal(false)}
+          title={`Cryo Location Coordinates · Row #${(locRowIndex ?? 0) + 1}`}
+          subtitle={`Assign storage location for ${gridRows[locRowIndex ?? 0]?.source || 'embryo'}`}
+          initialLocation={locRowIndex !== null ? gridRows[locRowIndex]?.location || '' : ''}
+          existingLocations={gridRows.map((r) => r.location || '')}
+          onApply={handleApplyLocation}
+        />
       </ModuleCard>
     </PatientRequired>
   );

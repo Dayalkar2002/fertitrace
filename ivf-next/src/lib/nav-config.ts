@@ -142,6 +142,7 @@ export const REPORT_MENU_GROUPS: NavMenuGroup[] = [
     items: [
       { label: 'Documents', route: '/reports/consent-forms' },
       { label: 'ART Cycle', route: '/reports/art-cycle' },
+      { label: 'Cryonavigation (Scan & Validate)', route: '/cryonavigation' },
       { label: 'QR Code List', route: '/reports/qrcode-list' },
       { label: 'IVF Summary', route: '/reports/ivf-summary' },
       { label: 'HSA Summary', route: '/reports/hsa-summary' },
@@ -186,8 +187,9 @@ export const TOP_NAV_MENUS: TopNavMenu[] = [
     label: 'Cryo',
     icon: 'cryo',
     items: [
-      { label: 'Oocytes Cryopreservation', route: '/oocyte-embryo?tab=cryopreservation' },
-      { label: 'Embryos Cryopreservation', route: '/oocyte-embryo?tab=cryopreservation' },
+      { label: 'Oocytes Cryopreservation', route: '/oocyte-embryo?tab=cryopreservation&type=oocyte' },
+      { label: 'Embryos Cryopreservation', route: '/oocyte-embryo?tab=cryopreservation&type=embryo' },
+      { label: 'Cryonavigation (Scan & Validate)', route: '/cryonavigation' },
     ],
   },
   {
