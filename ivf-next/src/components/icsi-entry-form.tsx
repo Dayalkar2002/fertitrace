@@ -11,6 +11,11 @@ import {
   icsiApi,
 } from '@/lib/services/clinical-modules';
 import { fetchCycleSemenAnalysis } from '@/lib/services/semen-analysis';
+import {
+  fetchSelfFrozenOocytes,
+  submitSelfOocyteThaw,
+  type SelfFrozenOocyte,
+} from '@/lib/services/self-oocyte';
 import type { LookupItem } from '@/lib/types/master';
 
 const inputCls = 'mt-1 h-9 w-full rounded-lg border border-slate-300 px-3 text-sm';
@@ -223,6 +228,8 @@ export function IcsiEntryForm() {
   const [isUpdate, setIsUpdate] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [frozenOocytes, setFrozenOocytes] = useState<SelfFrozenOocyte[]>([]);
+  const [thawLoading, setThawLoading] = useState(false);
 
   const balanceText = useMemo(() => {
     const v = form;
@@ -330,6 +337,11 @@ export function IcsiEntryForm() {
 
       setForm(next);
       setShowForm(true);
+
+      // Check if patient has self-frozen oocytes in storage
+      void fetchSelfFrozenOocytes(token, patId, satId)
+        .then((list) => setFrozenOocytes(list))
+        .catch(() => setFrozenOocytes([]));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to load cycle data.');
     } finally {
@@ -353,6 +365,37 @@ export function IcsiEntryForm() {
       }
     } catch {
       // ignore
+    }
+  }
+
+  async function handleThawOocytes() {
+    if (!token || !form.cycId || !frozenOocytes.length) return;
+    setThawLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await submitSelfOocyteThaw(token, {
+        patId,
+        satId,
+        thawCycleId: String(form.cycId),
+        thawProcDoneBy: 'Embryologist',
+        oocyteThawStatuses: frozenOocytes.map((o) => ({ oocyteId: o.oocyteId, survived: true })),
+      });
+      setSuccess(
+        `Thawed ${res.data.totalThawed} oocytes: ${res.data.survivedMII} Metaphase II survived and populated into ICSI!`
+      );
+      setForm((f) => ({
+        ...f,
+        oiMetaII: res.data.survivedMII,
+        oiMetaI: res.data.survivedMI,
+        oiGV: res.data.survivedGV,
+      }));
+      const updated = await fetchSelfFrozenOocytes(token, patId, satId);
+      setFrozenOocytes(updated);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to thaw oocytes.');
+    } finally {
+      setThawLoading(false);
     }
   }
 
@@ -526,6 +569,30 @@ export function IcsiEntryForm() {
                 </div>
               </div>
             </section>
+
+            {frozenOocytes.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50/70 p-4">
+                <div>
+                  <h3 className="text-sm font-bold text-sky-950 flex items-center gap-2">
+                    <span>❄️</span>
+                    <span>Self-Frozen Oocytes in Cryo Storage</span>
+                  </h3>
+                  <p className="text-xs text-sky-800 mt-0.5">
+                    Patient has <strong>{frozenOocytes.length}</strong> frozen oocytes available from cycle{' '}
+                    <strong>{frozenOocytes[0].cycleId}</strong> (Location: {frozenOocytes[0].location}).
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleThawOocytes}
+                  disabled={thawLoading}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-sky-700 transition disabled:opacity-50"
+                >
+                  <span>⚡</span>
+                  <span>{thawLoading ? 'Thawing…' : 'Thaw & Load into ICSI'}</span>
+                </button>
+              </div>
+            )}
 
             <section>
               <h2 className="mb-3 text-lg font-semibold">Oocytes &amp; Fertilization</h2>

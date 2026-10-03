@@ -256,7 +256,7 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
     title: 'Frozen Oocytes Passbook',
     description: 'Report viewer — rptEmbroys.aspx (Oocytes).',
     kind: 'report',
-    report: patientReport('spRptOocytePassbook', REPORT_PARAMS_NO_DATE, 1),
+    report: patientReport('spRptOocytes', REPORT_PARAMS_NO_DATE, 1),
   },
   {
     path: 'reports/passbook/embryos-self',

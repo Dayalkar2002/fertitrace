@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUser, authUnauthorizedResponse } from '@/lib/auth/verify-auth';
 import { getClinicalCycleDates, getClinicalDoctors } from '@/lib/services-server/clinical-cycle.service';
-import { loadClinicalTransferRecord, saveClinicalTransferRecord } from '@/lib/services-server/clinical-transfer.service';
+import { loadClinicalTransferRecord, saveClinicalTransferRecord, updateSingleEmbryoLocation } from '@/lib/services-server/clinical-transfer.service';
 
 export async function GET(req: NextRequest) {
   const user = getAuthenticatedUser(req);
@@ -38,5 +38,14 @@ export async function POST(req: NextRequest) {
 
   const payload = await req.json();
   const res = await saveClinicalTransferRecord('bt', payload);
+  return NextResponse.json(res, { status: res.success ? 200 : 500 });
+}
+
+export async function PATCH(req: NextRequest) {
+  const user = getAuthenticatedUser(req);
+  if (!user) return authUnauthorizedResponse();
+
+  const { rowId, location, action, patId, satId } = await req.json();
+  const res = await updateSingleEmbryoLocation('bt', Number(rowId), location, action, patId, satId);
   return NextResponse.json(res, { status: res.success ? 200 : 500 });
 }

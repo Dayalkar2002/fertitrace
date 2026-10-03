@@ -1,16 +1,24 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { usePatient } from '@/contexts/patient-context';
 import { useAuth } from '@/contexts/auth-context';
 import { usePatientIds } from '@/components/clinical/clinical-shared';
 import { useAppDispatch } from '@/store/hooks';
 import { setShowPatientModal } from '@/store/slices/uiSlice';
-import { ApiError } from '@/lib/api';
+import { ApiError, apiFetch } from '@/lib/api';
 import { loadOocyteEmbryoOverview } from '@/lib/services/oocyte-embryo';
 import { BT_EXPANSION_OPTIONS, BT_ICM_OPTIONS, BT_TE_OPTIONS, ET_ACTION_OPTIONS } from '@/lib/services/iui';
 import { readRetrievalSnapshot, type CycleRetrievalSnapshot } from '@/lib/cycle-snapshot';
 import type { EtEmbryoRow, LabSource, OocyteItem, PatientCycleOption, SourceSummary } from '@/lib/types/oocyte-embryo';
+import { CryoLocationModal } from '@/components/cryo-location-modal';
+import {
+  fetchSelfFrozenOocytes,
+  updateSingleOocyteLocation,
+  type SelfFrozenOocyte,
+} from '@/lib/services/self-oocyte';
 
 export type OocyteEmbryoTab =
   | 'oocytes'
@@ -224,7 +232,11 @@ export function OocyteEmbryoClient() {
   const { user, token } = useAuth();
   const { patId, satId, ready } = usePatientIds();
 
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<OocyteEmbryoTab>('oocytes');
+  const [cryoType, setCryoType] = useState<'oocyte' | 'embryo'>('oocyte');
+  const [frozenOocytes, setFrozenOocytes] = useState<SelfFrozenOocyte[]>([]);
+  const [loadingFrozenOocytes, setLoadingFrozenOocytes] = useState(false);
   const [sourceTab, setSourceTab] = useState<LabSource>('IVF');
   const [oocytes, setOocytes] = useState<OocyteItem[]>(INITIAL_OOCYTES);
   const [searchQuery, setSearchQuery] = useState('');
@@ -257,16 +269,150 @@ export function OocyteEmbryoClient() {
     setTimeout(() => setToast(null), 3500);
   }
 
-  // Handle URL query parameter for tab
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const tabParam = params.get('tab');
-      if (tabParam && ['oocytes', 'fertilization', 'embryo-culture', 'embryo-transfer', 'blastocyst-transfer', 'cryopreservation', 'thaw', 'embryo-disposition'].includes(tabParam)) {
-        setActiveTab(tabParam as OocyteEmbryoTab);
+  // SMART Cryo Location Modal state for embryos / blastocysts / oocyte straws
+  const [locModalRow, setLocModalRow] = useState<{
+    module: 'et' | 'bt' | 'oocyte';
+    id: string;
+    source: string;
+    location: string;
+  } | null>(null);
+
+  async function handleSaveLocation(finalLoc: string) {
+    if (!locModalRow || !token) return;
+    const rowId = Number(locModalRow.id);
+    const mod = locModalRow.module;
+
+    if (mod === 'oocyte') {
+      setFrozenOocytes((prev) =>
+        prev.map((o) => (String(o.oocyteId) === locModalRow.id ? { ...o, location: finalLoc } : o))
+      );
+      try {
+        await updateSingleOocyteLocation(token, rowId, finalLoc);
+        showToast(`Location ${finalLoc ? `"${finalLoc}"` : 'cleared'} saved for oocyte straw.`);
+        loadFrozenOocytes();
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : 'Failed to update oocyte location.');
+      } finally {
+        setLocModalRow(null);
       }
+      return;
     }
-  }, []);
+
+    // Optimistically update table
+    if (mod === 'et') {
+      setEmbryos((prev) =>
+        prev.map((e) =>
+          e.id === locModalRow.id
+            ? { ...e, location: finalLoc, action: e.action === 0 && finalLoc ? 2 : e.action }
+            : e
+        )
+      );
+    } else {
+      setBlastocysts((prev) =>
+        prev.map((b) =>
+          b.id === locModalRow.id
+            ? { ...b, location: finalLoc, action: b.action === 0 && finalLoc ? 2 : b.action }
+            : b
+        )
+      );
+    }
+
+    try {
+      await apiFetch(
+        `/${mod}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({
+            rowId: isNaN(rowId) ? 0 : rowId,
+            location: finalLoc,
+            action: 2, // Auto-set Freeze (2) in SMART when assigning cryo location
+            patId,
+            satId,
+          }),
+        },
+        token
+      );
+      showToast(`Location ${finalLoc ? `"${finalLoc}"` : 'cleared'} saved for ${locModalRow.source} embryo.`);
+      loadOverview(selectedCycleId);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to update location in database.');
+    } finally {
+      setLocModalRow(null);
+    }
+  }
+
+  async function handleActionChange(mod: 'et' | 'bt', rowIdStr: string, newAction: number) {
+    if (!token) return;
+    const rowId = Number(rowIdStr);
+
+    if (mod === 'et') {
+      setEmbryos((prev) =>
+        prev.map((e) => (e.id === rowIdStr ? { ...e, action: newAction } : e))
+      );
+    } else {
+      setBlastocysts((prev) =>
+        prev.map((b) => (b.id === rowIdStr ? { ...b, action: newAction } : b))
+      );
+    }
+
+    try {
+      await apiFetch(
+        `/${mod}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({
+            rowId: isNaN(rowId) ? 0 : rowId,
+            action: newAction,
+            patId,
+            satId,
+          }),
+        },
+        token
+      );
+      showToast(`Action updated.`);
+      loadOverview(selectedCycleId);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to update action.');
+    }
+  }
+
+  // Handle URL query parameter for tab & cryo type reactively
+  const tabParam = searchParams?.get('tab');
+  const typeParam = searchParams?.get('type');
+
+  useEffect(() => {
+    if (
+      tabParam &&
+      [
+        'oocytes',
+        'fertilization',
+        'embryo-culture',
+        'embryo-transfer',
+        'blastocyst-transfer',
+        'cryopreservation',
+        'thaw',
+        'embryo-disposition',
+      ].includes(tabParam)
+    ) {
+      setActiveTab(tabParam as OocyteEmbryoTab);
+    }
+    if (typeParam === 'oocyte' || typeParam === 'embryo') {
+      setCryoType(typeParam);
+    }
+  }, [tabParam, typeParam]);
+
+  const loadFrozenOocytes = useCallback(() => {
+    if (!token || !patId) return;
+    setLoadingFrozenOocytes(true);
+    fetchSelfFrozenOocytes(token, patId, satId)
+      .then((data) => setFrozenOocytes(data || []))
+      .catch(() => setFrozenOocytes([]))
+      .finally(() => setLoadingFrozenOocytes(false));
+  }, [token, patId, satId]);
+
+  useEffect(() => {
+    loadFrozenOocytes();
+  }, [loadFrozenOocytes]);
 
   const loadOverview = useCallback((cycleIdToLoad?: string) => {
     if (!token || !ready) return;
@@ -319,6 +465,48 @@ export function OocyteEmbryoClient() {
   const sourceEmbryos = embryos.filter((row) => row.source === sourceTab);
   const sourceBlastocysts = blastocysts.filter((row) => row.source === sourceTab);
   const displayBlastocysts = bothLabs ? blastocysts : sourceBlastocysts;
+
+  const frozenEmbryosList = useMemo(() => {
+    const list: Array<{
+      id: string;
+      module: 'et' | 'bt';
+      stageLabel: string;
+      source: string;
+      gradeLabel: string;
+      location: string;
+      remark: string;
+    }> = [];
+
+    embryos.forEach((e) => {
+      if (e.action === 2 || (e.location && e.location.trim().length > 0)) {
+        list.push({
+          id: e.id,
+          module: 'et',
+          stageLabel: e.celler ? `Day 3 (${e.celler})` : 'Day 3 Cleavage',
+          source: e.source,
+          gradeLabel: e.grade || '—',
+          location: e.location || '',
+          remark: e.remark || 'Vitrified Cleavage Embryo',
+        });
+      }
+    });
+
+    blastocysts.forEach((b) => {
+      if (b.action === 2 || (b.location && b.location.trim().length > 0)) {
+        list.push({
+          id: b.id,
+          module: 'bt',
+          stageLabel: 'Day 5 Blastocyst',
+          source: b.source,
+          gradeLabel: [b.celler, b.grade, b.teGrade].filter(Boolean).join(' ') || '—',
+          location: b.location || '',
+          remark: b.remark || 'Vitrified Blastocyst',
+        });
+      }
+    });
+
+    return list;
+  }, [embryos, blastocysts]);
 
   const retrievedCount = summary.retrieved;
   const matureCount = summary.matureMII;
@@ -476,41 +664,83 @@ export function OocyteEmbryoClient() {
           </div>
         </div>
 
-        {/* IVF / ICSI / IVF+ICSI SOURCE TABS */}
-        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
-          {([
-            { id: 'IVF' as LabView, label: 'IVF', count: ivfSummary.retrieved },
-            { id: 'ICSI' as LabView, label: 'ICSI', count: icsiSummary.retrieved },
-            { id: 'BOTH' as LabView, label: 'IVF + ICSI', count: 0 },
-          ]).map((tab) => {
-            const active = labView === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => {
-                  setLabView(tab.id);
-                  if (tab.id !== 'BOTH') setSourceTab(tab.id);
-                }}
-                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
-                  active
-                    ? 'bg-purple-700 text-white shadow-sm'
-                    : 'bg-purple-50 text-purple-800 hover:bg-purple-100 border border-purple-200'
-                }`}
-              >
-                {tab.label}
-                <span className={`rounded-md px-1.5 py-0.5 text-[10px] ${active ? 'bg-white/20' : 'bg-white text-purple-700'}`}>
-                  {tab.id === 'BOTH' ? `${ivfSummary.retrieved} | ${icsiSummary.retrieved}` : tab.count}
-                </span>
-              </button>
-            );
-          })}
-          <span className="text-[11px] text-slate-500">
-            {labView === 'BOTH'
-              ? 'IVF and ICSI stay in separate columns. The badge is IVF | ICSI.'
-              : `Counts come from the ${sourceTab} screen`}
-            {summary.hasRecord || (retrieval?.ivfAllotted || retrieval?.icsiAllotted) ? '' : ' — no saved record yet'}
-          </span>
+        {/* IVF / ICSI / IVF+ICSI SOURCE TABS & QUICK MODULE LAUNCHERS */}
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {([
+              { id: 'IVF' as LabView, label: 'IVF', count: ivfSummary.retrieved },
+              { id: 'ICSI' as LabView, label: 'ICSI', count: icsiSummary.retrieved },
+              { id: 'BOTH' as LabView, label: 'IVF + ICSI', count: 0 },
+            ]).map((tab) => {
+              const active = labView === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    setLabView(tab.id);
+                    if (tab.id !== 'BOTH') setSourceTab(tab.id);
+                  }}
+                  className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+                    active
+                      ? 'bg-purple-700 text-white shadow-sm'
+                      : 'bg-purple-50 text-purple-800 hover:bg-purple-100 border border-purple-200'
+                  }`}
+                >
+                  {tab.label}
+                  <span className={`rounded-md px-1.5 py-0.5 text-[10px] ${active ? 'bg-white/20' : 'bg-white text-purple-700'}`}>
+                    {tab.id === 'BOTH' ? `${ivfSummary.retrieved} | ${icsiSummary.retrieved}` : tab.count}
+                  </span>
+                </button>
+              );
+            })}
+            <span className="text-[11px] text-slate-500 ml-1">
+              {labView === 'BOTH'
+                ? 'IVF and ICSI stay in separate columns. The badge is IVF | ICSI.'
+                : `Counts come from the ${sourceTab} screen`}
+              {summary.hasRecord || (retrieval?.ivfAllotted || retrieval?.icsiAllotted) ? '' : ' — no saved record yet'}
+            </span>
+          </div>
+
+          {/* Quick Action Navigation Buttons */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href={selectedCycleId ? `/ivf?cycId=${encodeURIComponent(selectedCycleId)}` : '/ivf'}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-purple-200 bg-white px-3 py-1.5 text-xs font-bold text-purple-800 shadow-2xs hover:bg-purple-50 hover:border-purple-400 transition"
+              title="Open IVF Insemination & Fertilization Entry"
+            >
+              <span>🔬</span>
+              <span>Open IVF Entry</span>
+              <span className="text-purple-400">→</span>
+            </Link>
+            <Link
+              href={selectedCycleId ? `/icsi?cycId=${encodeURIComponent(selectedCycleId)}` : '/icsi'}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-purple-200 bg-white px-3 py-1.5 text-xs font-bold text-purple-800 shadow-2xs hover:bg-purple-50 hover:border-purple-400 transition"
+              title="Open ICSI Insemination & Fertilization Entry"
+            >
+              <span>⚡</span>
+              <span>Open ICSI Entry</span>
+              <span className="text-purple-400">→</span>
+            </Link>
+            <Link
+              href={selectedCycleId ? `/et?cycId=${encodeURIComponent(selectedCycleId)}` : '/et'}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-purple-200 bg-white px-3 py-1.5 text-xs font-bold text-purple-800 shadow-2xs hover:bg-purple-50 hover:border-purple-400 transition"
+              title="Open Embryo Transfer (ET) Screen"
+            >
+              <span>🧫</span>
+              <span>Open ET</span>
+              <span className="text-purple-400">→</span>
+            </Link>
+            <Link
+              href={selectedCycleId ? `/bt?cycId=${encodeURIComponent(selectedCycleId)}` : '/bt'}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-purple-200 bg-white px-3 py-1.5 text-xs font-bold text-purple-800 shadow-2xs hover:bg-purple-50 hover:border-purple-400 transition"
+              title="Open Blastocyst Transfer (BT) Screen"
+            >
+              <span>🧬</span>
+              <span>Open BT</span>
+              <span className="text-purple-400">→</span>
+            </Link>
+          </div>
         </div>
         {retrieval && (retrieval.ivfAllotted > 0 || retrieval.icsiAllotted > 0 || retrieval.sperm?.sampleId) ? (
           <p className="mt-2 text-[11px] text-slate-500">
@@ -843,17 +1073,48 @@ export function OocyteEmbryoClient() {
           {/* TAB 4: EMBRYO TRANSFER (ET) */}
           {activeTab === 'embryo-transfer' && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                  ET Entry · {sourceTab} embryos
-                </h3>
-                <span className="text-[11px] text-slate-500">Action list matches SMART ET Entry</span>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800">
+                      ET Entry · {sourceTab} embryos
+                    </h3>
+                    <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-[10px] font-bold text-purple-700">
+                      {sourceEmbryos.length} Embryos
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-500">
+                    Action list and Cryo Coordinates match SMART ET Entry
+                  </span>
+                </div>
+                <Link
+                  href={selectedCycleId ? `/et?cycId=${encodeURIComponent(selectedCycleId)}` : '/et'}
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#6345A6] hover:bg-[#52378c] px-4 py-2 text-xs font-bold text-white shadow-xs transition"
+                >
+                  <span>Open Full Embryo Transfer (ET)</span>
+                  <span>→</span>
+                </Link>
               </div>
 
               {sourceEmbryos.length === 0 ? (
-                <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                  No {sourceTab} embryo rows in ET yet. Add embryos on the ET screen; Action options are Transfer, Freeze, Stuck, KeepForBlast, Discard, Donated, DonatedForResearch.
-                </p>
+                <div className="rounded-2xl border border-dashed border-purple-200 bg-purple-50/40 px-6 py-8 text-center">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-purple-100 text-purple-700 text-xl mb-3">
+                    🧫
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-800">No {sourceTab} embryo rows recorded in ET yet</h4>
+                  <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">
+                    Add embryos, log catheter details, transfer notes, and assign cryo vitrification coordinates on the ET screen.
+                  </p>
+                  <div className="mt-4">
+                    <Link
+                      href={selectedCycleId ? `/et?cycId=${encodeURIComponent(selectedCycleId)}` : '/et'}
+                      className="inline-flex items-center gap-2 rounded-xl bg-[#6345A6] hover:bg-[#52378c] px-5 py-2.5 text-xs font-bold text-white shadow-xs transition"
+                    >
+                      <span>Go to Full Embryo Transfer (ET) Screen</span>
+                      <span>→</span>
+                    </Link>
+                  </div>
+                </div>
               ) : (
                 <div className="overflow-x-auto rounded-xl border border-slate-200">
                   <table className="min-w-full divide-y divide-slate-200 text-xs">
@@ -876,8 +1137,8 @@ export function OocyteEmbryoClient() {
                           <td className="px-3 py-2">
                             <select
                               value={row.action}
-                              disabled
-                              className="h-8 min-w-[160px] rounded-lg border border-slate-200 bg-white px-2 text-xs"
+                              onChange={(e) => handleActionChange('et', row.id, Number(e.target.value))}
+                              className="h-8 min-w-[150px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-800 focus:border-purple-500"
                             >
                               {ET_ACTION_OPTIONS.map((opt) => (
                                 <option key={opt.id} value={opt.id}>
@@ -886,7 +1147,45 @@ export function OocyteEmbryoClient() {
                               ))}
                             </select>
                           </td>
-                          <td className="px-3 py-2 text-slate-600">{row.location || '—'}</td>
+                          <td className="px-3 py-2">
+                            {row.location ? (
+                              <div className="flex items-center gap-1.5">
+                                <span className="inline-flex items-center rounded-md bg-purple-50 px-2 py-1 font-mono text-[11px] font-bold text-purple-900 border border-purple-200">
+                                  {row.location}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setLocModalRow({
+                                      module: 'et',
+                                      id: row.id,
+                                      source: row.source,
+                                      location: row.location || '',
+                                    })
+                                  }
+                                  className="rounded-md border border-purple-300 bg-white px-2 py-0.5 text-[11px] font-bold text-purple-700 hover:bg-purple-50 transition"
+                                  title="Edit Cryo Location Coordinates"
+                                >
+                                  ✎
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setLocModalRow({
+                                    module: 'et',
+                                    id: row.id,
+                                    source: row.source,
+                                    location: '',
+                                  })
+                                }
+                                className="inline-flex items-center gap-1 rounded-lg border border-dashed border-purple-300 bg-purple-50/60 px-2.5 py-1 text-[11px] font-bold text-purple-700 hover:bg-purple-100 transition"
+                              >
+                                <span>+ Set Location</span>
+                              </button>
+                            )}
+                          </td>
                           <td className="px-3 py-2 text-slate-600">{row.remark || '—'}</td>
                         </tr>
                       ))}
@@ -897,23 +1196,51 @@ export function OocyteEmbryoClient() {
             </div>
           )}
 
+          {/* TAB 5: BLASTOCYST TRANSFER (BT) */}
           {activeTab === 'blastocyst-transfer' && (
             <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                  BT Entry · {bothLabs ? 'IVF and ICSI' : sourceTab} blastocysts
-                </h3>
-                <a href="/bt" className="text-[11px] font-bold text-purple-700 underline">
-                  Open full Blastocyst Transfer
-                </a>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800">
+                      BT Entry · {bothLabs ? 'IVF and ICSI' : sourceTab} blastocysts
+                    </h3>
+                    <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-[10px] font-bold text-purple-700">
+                      {displayBlastocysts.length} Blastocysts
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Expansion grade, ICM, TE, and LN2 vitrification coordinates
+                  </p>
+                </div>
+                <Link
+                  href={selectedCycleId ? `/bt?cycId=${encodeURIComponent(selectedCycleId)}` : '/bt'}
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#6345A6] hover:bg-[#52378c] px-4 py-2 text-xs font-bold text-white shadow-xs transition"
+                >
+                  <span>Open Full Blastocyst Transfer (BT)</span>
+                  <span>→</span>
+                </Link>
               </div>
-              <p className="text-[11px] text-slate-500">
-                SMART BT columns: Source, Expansion grade, ICM Grade, TE Grade, Action, Location, Remarks. IVF and ICSI are listed on separate rows.
-              </p>
+
               {displayBlastocysts.length === 0 ? (
-                <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                  No {bothLabs ? 'IVF or ICSI' : sourceTab} blastocyst rows yet. Add them on the BT screen.
-                </p>
+                <div className="rounded-2xl border border-dashed border-purple-200 bg-purple-50/40 px-6 py-8 text-center">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-purple-100 text-purple-700 text-xl mb-3">
+                    🧬
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-800">No {bothLabs ? 'IVF or ICSI' : sourceTab} blastocyst rows yet</h4>
+                  <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">
+                    Record blastocyst grades, transfer notes, recipient assignments, and vitrification locations on the BT screen.
+                  </p>
+                  <div className="mt-4">
+                    <Link
+                      href={selectedCycleId ? `/bt?cycId=${encodeURIComponent(selectedCycleId)}` : '/bt'}
+                      className="inline-flex items-center gap-2 rounded-xl bg-[#6345A6] hover:bg-[#52378c] px-5 py-2.5 text-xs font-bold text-white shadow-xs transition"
+                    >
+                      <span>Go to Full Blastocyst Transfer (BT) Screen</span>
+                      <span>→</span>
+                    </Link>
+                  </div>
+                </div>
               ) : (
                 <div className="overflow-x-auto rounded-xl border border-slate-200">
                   <table className="min-w-full divide-y divide-slate-200 text-xs">
@@ -936,14 +1263,62 @@ export function OocyteEmbryoClient() {
                           <td className="px-3 py-2 text-slate-700">{gradeLabel(BT_ICM_OPTIONS, row.grade)}</td>
                           <td className="px-3 py-2 text-slate-700">{row.teGrade ? gradeLabel(BT_TE_OPTIONS, row.teGrade) : '—'}</td>
                           <td className="px-3 py-2 text-slate-700">
-                            {row.actionLabel || '—'}
+                            <select
+                              value={row.action}
+                              onChange={(e) => handleActionChange('bt', row.id, Number(e.target.value))}
+                              className="h-8 min-w-[140px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-800 focus:border-purple-500"
+                            >
+                              {ET_ACTION_OPTIONS.map((opt) => (
+                                <option key={opt.id} value={opt.id}>
+                                  {opt.name}
+                                </option>
+                              ))}
+                            </select>
                             {row.recipient ? (
-                              <span className="ml-1 text-[10px] text-purple-700 font-semibold">
+                              <span className="ml-1 text-[10px] text-purple-700 font-semibold block">
                                 (Rec: {row.recipient})
                               </span>
                             ) : null}
                           </td>
-                          <td className="px-3 py-2 text-slate-600">{row.location || '—'}</td>
+                          <td className="px-3 py-2">
+                            {row.location ? (
+                              <div className="flex items-center gap-1.5">
+                                <span className="inline-flex items-center rounded-md bg-purple-50 px-2 py-1 font-mono text-[11px] font-bold text-purple-900 border border-purple-200">
+                                  {row.location}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setLocModalRow({
+                                      module: 'bt',
+                                      id: row.id,
+                                      source: row.source,
+                                      location: row.location || '',
+                                    })
+                                  }
+                                  className="rounded-md border border-purple-300 bg-white px-2 py-0.5 text-[11px] font-bold text-purple-700 hover:bg-purple-50 transition"
+                                  title="Edit Cryo Location Coordinates"
+                                >
+                                  ✎
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setLocModalRow({
+                                    module: 'bt',
+                                    id: row.id,
+                                    source: row.source,
+                                    location: '',
+                                  })
+                                }
+                                className="inline-flex items-center gap-1 rounded-lg border border-dashed border-purple-300 bg-purple-50/60 px-2.5 py-1 text-[11px] font-bold text-purple-700 hover:bg-purple-100 transition"
+                              >
+                                <span>+ Set Location</span>
+                              </button>
+                            )}
+                          </td>
                           <td className="px-3 py-2 text-slate-600">{row.remark || '—'}</td>
                         </tr>
                       ))}
@@ -957,45 +1332,279 @@ export function OocyteEmbryoClient() {
           {/* TAB 5: CRYOPRESERVATION */}
           {activeTab === 'cryopreservation' && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Vitrified Embryo Inventory (LN2 Coordinates)
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setShowFreezeModal(true)}
-                  className="rounded-xl bg-teal-600 hover:bg-teal-700 px-3.5 py-1.5 text-xs font-bold text-white uppercase"
-                >
-                  + Vitrify Embryo / Oocyte
-                </button>
+              {/* Header & Sub-Tab Toggle */}
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800">
+                      Cryopreservation &amp; LN₂ Vitrification
+                    </h3>
+                    <span className="rounded-full bg-teal-100 px-2.5 py-0.5 text-[10px] font-bold text-teal-800">
+                      {cryoType === 'oocyte'
+                        ? `${frozenOocytes.length} Vitrified Oocytes`
+                        : `${frozenEmbryosList.length} Vitrified Embryos`}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Storage coordinate format: Tank (CC), Canister (C), Goblet (GO), Visotube (VE/VI), Straw (ST)
+                  </p>
+                </div>
+
+                {/* Sub-Tabs: Oocytes vs Embryos Toggle */}
+                <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setCryoType('oocyte')}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                      cryoType === 'oocyte'
+                        ? 'bg-teal-700 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                    }`}
+                  >
+                    <span>🥚</span>
+                    <span>Oocytes Cryopreservation</span>
+                    <span
+                      className={`rounded-md px-1.5 py-0.2 text-[10px] ${
+                        cryoType === 'oocyte' ? 'bg-white/20' : 'bg-white text-teal-800'
+                      }`}
+                    >
+                      {frozenOocytes.length}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCryoType('embryo')}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                      cryoType === 'embryo'
+                        ? 'bg-teal-700 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                    }`}
+                  >
+                    <span>🧫</span>
+                    <span>Embryos Cryopreservation</span>
+                    <span
+                      className={`rounded-md px-1.5 py-0.2 text-[10px] ${
+                        cryoType === 'embryo' ? 'bg-white/20' : 'bg-white text-teal-800'
+                      }`}
+                    >
+                      {frozenEmbryosList.length}
+                    </span>
+                  </button>
+                </div>
               </div>
 
-              <div className="overflow-x-auto rounded-xl border border-slate-200">
-                <table className="min-w-full divide-y divide-slate-200 text-xs">
-                  <thead className="bg-slate-50 text-slate-600">
-                    <tr>
-                      <th className="px-3 py-2 text-left font-bold uppercase">Straw No.</th>
-                      <th className="px-3 py-2 text-left font-bold uppercase">Embryo ID</th>
-                      <th className="px-3 py-2 text-left font-bold uppercase">Stage &amp; Grade</th>
-                      <th className="px-3 py-2 text-left font-bold uppercase">Device</th>
-                      <th className="px-3 py-2 text-left font-bold uppercase">Location</th>
-                      <th className="px-3 py-2 text-left font-bold uppercase">Freeze Date</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 bg-white">
-                    {oocytes.filter((o) => o.cryoStrawNo).map((o) => (
-                      <tr key={o.id} className="hover:bg-slate-50">
-                        <td className="px-3 py-2 font-mono font-bold text-teal-700">{o.cryoStrawNo}</td>
-                        <td className="px-3 py-2 font-mono text-slate-800">{o.embryoId}</td>
-                        <td className="px-3 py-2 font-bold text-purple-700">{o.day5Grade}</td>
-                        <td className="px-3 py-2 text-slate-600">Cryotop (High Security)</td>
-                        <td className="px-3 py-2 text-slate-800 font-medium">Tank 1 &gt; Canister 3 &gt; Goblet Green</td>
-                        <td className="px-3 py-2 text-slate-500">23-Aug-2026</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              {/* Quick links to Passbooks & Cryonavigation */}
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-teal-50/50 border border-teal-100 p-2.5 text-xs">
+                <span className="text-[11px] text-teal-900 font-semibold">
+                  Lab Passbooks &amp; Witness Verification:
+                </span>
+                <div className="flex items-center gap-3">
+                  <Link
+                    href="/reports/passbook/oocytes-self"
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-800 hover:underline"
+                  >
+                    <span>📄 Frozen Oocytes Passbook</span>
+                  </Link>
+                  <span className="text-teal-300">•</span>
+                  <Link
+                    href="/reports/passbook/embryos-self"
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-800 hover:underline"
+                  >
+                    <span>📄 Embryos Passbook</span>
+                  </Link>
+                  <span className="text-teal-300">•</span>
+                  <Link
+                    href="/cryonavigation"
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-700 hover:underline"
+                  >
+                    <span>🧭 Cryonavigation (Scan Straw)</span>
+                  </Link>
+                </div>
               </div>
+
+              {/* OOCYTES CRYOPRESERVATION VIEW */}
+              {cryoType === 'oocyte' && (
+                <div className="space-y-3">
+                  {frozenOocytes.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-teal-200 bg-teal-50/40 px-6 py-8 text-center">
+                      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-teal-100 text-teal-700 text-xl mb-3">
+                        ❄️
+                      </div>
+                      <h4 className="text-sm font-bold text-slate-800">No vitrified oocyte records in LN₂ storage</h4>
+                      <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">
+                        Retrieved unfertilized oocytes can be vitrified and assigned LN₂ straw storage coordinates for social freezing or delayed ICSI cycles.
+                      </p>
+                      <div className="mt-4 flex items-center justify-center gap-3">
+                        <Link
+                          href="/cycle/entry"
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-teal-700 hover:bg-teal-800 px-4 py-2 text-xs font-bold text-white shadow-xs transition"
+                        >
+                          <span>Go to Cycle Retrieval</span>
+                          <span>→</span>
+                        </Link>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto rounded-xl border border-slate-200">
+                      <table className="min-w-full divide-y divide-slate-200 text-xs">
+                        <thead className="bg-slate-50 text-slate-600">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-bold uppercase">Straw Location</th>
+                            <th className="px-3 py-2 text-left font-bold uppercase">Maturity</th>
+                            <th className="px-3 py-2 text-left font-bold uppercase">Retrieval Cycle</th>
+                            <th className="px-3 py-2 text-left font-bold uppercase">Freeze Date</th>
+                            <th className="px-3 py-2 text-left font-bold uppercase">Embryologist</th>
+                            <th className="px-3 py-2 text-left font-bold uppercase">Storage Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 bg-white">
+                          {frozenOocytes.map((o) => (
+                            <tr key={o.oocyteId} className="hover:bg-slate-50">
+                              <td className="px-3 py-2">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="inline-flex items-center rounded-md bg-teal-50 px-2 py-1 font-mono text-[11px] font-bold text-teal-900 border border-teal-200">
+                                    {o.location || '—'}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setLocModalRow({
+                                        module: 'oocyte',
+                                        id: String(o.oocyteId),
+                                        source: o.source,
+                                        location: o.location || '',
+                                      })
+                                    }
+                                    className="rounded-md border border-teal-300 bg-white px-2 py-0.5 text-[11px] font-bold text-teal-700 hover:bg-teal-50 transition"
+                                    title="Edit Cryo Location Coordinates"
+                                  >
+                                    ✎
+                                  </button>
+                                </div>
+                              </td>
+                              <td className="px-3 py-2 font-bold text-slate-800">
+                                <span
+                                  className={`inline-flex rounded-md px-2 py-0.5 text-[10px] font-bold ${
+                                    o.source === 'Metaphase II'
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : 'bg-amber-100 text-amber-800'
+                                  }`}
+                                >
+                                  {o.source}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 font-mono text-slate-700">{o.cycleId || '—'}</td>
+                              <td className="px-3 py-2 text-slate-600">{o.dateOfCreation || '—'}</td>
+                              <td className="px-3 py-2 text-slate-600">{o.procDoneBy || '—'}</td>
+                              <td className="px-3 py-2">
+                                {o.inUse ? (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                                    <span>🔥</span>
+                                    <span>Thawed ({o.thawCycleId || 'Used'})</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-bold text-sky-800">
+                                    <span>❄️</span>
+                                    <span>In LN₂ Storage</span>
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* EMBRYOS CRYOPRESERVATION VIEW */}
+              {cryoType === 'embryo' && (
+                <div className="space-y-3">
+                  {frozenEmbryosList.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-purple-200 bg-purple-50/40 px-6 py-8 text-center">
+                      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-purple-100 text-purple-700 text-xl mb-3">
+                        🧬
+                      </div>
+                      <h4 className="text-sm font-bold text-slate-800">No embryos cryopreserved for this cycle yet</h4>
+                      <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">
+                        Cleavage embryos (Day 3) and Blastocysts (Day 5) can be cryopreserved on the Embryo Transfer (ET) or Blastocyst Transfer (BT) tabs by selecting &ldquo;Freeze&rdquo; action and assigning storage coordinates.
+                      </p>
+                      <div className="mt-4 flex items-center justify-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('embryo-transfer')}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-purple-300 bg-white px-4 py-2 text-xs font-bold text-purple-800 shadow-2xs hover:bg-purple-50 transition"
+                        >
+                          <span>🧫 Go to Embryo Transfer (ET)</span>
+                          <span>→</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('blastocyst-transfer')}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-purple-300 bg-white px-4 py-2 text-xs font-bold text-purple-800 shadow-2xs hover:bg-purple-50 transition"
+                        >
+                          <span>🧬 Go to Blastocyst Transfer (BT)</span>
+                          <span>→</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto rounded-xl border border-slate-200">
+                      <table className="min-w-full divide-y divide-slate-200 text-xs">
+                        <thead className="bg-slate-50 text-slate-600">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-bold uppercase">LN₂ Location</th>
+                            <th className="px-3 py-2 text-left font-bold uppercase">Stage</th>
+                            <th className="px-3 py-2 text-left font-bold uppercase">Source</th>
+                            <th className="px-3 py-2 text-left font-bold uppercase">Grade</th>
+                            <th className="px-3 py-2 text-left font-bold uppercase">Action</th>
+                            <th className="px-3 py-2 text-left font-bold uppercase">Remark</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 bg-white">
+                          {frozenEmbryosList.map((emb) => (
+                            <tr key={`${emb.module}-${emb.id}`} className="hover:bg-slate-50">
+                              <td className="px-3 py-2">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="inline-flex items-center rounded-md bg-purple-50 px-2 py-1 font-mono text-[11px] font-bold text-purple-900 border border-purple-200">
+                                    {emb.location || '—'}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setLocModalRow({
+                                        module: emb.module,
+                                        id: emb.id,
+                                        source: emb.source,
+                                        location: emb.location || '',
+                                      })
+                                    }
+                                    className="rounded-md border border-purple-300 bg-white px-2 py-0.5 text-[11px] font-bold text-purple-700 hover:bg-purple-50 transition"
+                                    title="Edit Cryo Location Coordinates"
+                                  >
+                                    ✎
+                                  </button>
+                                </div>
+                              </td>
+                              <td className="px-3 py-2 font-bold text-slate-800">{emb.stageLabel}</td>
+                              <td className="px-3 py-2 font-bold text-purple-700">{emb.source}</td>
+                              <td className="px-3 py-2 text-slate-700 font-medium">{emb.gradeLabel}</td>
+                              <td className="px-3 py-2">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-teal-100 px-2.5 py-0.5 text-[10px] font-bold text-teal-800">
+                                  <span>❄️</span>
+                                  <span>Freeze (Vitrified)</span>
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-slate-600">{emb.remark}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -1331,6 +1940,31 @@ export function OocyteEmbryoClient() {
           </div>
         </div>
       )}
+
+      {/* SMART CRYO LOCATION COORDINATES MODAL */}
+      <CryoLocationModal
+        isOpen={locModalRow !== null}
+        onClose={() => setLocModalRow(null)}
+        title={
+          locModalRow?.module === 'oocyte'
+            ? 'Set Location · Vitrified Oocyte Straw'
+            : `Set Location · ${locModalRow?.module?.toUpperCase()} Embryo`
+        }
+        subtitle={
+          locModalRow?.module === 'oocyte'
+            ? `Set LN₂ coordinates for ${locModalRow?.source || 'Oocyte'} straw`
+            : `Set SMART Cryopreservation coordinates for ${locModalRow?.source || 'Embryo'}`
+        }
+        initialLocation={locModalRow?.location || ''}
+        existingLocations={
+          locModalRow?.module === 'oocyte'
+            ? frozenOocytes.map((o) => o.location || '')
+            : locModalRow?.module === 'et'
+            ? embryos.map((e) => e.location || '')
+            : blastocysts.map((b) => b.location || '')
+        }
+        onApply={handleSaveLocation}
+      />
 
     </div>
   );

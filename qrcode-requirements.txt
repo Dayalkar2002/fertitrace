@@ -1,0 +1,223 @@
+==========================================================================================
+BAR CODE GENERATION VARIABLES.docx
+==========================================================================================
+BAR CODE GENERATION
+1.System code:
+2.QR Version Code:
+3.CLINIC ID:
+4.SMART ID/ FertiTrace ID:
+5.Cycle ID:
+6.Specimen ID:
+7.Specimen Type: ADD IN MASTER
+EMBRYO
+SEMEN
+OOCYTES
+8.START PROCESS DATE/TIME:        04 12 20 14 46
+(21, 22.23) ONLY LAST TWO DIGITS OF THE YEAR 2020 OR 2021 TIME:  14.46
+9.CONSUMABLE TYPE:   ADD IN MASTER
+01       SEMEN CONTAINER JAR
+02       CONICAL TUBE
+03       FALCON TUBE 5ML
+04       APPENDROFF
+05       IUI CATHETER
+06       FACLON TUBE 15ML
+07       PERTIDISH
+08       CENTRE WELL
+09       ICSI DISH
+10       FOUR WELL
+11       EMBRYO TRANSFER CATHETER
+12       VITRIFICATION STRAW
+13       VITRIFICATION CRYOVIAL
+10. PROCEDURE:  ADD IN MASTER
+HSA
+SQA
+IUI SINGLE HUSBAND
+IUI DOUBLE HUSBAND
+THAW HUSBAND SINGLE
+THAW HUSBAND DOUBLE
+THAW DONOR SINGLE
+THAW DONOR DOUBLE
+SELF HUSBAND FREEZING
+IVF CYCLE
+EMBRYO FREEZING
+FET CYCLE
+OCCYTE FREEZING
+THAW OCCYTE CYCLE
+ED CYCLE
+ED FREEZING CYCLE
+ED THAW CYCLE
+11.CONSUMNABLE /UNIT No.       01/02/03   ADD IN MASTER
+12.LABELS SIZE                                A /B/C/D/E/F    ADD IN MASTER
+13.Signature/checksum                ADD INMASTER
+1.I need to print the labels, multiple labels, different choices, multiple patients at a time. (Remember roll is to be changed as per the label selection.
+2.I need to print the labels, multiple labels, different choices, multiple patients at a time. (Remember roll is to be changed as per the label selection.
+3.printer and scanner need to configured as per the requirements. Location of alphanumeric code, and the qr code for the labels as per point no.3.The printer is usb /Wi-Fi enabled and the handled scanner is WIFI, Bluetooth, GPS enabled.
+4.when I scan the item with the scanner .it should open on a display screen and when I select it (if more than one in same scanning zone) it should validate the data from the data base, if right it says ok if wrong it says mismatch and if possible, an audible note or an alarm
+5.once validated and procedure is completed as per point 1, qr code should be disabled or non-editable. I think if it can be deleted also, I do not mind. (need to know the consequences)
+6.a similar thing is to be done for Pre assigned labels available in the market. We need to put a window or screen where the preassigned label is scanned and allotted to the designated data base.
+7.in the background there will be an inventory which will be generated for the above and when the procedure is completed it should be updated accordingly(database)
+8.i will need inputs how you intend to put it up on the screen in the software.
+9.we will add our points which are not captured here once I show you the software.
+Sample of data on qr code
+STRAW
+CC-BA     52 /            C-9           /   GO- BLUE     /    VE –RED       /         VI-BLACK     /   ST-BROWN
+BA 52      C9    GOBL VERD      VIBL    STBR
+CRYO VIAL
+CC-BA            54     /     C-1       /     CH-D         /        U            1    -          WHITE
+BA    54    C1   CHD      U    1      WH
+EMBRYO FREEZING STRAW/ OOCYTE STRAW
+FINAL BAR CODE        56101041220BA52C9GOBLVERDVIBLSTBR (33)
+SEMEN     FREEZING     VIAL
+FINAL BAR CODE
+56102041220BA54C1CHDU1WH (24)
+FINAL BAR CODE  may look like this
+56104041220HSA (14)                                                    semen jar
+56105041220IUI (14)                                                       semen jar
+56106030820IVF (14)                                                      petri dish
+
+==========================================================================================
+FERTITRACE_QR_Code_Data_Breakup.docx
+==========================================================================================
+FERTITRACE QR Code – Data Breakup Specification
+Example QR String: FT|V1|CL001|CASE26001234|CY2600456|SP000789|OOCYTE|DISH|01|20260908T0835|SIG12345
+QR Code Field Breakup
+Seq.
+QR Field
+Example Value
+Meaning
+Mandatory
+1
+System Code
+FT
+Identifies FERTITRACE
+Yes
+2
+QR Version
+V1
+Version of QR data structure
+Yes
+3
+Clinic/Site ID
+CL001
+IVF centre/site identifier
+Yes
+4
+Case/Patient ID
+CASE26001234
+Non-meaningful patient/case identifier
+Yes
+5
+Cycle ID
+CY2600456
+Specific IVF treatment cycle
+Yes
+6
+Specimen ID
+SP000789
+Unique identifier for the specimen
+Yes
+7
+Specimen Type
+OOCYTE
+Type of biological material
+Yes
+8
+Container Type
+DISH
+Physical container holding specimen
+Yes
+9
+Container/Unit No.
+01
+Specific dish/container number
+Yes
+10
+Creation Date/Time
+20260908T0835
+Date/time QR record was created
+Yes
+11
+Signature/Checksum
+SIG12345
+Validation/tamper-check value
+Yes
+How FERTITRACE Reads the QR
+FT → FERTITRACE
+V1 → QR format version
+CL001 → Clinic/Site
+CASE26001234 → Patient/Case record
+CY2600456 → IVF cycle
+SP000789 → Specimen
+OOCYTE → Biological material type
+DISH → Container type
+01 → Specific dish/container
+20260908T0835 → Creation date/time
+SIG12345 → QR validation/checksum
+Recommended FERTITRACE Design Principle
+Specimen ID (SP000789) should be treated as the primary traceability identifier rather than relying only on the Case/Patient ID. This allows FERTITRACE to maintain traceability as material moves through OPU → Oocyte → Fertilisation → Zygote → Embryo → Biopsy → Cryo → Thaw → Transfer.
+Security Note
+Avoid putting patient name, mobile number, address, Aadhaar/passport number, diagnosis, medical history, embryo grading, genetic results or other sensitive clinical information directly into the QR. The QR should identify the record; the FERTITRACE database should contain the detailed clinical and traceability information.
+
+==========================================================================================
+FERTITRACE_QR_Lifecycle_Database_Retention_Table.docx
+==========================================================================================
+FERTITRACE – QR Code Lifecycle & Database Retention
+Recommendation: Do NOT delete the QR record after the IVF procedure is completed. Retain the QR identity and complete traceability history in the FERTITRACE database, while changing the lifecycle status as the specimen/container progresses or reaches closure.
+QR Code Lifecycle Table
+Stage
+QR Record
+Recommended Status
+What FERTITRACE Should Do
+QR generated
+Retain
+ACTIVE
+Create QR identity and link it to the case/cycle/specimen/container.
+OPU completed
+Retain
+IN_PROCESS
+Record collection/witnessing event and maintain the same traceability identity.
+Fertilisation
+Retain
+IN_PROCESS
+Add fertilisation event linked to the existing traceability chain.
+Embryo development
+Retain
+IN_PROCESS
+Add embryology events and related specimen/embryo identifiers.
+Cryopreservation
+Retain
+CRYOPRESERVED
+Record cryo status, storage location and container/unit details.
+Thaw
+Retain
+THAWED
+Record thaw event, date/time, user and relevant witnessing details.
+Embryo transfer
+Retain
+TRANSFERRED / CLOSED
+Record transfer details and close the lifecycle when appropriate.
+Specimen disposed
+Retain
+DISPOSED / CLOSED
+Record disposal event, date/time, authorisation and reason.
+Procedure cancelled
+Retain
+CANCELLED
+Keep QR record and record cancellation reason; never delete the history.
+Recommended Database Principle
+QR Master – stores the permanent QR identity and its lifecycle status.
+Specimen/Container Master – stores the biological material and physical container details.
+Traceability Event / Audit Log – stores every important scan, witnessing, movement, status change and user action.
+Key Rule
+Never delete traceability history. When the specimen lifecycle ends, mark the QR as CLOSED, DISPOSED, TRANSFERRED or CANCELLED as applicable. The physical QR may become inactive, but its database record and audit history should remain available according to the applicable record-retention policy.
+
+==========================================================================================
+FLOW FOR QR CODE.docx
+==========================================================================================
+Q R CODE WORK
+Only QR Code                                                                               QR Plus RFID Code
+Code generation            Pre assigned labels                             Code generation           Pre assigned labels
+by system                                                                                         by system
+QR code scanner and printer                                                  QR code +RFID    scanner and printer
+Location          LF-1                                                                                                             LF-1
+Cryocan                                                                                                        Cryocan

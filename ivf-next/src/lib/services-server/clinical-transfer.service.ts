@@ -215,3 +215,50 @@ export async function saveClinicalTransferRecord(
     };
   }
 }
+
+export async function updateSingleEmbryoLocation(
+  module: 'et' | 'bt',
+  rowId: number,
+  location: string,
+  action?: number,
+  patId?: number,
+  satId?: number
+) {
+  if (!isDbConfigured()) {
+    return { success: true, message: 'Mock location updated' };
+  }
+  try {
+    const table = module === 'et' ? 'ETEmbryoDetailsGrid' : 'BTBlastocystDetailsGrid';
+    const idCol = module === 'et' ? 'ETEDID' : 'BTBDID';
+    const locCol = module === 'et' ? 'ETEDLocation' : 'BTBDLocation';
+    const actCol = module === 'et' ? 'ETEDAction' : 'BTBDAction';
+
+    const params: { name: string; value: unknown }[] = [
+      { name: '@Location', value: location },
+      { name: '@RowID', value: rowId },
+    ];
+    let query = `UPDATE ${table} SET ${locCol} = @Location`;
+    if (action !== undefined && action > 0) {
+      query += `, ${actCol} = @Action`;
+      params.push({ name: '@Action', value: action });
+    }
+    query += ` WHERE ${idCol} = @RowID`;
+    if (patId) {
+      query += ` AND PatID = @PatID`;
+      params.push({ name: '@PatID', value: patId });
+    }
+    if (satId) {
+      query += ` AND SatID = @SatID`;
+      params.push({ name: '@SatID', value: satId });
+    }
+
+    await executeText(query, params);
+    return { success: true, message: 'Embryo location updated successfully' };
+  } catch (err) {
+    console.error(`Failed to update ${module} embryo location:`, err);
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : 'Failed to update embryo location',
+    };
+  }
+}
