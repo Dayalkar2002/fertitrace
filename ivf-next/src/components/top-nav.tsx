@@ -4,13 +4,13 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TopNavMenu, MasterMenuItem } from '@/lib/nav-config';
-import { TOP_NAV_MENUS, getMasterColumns, FERTITRACE_IN_USE_COUNT, STANDARD_MASTER_COUNT } from '@/lib/nav-config';
+import { TOP_NAV_MENUS, getMasterColumns, FERTITRACE_IN_USE_COUNT, STANDARD_MASTER_COUNT, QR_CODE_MASTER_COUNT } from '@/lib/nav-config';
 
 export function TopNav() {
   const pathname = usePathname();
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [masterSearch, setMasterSearch] = useState('');
-  const [masterFilter, setMasterFilter] = useState<'all' | 'fertitrace' | 'standard'>('all');
+  const [masterFilter, setMasterFilter] = useState<'all' | 'fertitrace' | 'standard' | 'qrcode'>('all');
   const navRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -62,8 +62,9 @@ export function TopNav() {
     const q = masterSearch.trim().toLowerCase();
     return masterColumns.map((col) =>
       col.filter((item) => {
-        const matchesQuery = !q || item.label.toLowerCase().includes(q);
+        const matchesQuery = !q || item.label.toLowerCase().includes(q) || (item.qrRole && item.qrRole.toLowerCase().includes(q));
         if (!matchesQuery) return false;
+        if (masterFilter === 'qrcode') return !!item.isQrCode;
         if (masterFilter === 'fertitrace') return !!item.isFertiTrace;
         if (masterFilter === 'standard') return !item.isFertiTrace;
         return true;
@@ -121,9 +122,9 @@ export function TopNav() {
               {openMenu === menu.label && (
                 <>
                   {menu.label === 'Master' ? (
-                    /* Master Dropdown: All 32+ Masters across 4 columns with Two-Color Highlighting */
-                    <div className="absolute left-0 sm:left-[-120px] md:left-[-180px] lg:left-[-220px] xl:left-[-200px] top-full z-50 mt-2.5 w-[900px] max-w-[calc(100vw-280px)] rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150 max-h-[calc(100vh-120px)] overflow-y-auto">
-                      {/* Header with Title, Search, and Two-Color Legend */}
+                    /* Master Dropdown: All Masters across 4 columns with QR Code & Two-Color Highlighting */
+                    <div className="absolute left-0 sm:left-[-120px] md:left-[-180px] lg:left-[-220px] xl:left-[-200px] top-full z-50 mt-2.5 w-[940px] max-w-[calc(100vw-280px)] rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150 max-h-[calc(100vh-120px)] overflow-y-auto">
+                      {/* Header with Title, Search, and Legend */}
                       <div className="border-b border-slate-100 pb-3.5">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                           <div className="flex items-center gap-2.5">
@@ -138,6 +139,11 @@ export function TopNav() {
                                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
                                   All 4 Columns
                                 </span>
+                                {masterFilter === 'qrcode' && (
+                                  <span className="rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-[10px] font-bold">
+                                    ⚡ QR Generation Tables Active
+                                  </span>
+                                )}
                               </div>
                               <div className="text-[11px] text-slate-400">
                                 Clinic, laboratory witnessing & configuration registries
@@ -151,8 +157,8 @@ export function TopNav() {
                               type="text"
                               value={masterSearch}
                               onChange={(e) => setMasterSearch(e.target.value)}
-                              placeholder="Search masters..."
-                              className="w-48 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 transition focus:border-[#6345A6] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#6345A6]"
+                              placeholder="Search masters or QR fields..."
+                              className="w-56 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 transition focus:border-[#6345A6] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#6345A6]"
                             />
                             {masterSearch && (
                               <button
@@ -166,22 +172,27 @@ export function TopNav() {
                           </div>
                         </div>
 
-                        {/* Two-Color Legend & Filter Tabs */}
+                        {/* Tri-Color Legend & Filter Tabs */}
                         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-slate-50/80 px-3 py-2 border border-slate-100">
-                          {/* Legend showing both distinct colors */}
-                          <div className="flex items-center gap-3 text-[11px]">
+                          {/* Legend showing distinct colors including QR Code Tables */}
+                          <div className="flex flex-wrap items-center gap-2.5 text-[11px]">
                             <span className="flex items-center gap-1.5 font-bold text-purple-900">
                               <span className="h-2.5 w-2.5 rounded-full bg-[#6345A6] shadow-2xs ring-2 ring-purple-200" />
                               <span>FertiTrace In-Use ({FERTITRACE_IN_USE_COUNT})</span>
                             </span>
                             <span className="text-slate-300">•</span>
+                            <span className="flex items-center gap-1.5 font-bold text-emerald-800">
+                              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-2xs ring-2 ring-emerald-200" />
+                              <span>QR Code Tables ({QR_CODE_MASTER_COUNT})</span>
+                            </span>
+                            <span className="text-slate-300">•</span>
                             <span className="flex items-center gap-1.5 font-semibold text-slate-600">
                               <span className="h-2.5 w-2.5 rounded-full bg-slate-300 ring-2 ring-slate-100" />
-                              <span>Standard Masters ({STANDARD_MASTER_COUNT})</span>
+                              <span>Standard ({STANDARD_MASTER_COUNT})</span>
                             </span>
                           </div>
 
-                          {/* Filter Tabs */}
+                          {/* Filter Tabs with separate QR Code option */}
                           <div className="flex items-center gap-1">
                             <button
                               type="button"
@@ -193,6 +204,17 @@ export function TopNav() {
                               }`}
                             >
                               All ({totalVisibleMasters})
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setMasterFilter('qrcode')}
+                              className={`rounded-lg px-2.5 py-1 text-[10px] font-bold transition ${
+                                masterFilter === 'qrcode'
+                                  ? 'bg-emerald-600 text-white shadow-2xs ring-2 ring-emerald-300'
+                                  : 'text-emerald-700 bg-emerald-50/80 hover:bg-emerald-100 border border-emerald-200/70'
+                              }`}
+                            >
+                              ⚡ QR Code ({QR_CODE_MASTER_COUNT})
                             </button>
                             <button
                               type="button"
@@ -220,7 +242,7 @@ export function TopNav() {
                         </div>
                       </div>
 
-                      {/* 4 Columns of Masters with Two-Colour Highlighting */}
+                      {/* 4 Columns of Masters with QR Highlighting */}
                       <div className="mt-3.5 grid grid-cols-4 gap-3">
                         {filteredColumns.map((column, ci) => (
                           <div key={ci} className="space-y-1.5">
@@ -234,44 +256,68 @@ export function TopNav() {
                             ) : (
                               column.map((item) => {
                                 const isUsed = !!item.isFertiTrace;
+                                const isQr = !!item.isQrCode;
                                 return (
                                   <Link
                                     key={item.route + item.label}
                                     href={item.route}
                                     onClick={() => setOpenMenu(null)}
+                                    title={item.qrRole || item.label}
                                     className={`group flex items-center justify-between rounded-xl p-2 transition-all border ${
-                                      isUsed
+                                      masterFilter === 'qrcode'
+                                        ? 'bg-emerald-50/80 hover:bg-emerald-100/90 border-emerald-300 hover:border-emerald-400 shadow-2xs'
+                                        : isQr && isUsed
+                                        ? 'bg-purple-50/80 hover:bg-purple-100/90 border-purple-200/90 hover:border-purple-300 shadow-2xs ring-1 ring-emerald-500/20'
+                                        : isUsed
                                         ? 'bg-purple-50/80 hover:bg-purple-100/90 border-purple-200/90 hover:border-purple-300 shadow-2xs'
                                         : 'bg-slate-50/60 hover:bg-slate-100/90 border-slate-200/70 hover:border-slate-300 text-slate-700'
                                     }`}
                                   >
-                                    <div className="flex items-center gap-2 min-w-0 pr-1">
+                                    <div className="flex flex-col min-w-0 pr-1">
+                                      <div className="flex items-center gap-2">
+                                        <span
+                                          className={`h-2 w-2 rounded-full shrink-0 transition-transform group-hover:scale-125 ${
+                                            isQr
+                                              ? 'bg-emerald-500 ring-2 ring-emerald-200'
+                                              : isUsed
+                                              ? 'bg-[#6345A6] ring-2 ring-purple-200'
+                                              : 'bg-slate-400'
+                                          }`}
+                                        />
+                                        <span
+                                          className={`text-xs truncate transition-colors ${
+                                            isQr
+                                              ? 'font-bold text-slate-900 group-hover:text-emerald-700'
+                                              : isUsed
+                                              ? 'font-bold text-purple-950 group-hover:text-[#6345A6]'
+                                              : 'font-medium text-slate-700 group-hover:text-slate-900'
+                                          }`}
+                                        >
+                                          {item.label}
+                                        </span>
+                                      </div>
+                                      {masterFilter === 'qrcode' && item.qrRole && (
+                                        <span className="mt-0.5 text-[9px] font-medium text-emerald-700 truncate pl-4">
+                                          {item.qrRole}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      {isQr && (
+                                        <span className="rounded-md px-1 py-0.5 text-[8px] font-black leading-none bg-emerald-600 text-white shadow-2xs" title={item.qrRole}>
+                                          ⚡ QR
+                                        </span>
+                                      )}
                                       <span
-                                        className={`h-2 w-2 rounded-full shrink-0 transition-transform group-hover:scale-125 ${
+                                        className={`rounded-md px-1.5 py-0.5 text-[8.5px] font-bold leading-none ${
                                           isUsed
-                                            ? 'bg-[#6345A6] ring-2 ring-purple-200'
-                                            : 'bg-slate-400'
-                                        }`}
-                                      />
-                                      <span
-                                        className={`text-xs truncate transition-colors ${
-                                          isUsed
-                                            ? 'font-bold text-purple-950 group-hover:text-[#6345A6]'
-                                            : 'font-medium text-slate-700 group-hover:text-slate-900'
+                                            ? 'bg-[#6345A6] text-white shadow-2xs'
+                                            : 'bg-slate-200/80 text-slate-600'
                                         }`}
                                       >
-                                        {item.label}
+                                        {isUsed ? 'In Use' : 'Standard'}
                                       </span>
                                     </div>
-                                    <span
-                                      className={`shrink-0 rounded-md px-1.5 py-0.5 text-[8.5px] font-bold leading-none ${
-                                        isUsed
-                                          ? 'bg-[#6345A6] text-white shadow-2xs'
-                                          : 'bg-slate-200/80 text-slate-600'
-                                      }`}
-                                    >
-                                      {isUsed ? 'In Use' : 'Standard'}
-                                    </span>
                                   </Link>
                                 );
                               })
@@ -287,16 +333,16 @@ export function TopNav() {
                             Showing {totalVisibleMasters} registries
                           </span>
                           <span className="text-slate-300">•</span>
-                          <span className="text-[11px] text-purple-800 font-bold">
-                            {FERTITRACE_IN_USE_COUNT} highlighted for FertiTrace project
+                          <span className="text-[11px] text-emerald-800 font-bold">
+                            {QR_CODE_MASTER_COUNT} active in QR code generation
                           </span>
                         </div>
                         <Link
-                          href="/masters"
+                          href="/masters/qr-code"
                           onClick={() => setOpenMenu(null)}
-                          className="font-bold text-[#6345A6] hover:underline flex items-center gap-1"
+                          className="font-bold text-emerald-700 hover:text-emerald-800 hover:underline flex items-center gap-1 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200"
                         >
-                          <span>Open Full Master Directory</span>
+                          <span>Open QR Code Master & Data Dictionary</span>
                           <span>→</span>
                         </Link>
                       </div>
