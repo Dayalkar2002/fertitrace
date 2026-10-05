@@ -138,12 +138,12 @@ export function CycleEntryForm() {
   });
   const retrievalPayloadRef = useRef<RetrievalData>({});
 
-  // Keyboard shortcut: Ctrl+S / Cmd+S to Save & Next
+  // Keyboard shortcut: Ctrl+S / Cmd+S to Save
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        void save(true);
+        void save();
       }
     }
     window.addEventListener('keydown', handleKeyDown);
@@ -496,22 +496,10 @@ export function CycleEntryForm() {
       }
       setSuccess('Cycle entry saved successfully.');
       setTimeout(() => setToastMessage(null), 3000);
-      if (andNext && saved.cycleId) {
-        router.push(`/cycle/retrieval/${saved.cycleId}`);
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save cycle entry.');
     } finally {
       setSaving(false);
-    }
-  }
-
-  function next() {
-    if (currentCycle?.cycleId) {
-      router.push(`/cycle/retrieval/${currentCycle.cycleId}`);
-    } else {
-      setToastMessage('Please save the cycle entry first before proceeding.');
-      setTimeout(() => setToastMessage(null), 3500);
     }
   }
 
@@ -1100,12 +1088,12 @@ export function CycleEntryForm() {
 
         {/* 7. Action Footer Buttons */}
         <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
-          {/* SAVE & NEXT */}
+          {/* SAVE */}
           <button
             type="button"
             disabled={saving}
-            onClick={() => void save(true)}
-            title="Press Ctrl+S / ⌘S to Save & Next"
+            onClick={() => void save()}
+            title="Press Ctrl+S / ⌘S to Save"
             className="flex items-center gap-2 rounded-xl bg-[#16a34a] hover:bg-[#15803d] px-6 py-2.5 text-sm font-bold text-white shadow-md transition active:scale-[0.99] disabled:opacity-60"
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1113,24 +1101,30 @@ export function CycleEntryForm() {
               <polyline points="17 21 17 13 7 13 7 21" />
               <polyline points="7 3 7 8 15 8" />
             </svg>
-            <span>SAVE & NEXT</span>
+            <span>{saving ? 'SAVING…' : 'SAVE'}</span>
             <kbd className="hidden sm:inline-block rounded bg-emerald-700/60 px-1.5 py-0.5 text-[10px] font-mono text-emerald-100">
               Ctrl+S
             </kbd>
           </button>
 
-          {/* NEXT */}
-          <button
-            type="button"
-            onClick={next}
-            className="flex items-center gap-2 rounded-xl bg-[#1d4ed8] hover:bg-[#1e40af] px-6 py-2.5 text-sm font-bold text-white shadow-md transition active:scale-[0.99]"
-          >
-            <span>NEXT</span>
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M5 12h14" />
-              <path d="M12 5l7 7-7 7" />
-            </svg>
-          </button>
+          {/* NEXT (Blocked - Under Development) */}
+          <div className="relative group">
+            <button
+              type="button"
+              disabled
+              title="Development is not ready for Next"
+              className="flex items-center gap-2 rounded-xl bg-slate-300 dark:bg-slate-700 px-6 py-2.5 text-sm font-bold text-slate-500 dark:text-slate-400 shadow-xs cursor-not-allowed select-none"
+            >
+              <span>NEXT</span>
+              <svg className="h-4 w-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M5 12h14" />
+                <path d="M12 5l7 7-7 7" />
+              </svg>
+            </button>
+            <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2.5 py-1 text-[11px] font-medium text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100 z-50">
+              Development is not ready for Next
+            </span>
+          </div>
 
           {/* CANCEL */}
           <button

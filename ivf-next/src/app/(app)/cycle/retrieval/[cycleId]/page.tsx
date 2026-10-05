@@ -1,4 +1,4 @@
-import { CycleRetrievalForm } from '@/components/cycle-retrieval-form';
+import { redirect } from 'next/navigation';
 
 export default async function CycleRetrievalPage({
   params,
@@ -6,5 +6,5 @@ export default async function CycleRetrievalPage({
   params: Promise<{ cycleId: string }>;
 }) {
   const { cycleId } = await params;
-  return <CycleRetrievalForm cycleId={cycleId} />;
+  redirect(`/cycle/entry${cycleId ? `?cycleId=${encodeURIComponent(cycleId)}` : ''}`);
 }
