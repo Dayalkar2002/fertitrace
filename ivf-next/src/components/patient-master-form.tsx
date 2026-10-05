@@ -49,6 +49,8 @@ const emptyForm = (): PatientMasterDetail & { patId: number } => ({
   husbandPassport: '',
   artClinicReg: '',
   pcpndtClinicReg: '',
+  smartCardUid: '',
+  rfidTagId: '',
 });
 
 function toInputDate(value: string | null | undefined): string {
@@ -257,6 +259,8 @@ export function PatientMasterForm() {
       husbandPassport: detail.husbandPassport || '',
       artClinicReg: detail.artClinicReg || '',
       pcpndtClinicReg: detail.pcpndtClinicReg || '',
+      smartCardUid: detail.smartCardUid || '',
+      rfidTagId: detail.rfidTagId || '',
     });
   }
 
@@ -625,6 +629,65 @@ export function PatientMasterForm() {
             </div>
           </SectionCard>
 
+          {/* Section E: Smart Card & Electronic Witnessing (RFID / NFC) */}
+          <SectionCard
+            title="5. Smart Card & Electronic Witnessing (RFID / NFC)"
+            icon="💳"
+            accent="border-teal-200/80 bg-teal-50/20"
+          >
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Smart Card RFID UID / EPC
+                  <div className="mt-1 flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={form.smartCardUid || ''}
+                      onChange={(e) => updateField('smartCardUid', e.target.value)}
+                      placeholder="e.g. FT-RFID-00045872 or tap blank card"
+                      className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 font-mono text-xs text-slate-800 outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-600/15"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const randUid = `FT-RFID-${Math.floor(10000000 + Math.random() * 90000000)}`;
+                        updateField('smartCardUid', randUid);
+                      }}
+                      className="shrink-0 rounded-xl bg-teal-600 hover:bg-teal-700 px-3 py-2 text-xs font-bold text-white shadow-2xs transition active:scale-95 flex items-center gap-1.5"
+                      title="Simulate scanning a new RFID Smart Card on desktop reader"
+                    >
+                      <span>📡</span>
+                      <span>Tap / Scan Card</span>
+                    </button>
+                  </div>
+                </label>
+                <p className="mt-1 text-[10.5px] text-slate-500">
+                  Links this patient's lifetime identity to an embedded UHF RFID (865-868 MHz) or NFC (13.56 MHz) smart card. One Patient – One Card – Lifetime Identity.
+                </p>
+              </div>
+
+              <div>
+                <Field
+                  label="Secondary RFID Tag ID (Optional)"
+                  value={form.rfidTagId || ''}
+                  onChange={(v) => updateField('rfidTagId', v)}
+                  placeholder="e.g. EPC-96-HEX"
+                />
+              </div>
+
+              <div className="flex flex-col justify-end">
+                <button
+                  type="button"
+                  onClick={() => router.push('/smartcard')}
+                  className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-teal-300 bg-teal-50 px-3 text-xs font-bold text-teal-800 hover:bg-teal-100 transition shadow-2xs"
+                >
+                  <span>🖨️ Open Smart Card Studio</span>
+                  <span>→</span>
+                </button>
+              </div>
+            </div>
+          </SectionCard>
+
           {/* Form Action Buttons */}
           <div className="flex items-center gap-3 pt-2">
             <button
@@ -762,8 +825,123 @@ export function PatientMasterForm() {
             </div>
           </div>
 
-          {/* Patients Modern Data Table */}
-          <div className="overflow-x-auto rounded-xl border border-slate-200/90 shadow-2xs">
+          {/* Mobile Patient Cards View (phones) */}
+          <div className="space-y-3 sm:hidden">
+            {paginatedRows.length === 0 ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-xs text-slate-500">
+                No patients match the search or filter criteria.
+              </div>
+            ) : (
+              paginatedRows.map((row) => (
+                <div
+                  key={row.id}
+                  onClick={() => void openRowPopup(row)}
+                  className="rounded-2xl border border-slate-200/90 bg-white p-3.5 shadow-2xs space-y-2.5 transition active:scale-[0.99]"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-purple-100 text-xs font-black text-purple-700">
+                        {getInitials(row.name)}
+                      </div>
+                      <div>
+                        <div className="font-bold text-slate-900 text-xs">{row.name}</div>
+                        <div className="text-[10px] text-slate-500 font-mono">
+                          UHID: <strong>{row.refNo || `PT-00${row.id}`}</strong>
+                        </div>
+                      </div>
+                    </div>
+                    {row.category && (
+                      <span className="rounded-md bg-purple-50 px-2 py-0.5 text-[10px] font-bold text-purple-700 border border-purple-200 shrink-0">
+                        {row.category}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-1 text-[11px] text-slate-600 bg-slate-50/80 p-2 rounded-xl">
+                    <div>
+                      <span className="text-slate-400">Partner: </span>
+                      <span className="font-semibold text-slate-800">{row.husbandName || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400">Mobile: </span>
+                      <span className="font-semibold text-slate-800">{row.mobile || '—'}</span>
+                    </div>
+                    {row.cycleId && (
+                      <div className="col-span-2">
+                        <span className="text-slate-400">Cycle: </span>
+                        <span className="font-bold text-blue-700 font-mono">{row.cycleId}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 pt-0.5" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        selectPatient({
+                          id: row.id,
+                          uhid: row.refNo,
+                          name: row.name,
+                          partner: row.husbandName,
+                          age: 0,
+                          gender: '',
+                          aadhar: row.aadhar || '',
+                          satelliteId: row.satId || 0,
+                          mobile: row.mobile,
+                          category: row.category,
+                        });
+                        router.push('/cycle/creation');
+                      }}
+                      className="flex-1 rounded-lg bg-blue-600 hover:bg-blue-700 py-1.5 text-center text-[11px] font-bold text-white shadow-2xs"
+                    >
+                      Cycle →
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        selectPatient({
+                          id: row.id,
+                          name: row.name,
+                          uhid: row.refNo || `PT-00${row.id}`,
+                          partner: row.husbandName,
+                          age: 0,
+                          gender: '',
+                          aadhar: row.aadhar || '',
+                          satelliteId: row.satId || 0,
+                          mobile: row.mobile,
+                          category: row.category,
+                        });
+                        router.push('/smartcard');
+                      }}
+                      className="rounded-lg border border-teal-200 bg-teal-50 px-2.5 py-1.5 text-[11px] font-bold text-teal-800"
+                    >
+                      💳 Card
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void selectRow(row)}
+                      className="rounded-lg border border-purple-200 bg-purple-50 px-2.5 py-1.5 text-[11px] font-bold text-purple-700"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void deleteRow(row)}
+                      className="rounded-lg p-1.5 text-slate-400 hover:text-red-600"
+                    >
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Patients Desktop / Tablet Data Table */}
+          <div className="hidden sm:block overflow-x-auto touch-scroll rounded-xl border border-slate-200/90 shadow-2xs">
             <table className="w-full min-w-[1050px] text-left text-xs">
               <thead className="bg-[#1e293b] text-[11px] font-bold uppercase tracking-wider text-slate-200">
                 <tr>
@@ -809,6 +987,30 @@ export function PatientMasterForm() {
                         >
                           <span>Cycle</span>
                           <span className="text-[10px]">→</span>
+                        </button>
+
+                        {/* Smart Card Issue / View */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            selectPatient({
+                              id: row.id,
+                              name: row.name,
+                              uhid: row.refNo || `PT-00${row.id}`,
+                              partner: row.husbandName,
+                              age: 0,
+                              gender: '',
+                              aadhar: row.aadhar || '',
+                              satelliteId: row.satId || 0,
+                              mobile: row.mobile,
+                              category: row.category,
+                            });
+                            router.push('/smartcard');
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg border border-teal-200 bg-teal-50 hover:bg-teal-100 px-2 py-1 text-[11px] font-bold text-teal-800 transition active:scale-95"
+                          title="Open Smart Card Studio for this patient"
+                        >
+                          <span>💳 Card</span>
                         </button>
 
                         {/* Edit in form */}
@@ -1036,11 +1238,11 @@ export function PatientMasterForm() {
       {/* 4. PATIENT DETAILS MODAL POPUP */}
       {showDetailModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-2 sm:p-4 backdrop-blur-xs"
           onClick={() => setShowDetailModal(false)}
         >
           <div
-            className="max-h-[85vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-slate-900/5"
+            className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-4 sm:p-6 shadow-2xl ring-1 ring-slate-900/5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
@@ -1049,7 +1251,7 @@ export function PatientMasterForm() {
                   {selectedDetail ? getInitials(selectedDetail.name) : 'P'}
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-slate-900">
+                  <h2 className="text-base sm:text-lg font-bold text-slate-900">
                     {selectedDetail?.name || 'Patient Details'}
                   </h2>
                   <p className="text-xs text-slate-500">
@@ -1070,7 +1272,7 @@ export function PatientMasterForm() {
               <p className="py-6 text-center text-xs text-slate-500">Loading patient details…</p>
             ) : selectedDetail ? (
               <div className="space-y-4">
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid gap-2.5 sm:gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                   <DetailItem label="Full Name" value={selectedDetail.name} />
                   <DetailItem label="Ref No" value={selectedDetail.refNo} />
                   <DetailItem label="Category" value={selectedDetail.category} />
@@ -1104,10 +1306,17 @@ export function PatientMasterForm() {
                   <DetailItem label="Address" value={selectedDetail.address} className="sm:col-span-2 lg:col-span-3" />
                 </div>
 
-                <div className="mt-6 flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
+                <div className="mt-6 flex flex-col-reverse sm:flex-row items-center justify-end gap-2 sm:gap-3 border-t border-slate-100 pt-4">
                   <button
                     type="button"
-                    className="rounded-xl bg-gradient-to-r from-[#6345A6] to-[#7c3aed] px-5 py-2 text-xs font-bold text-white shadow-sm hover:from-[#5b3da0] hover:to-[#6d28d9] transition"
+                    className="w-full sm:w-auto rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                    onClick={() => setShowDetailModal(false)}
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full sm:w-auto rounded-xl bg-gradient-to-r from-[#6345A6] to-[#7c3aed] px-5 py-2 text-xs font-bold text-white shadow-sm hover:from-[#5b3da0] hover:to-[#6d28d9] transition"
                     onClick={() => {
                       patchForm(selectedDetail);
                       setShowDetailModal(false);
@@ -1116,13 +1325,6 @@ export function PatientMasterForm() {
                     }}
                   >
                     ✏️ Load into Form to Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
-                    onClick={() => setShowDetailModal(false)}
-                  >
-                    Close
                   </button>
                 </div>
               </div>

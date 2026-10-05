@@ -252,5 +252,35 @@ body {
   animation: checkmark-ripple 1.6s ease-out infinite;
 }
 
+/* Mobile & Responsive Utilities */
+.touch-scroll {
+  -webkit-overflow-scrolling: touch;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@media (max-width: 768px) {
+  .mobile-scroll-hint {
+    position: relative;
+  }
+  .mobile-scroll-hint::after {
+    content: '⇄ swipe to view full table';
+    display: block;
+    font-size: 10px;
+    font-weight: 600;
+    color: #94a3b8;
+    text-align: right;
+    padding-top: 4px;
+    padding-right: 4px;
+  }
+}
+
+
 
 

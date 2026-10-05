@@ -19,6 +19,8 @@ export interface PatientMasterRow {
   aadhar?: string;
   husbandAadhar?: string;
   mobile?: string;
+  smartCardUid?: string;
+  rfidTagId?: string;
   raw?: Record<string, unknown>;
 }
 
@@ -56,6 +58,8 @@ export interface PatientMasterDetail {
   husbandPassport?: string;
   artClinicReg?: string;
   pcpndtClinicReg?: string;
+  smartCardUid?: string;
+  rfidTagId?: string;
 }
 
 export interface PatientLookups {

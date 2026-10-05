@@ -107,7 +107,7 @@ export function CommonMasterForm({ catId }: CommonMasterFormProps) {
         </button>
       </form>
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200">
+      <div className="overflow-x-auto touch-scroll rounded-lg border border-slate-200">
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
             <tr>

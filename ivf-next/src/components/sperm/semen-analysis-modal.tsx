@@ -21,26 +21,26 @@ export function SemenAnalysisModal({
   if (!isOpen || !analysis) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-2 sm:p-4 backdrop-blur-xs animate-fadeIn">
       <div className="relative flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
         {/* Modal Header */}
-        <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-emerald-50 via-teal-50 to-cyan-50 px-6 py-4">
-          <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm text-lg">
+        <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-emerald-50 via-teal-50 to-cyan-50 px-4 py-3 sm:px-6 sm:py-4">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <span className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm text-base sm:text-lg shrink-0">
               🔬
             </span>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-800">
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                <h2 className="text-sm sm:text-base font-bold text-slate-800">
                   Semen Analysis Details (SMART Form)
                 </h2>
                 {analysis.cycleId && (
-                  <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-300">
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.2 text-[10px] sm:text-xs font-bold text-emerald-800 border border-emerald-300">
                     Cycle: {analysis.cycleId}
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-500">
+              <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
                 Patient: <span className="font-semibold text-slate-700">{patientName || `Patient #${analysis.patientId}`}</span>
                 {partnerName && <span> (H/O {partnerName})</span>}
                 &nbsp;•&nbsp; Date: <span className="font-semibold text-slate-700">{analysis.date || '—'}</span>
@@ -50,7 +50,7 @@ export function SemenAnalysisModal({
           <button
             type="button"
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition shrink-0"
             title="Close"
           >
             ✕
@@ -58,7 +58,7 @@ export function SemenAnalysisModal({
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 text-xs text-slate-700">
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-4 sm:space-y-6 text-xs text-slate-700">
           {/* Top Metadata Strip */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7 rounded-xl border border-slate-200 bg-slate-50/70 p-3.5">
             <div>

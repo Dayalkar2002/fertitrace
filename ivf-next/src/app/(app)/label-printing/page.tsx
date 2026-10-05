@@ -313,13 +313,13 @@ export default function LabelPrintingPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           {/* Toggle Generation Mode */}
-          <div className="flex rounded-xl bg-slate-100 p-1 text-xs font-bold text-slate-600">
+          <div className="flex rounded-xl bg-slate-100 p-1 text-xs font-bold text-slate-600 w-full sm:w-auto justify-between sm:justify-start">
             <button
               type="button"
               onClick={() => setGenerationMode('system')}
-              className={`rounded-lg px-3 py-1.5 transition ${
+              className={`flex-1 sm:flex-initial text-center rounded-lg px-3 py-1.5 transition ${
                 generationMode === 'system'
                   ? 'bg-white text-[#6345A6] shadow-2xs'
                   : 'hover:text-slate-900'
@@ -330,7 +330,7 @@ export default function LabelPrintingPage() {
             <button
               type="button"
               onClick={() => setGenerationMode('preassigned')}
-              className={`rounded-lg px-3 py-1.5 transition ${
+              className={`flex-1 sm:flex-initial text-center rounded-lg px-3 py-1.5 transition ${
                 generationMode === 'preassigned'
                   ? 'bg-white text-[#6345A6] shadow-2xs'
                   : 'hover:text-slate-900'
@@ -344,7 +344,7 @@ export default function LabelPrintingPage() {
             type="button"
             onClick={() => handlePrint()}
             disabled={!currentRecord}
-            className="flex items-center gap-2 rounded-xl bg-[#6345A6] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#52388c] transition disabled:opacity-50"
+            className="flex w-full sm:w-auto justify-center items-center gap-2 rounded-xl bg-[#6345A6] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#52388c] transition disabled:opacity-50"
           >
             <span>🖨️</span>
             <span>Print Current Label</span>

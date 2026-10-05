@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePatient } from '@/contexts/patient-context';
 import { useAuth } from '@/contexts/auth-context';
 import { apiFetch } from '@/lib/api';
@@ -88,13 +88,21 @@ export function PatientCommunication() {
   const { token, user } = useAuth();
   const { selectedPatient, patients, loadPatients, selectPatient, selectedSatellite } = usePatient();
   const [smsPhone, setSmsPhone] = useState('');
+  const [emailRecipient, setEmailRecipient] = useState('');
 
   const [patientDetail, setPatientDetail] = useState<{
     mobile?: string;
     phone?: string;
     age?: number;
     uhid?: string;
+    email?: string;
   } | null>(null);
+
+  useEffect(() => {
+    if (selectedPatient?.email) {
+      setEmailRecipient(selectedPatient.email);
+    }
+  }, [selectedPatient?.email]);
 
   useEffect(() => {
     if (!selectedPatient?.id) {
@@ -102,13 +110,15 @@ export function PatientCommunication() {
       return;
     }
 
-    if (selectedPatient.mobile || selectedPatient.phone) {
+    if (selectedPatient.mobile || selectedPatient.phone || selectedPatient.email) {
       setPatientDetail({
         mobile: selectedPatient.mobile || selectedPatient.phone,
         phone: selectedPatient.phone,
         age: selectedPatient.age,
         uhid: selectedPatient.uhid,
+        email: selectedPatient.email,
       });
+      if (selectedPatient.email) setEmailRecipient(selectedPatient.email);
       return;
     }
 
@@ -132,11 +142,13 @@ export function PatientCommunication() {
             phone: String(d.phone || ''),
             age: Number(calcAge || d.age || 0),
             uhid: String(d.refNo || ''),
+            email: String(d.email || ''),
           });
+          if (d.email) setEmailRecipient(String(d.email));
         }
       })
       .catch(() => {});
-  }, [selectedPatient?.id, selectedPatient?.mobile, selectedPatient?.phone, selectedPatient?.age, selectedPatient?.uhid, token]);
+  }, [selectedPatient?.id, selectedPatient?.mobile, selectedPatient?.phone, selectedPatient?.age, selectedPatient?.uhid, selectedPatient?.email, token]);
 
   // Patient Demographic details (matches mockup defaults or active selected patient)
   const patientId =
@@ -189,6 +201,19 @@ export function PatientCommunication() {
   const [history, setHistory] = useState<CommunicationRecord[]>(INITIAL_HISTORY);
   const [sending, setSending] = useState(false);
   const [showVariablesDropdown, setShowVariablesDropdown] = useState(false);
+  const variablesDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (variablesDropdownRef.current && !variablesDropdownRef.current.contains(event.target as Node)) {
+        setShowVariablesDropdown(false);
+      }
+    }
+    if (showVariablesDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showVariablesDropdown]);
   const [selectedRecord, setSelectedRecord] = useState<CommunicationRecord | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [copiedMobile, setCopiedMobile] = useState(false);
@@ -269,6 +294,11 @@ export function PatientCommunication() {
 
   async function handleSendMessage() {
     if (!message.trim()) return;
+    if (channel === 'Email' && (!emailRecipient.trim() || !emailRecipient.includes('@'))) {
+      setToastMessage('Enter a valid patient email address before sending.');
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
+    }
     if (channel === 'SMS' && smsDigits.length < 10) {
       setToastMessage('Enter the patient phone number before sending SMS.');
       setTimeout(() => setToastMessage(null), 4000);
@@ -284,13 +314,21 @@ export function PatientCommunication() {
     setSending(true);
 
     const activeDlt = activeTemplate;
+    const targetRecipient =
+      channel === 'Email'
+        ? emailRecipient.trim()
+        : channel === 'SMS'
+        ? smsDigits
+        : smsDigits.length === 10
+        ? `91${smsDigits}`
+        : mobileNo.replace(/\D/g, '');
 
     try {
       if (token) {
         const record = await sendCommunicationMessage(token, {
           patientId: selectedPatient?.id || patientId,
           patientName,
-          recipient: channel === 'SMS' ? smsDigits : smsDigits.length === 10 ? `91${smsDigits}` : mobileNo.replace(/\D/g, ''),
+          recipient: targetRecipient,
           channel,
           messageType,
           messageText: previewText,
@@ -300,7 +338,9 @@ export function PatientCommunication() {
         });
         setHistory((prev) => [record, ...prev]);
         setToastMessage(
-          channel === 'SMS'
+          channel === 'Email'
+            ? `Email successfully sent to ${emailRecipient.trim()}!`
+            : channel === 'SMS'
             ? `SMS submitted for ${smsDigits}. It can take a minute to reach the phone.`
             : `Message dispatched via ${channel} to ${mobileNo}!`
         );
@@ -313,13 +353,17 @@ export function PatientCommunication() {
           dateTime: dateStr,
           messageType,
           channel,
-          recipient: channel === 'SMS' ? smsDigits : mobileNo,
+          recipient: targetRecipient,
           sentBy: user?.roleName || user?.userName || 'Embryologist',
           status: 'Delivered',
           messageText: previewText,
         };
         setHistory((prev) => [localRecord, ...prev]);
-        setToastMessage(`Message dispatched via ${channel} to ${channel === 'SMS' ? smsDigits : mobileNo}!`);
+        setToastMessage(
+          channel === 'Email'
+            ? `Email sent to ${emailRecipient.trim()}!`
+            : `Message dispatched via ${channel} to ${channel === 'SMS' ? smsDigits : mobileNo}!`
+        );
       }
       setTimeout(() => setToastMessage(null), 4000);
     } catch (err) {
@@ -447,6 +491,45 @@ export function PatientCommunication() {
           </div>
         )}
 
+        {channel === 'Email' && (
+          <div className="grid grid-cols-1 gap-4 rounded-xl border border-sky-200 bg-sky-50/50 p-4 sm:grid-cols-2">
+            <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600">
+              <span>Emails are dispatched via IVF CRAAFT Official Mail (<strong>ivfcraaftindia@gmail.com</strong>).</span>
+              <span className="font-semibold text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded text-[10px]">Gmail SMTP Active</span>
+            </div>
+            <label className="block text-xs font-medium text-slate-600">
+              Patient Name
+              <select
+                value={selectedPatient?.id || ''}
+                onChange={(e) => {
+                  const next = patients.find((item) => String(item.id) === e.target.value);
+                  if (!next) return;
+                  selectPatient(next);
+                  if (next.email) setEmailRecipient(next.email);
+                }}
+                className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800"
+              >
+                <option value="">Select patient</option>
+                {(patients.length ? patients : selectedPatient ? [selectedPatient] : []).map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-xs font-medium text-slate-600">
+              Recipient Email Address
+              <input
+                type="email"
+                value={emailRecipient}
+                onChange={(e) => setEmailRecipient(e.target.value)}
+                placeholder="patient@example.com"
+                className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800"
+              />
+            </label>
+          </div>
+        )}
+
         {/* Row 1: Message Type & Channel */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {/* Message Type */}
@@ -522,63 +605,22 @@ export function PatientCommunication() {
 
         {/* Row 2: Message Template & Language */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {/* Template with Insert Variables */}
+          {/* Template */}
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">
               Message Template
             </label>
-            <div className="flex items-center gap-2">
-              <select
-                value={templateKey}
-                onChange={(e) => handleTemplateChange(e.target.value)}
-                className="h-10 flex-1 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-800 outline-none transition focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10"
-              >
-                {Object.entries(DLT_TEMPLATES).map(([key, item]) => (
-                  <option key={key} value={key}>
-                    {item.whatsappApproved ? `${key} · WhatsApp approved` : key}
-                  </option>
-                ))}
-              </select>
-
-              {/* Insert Variables Dropdown Button */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowVariablesDropdown(!showVariablesDropdown)}
-                  className="flex h-10 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
-                >
-                  <span>Insert Variables</span>
-                  <svg className="h-3.5 w-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
-                </button>
-
-                {showVariablesDropdown && (
-                  <div className="absolute right-0 mt-1 w-48 rounded-xl border border-slate-200 bg-white py-1 shadow-lg z-30">
-                    {[
-                      '[Patient Name]',
-                      '[Doctor Name]',
-                      '[Procedure]',
-                      '[Date & Time]',
-                      '[Date]',
-                      '[Time]',
-                      '[Month]',
-                      '[Clinic Name]',
-                    ].map((v) => (
-                      <button
-                        key={v}
-                        type="button"
-                        onClick={() => handleInsertVariable(v)}
-                        className="w-full px-3.5 py-1.5 text-left text-xs font-medium text-slate-700 hover:bg-pink-50 hover:text-pink-600 transition"
-                      >
-                        {v}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
+            <select
+              value={templateKey}
+              onChange={(e) => handleTemplateChange(e.target.value)}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-800 outline-none transition focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10"
+            >
+              {Object.entries(DLT_TEMPLATES).map(([key, item]) => (
+                <option key={key} value={key}>
+                  {item.whatsappApproved ? `${key} · WhatsApp approved` : key}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Language */}
@@ -604,10 +646,62 @@ export function PatientCommunication() {
           
           {/* Left: Message Textarea */}
           <div className="lg:col-span-8">
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-medium text-slate-600">
-                Message
-              </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center gap-3">
+                <label className="block text-xs font-medium text-slate-600">
+                  Message
+                </label>
+
+                {/* Insert Variables Dropdown Button */}
+                <div className="relative" ref={variablesDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowVariablesDropdown(!showVariablesDropdown)}
+                    className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-pink-200 bg-pink-50/70 px-2.5 text-[11px] font-semibold text-pink-700 hover:bg-pink-100 transition whitespace-nowrap active:scale-95 shadow-2xs"
+                  >
+                    <span>+ Insert Variable</span>
+                    <svg
+                      className={`h-3 w-3 text-pink-500 transition-transform ${showVariablesDropdown ? 'rotate-180' : ''}`}
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </button>
+
+                  {showVariablesDropdown && (
+                    <div className="absolute left-0 top-full mt-1 w-56 rounded-xl border border-slate-200 bg-white py-1.5 shadow-xl z-30">
+                      <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 mb-1">
+                        Select Variable
+                      </div>
+                      {[
+                        { label: '[Patient Name]', desc: 'Patient name' },
+                        { label: '[Doctor Name]', desc: 'Doctor name' },
+                        { label: '[Procedure]', desc: 'Procedure' },
+                        { label: '[Date & Time]', desc: 'Date & time' },
+                        { label: '[Date]', desc: 'Date only' },
+                        { label: '[Time]', desc: 'Time only' },
+                        { label: '[Month]', desc: 'Month' },
+                        { label: '[Clinic Name]', desc: 'Clinic name' },
+                        { label: '[Cycle No]', desc: 'Cycle number' },
+                      ].map((v) => (
+                        <button
+                          key={v.label}
+                          type="button"
+                          onClick={() => handleInsertVariable(v.label)}
+                          className="w-full px-3 py-1.5 text-left text-xs font-medium text-slate-700 hover:bg-pink-50 hover:text-pink-600 transition flex items-center justify-between"
+                        >
+                          <span className="font-mono text-pink-700">{v.label}</span>
+                          <span className="text-[10px] text-slate-400">{v.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <span className="text-[11px] text-slate-400">
                 Press <kbd className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600 border border-slate-200">Ctrl+Enter</kbd> to send
               </span>

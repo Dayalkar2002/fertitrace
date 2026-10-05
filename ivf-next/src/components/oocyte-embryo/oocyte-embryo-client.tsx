@@ -789,7 +789,7 @@ export function OocyteEmbryoClient() {
             </div>
           </div>
 
-          <div className="flex items-center gap-6 text-xs">
+          <div className="grid grid-cols-2 sm:flex sm:items-center gap-3 sm:gap-6 text-xs w-full sm:w-auto pt-2 sm:pt-0 border-t border-slate-100 sm:border-0">
             <div>
               <span className="block text-[10px] uppercase font-bold text-slate-400">Cycle Day</span>
               <span className="font-bold text-slate-800 text-sm">Day {cycleDay}</span>
@@ -899,8 +899,8 @@ export function OocyteEmbryoClient() {
           </p>
         ) : null}
 
-        {/* 7 MODULE TABS */}
-        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+        {/* 7 MODULE TABS - Scrollable on mobile, wrapping on desktop */}
+        <div className="mt-4 flex items-center gap-1.5 sm:gap-2 border-t border-slate-100 pt-3 overflow-x-auto touch-scroll no-scrollbar pb-1 flex-nowrap sm:flex-wrap">
           {[
             { id: 'oocytes', label: 'Oocytes' },
             { id: 'fertilization', label: 'Fertilization' },
@@ -917,7 +917,7 @@ export function OocyteEmbryoClient() {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id as OocyteEmbryoTab)}
-                className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+                className={`shrink-0 rounded-xl px-3.5 sm:px-4 py-2 text-xs font-bold transition-all whitespace-nowrap ${
                   active
                     ? 'bg-[#181d38] text-white shadow-sm scale-[1.01]'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -934,9 +934,9 @@ export function OocyteEmbryoClient() {
       {summaryError && (
         <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{summaryError}</p>
       )}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-2">
         {/* OOCYTE SUMMARY */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-3">
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs space-y-3">
           <div className="flex items-center justify-between border-b border-slate-100 pb-2">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
               Oocyte Summary · {cycleType}
@@ -945,7 +945,7 @@ export function OocyteEmbryoClient() {
               {summary.cycleDate ? `Cycle ${summary.cycleDate}` : 'From IVF / ICSI screen'}
             </span>
           </div>
-          <div className="grid grid-cols-4 gap-3 text-center">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 text-center">
             <div className="rounded-xl bg-purple-50/60 border border-purple-100 p-2.5">
               <span className="block text-[10px] font-bold text-purple-600 uppercase">Retrieved</span>
               <PairCount both={bothLabs} ivf={ivfSummary.retrieved} icsi={icsiSummary.retrieved} single={retrievedCount} />
@@ -966,7 +966,7 @@ export function OocyteEmbryoClient() {
         </div>
 
         {/* EMBRYO SUMMARY */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-3">
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs space-y-3">
           <div className="flex items-center justify-between border-b border-slate-100 pb-2">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
               Embryo Summary · {cycleType}
@@ -975,7 +975,7 @@ export function OocyteEmbryoClient() {
               2PN / cleaved from {sourceTab}; blastocyst &amp; freeze from ET Action
             </span>
           </div>
-          <div className="grid grid-cols-4 gap-3 text-center">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 text-center">
             <div className="rounded-xl bg-emerald-50/60 border border-emerald-100 p-2.5">
               <span className="block text-[10px] font-bold text-emerald-600 uppercase">Fertilized (2PN)</span>
               <PairCount both={bothLabs} ivf={ivfSummary.fertilized2PN} icsi={icsiSummary.fertilized2PN} single={fertilized2PN} />
