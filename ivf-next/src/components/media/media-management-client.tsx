@@ -435,7 +435,7 @@ export function MediaManagementClient() {
       <PatientSelectModal open={patientModalOpen} onClose={() => setPatientModalOpen(false)} />
 
       {/* Main Container */}
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-5 space-y-6">
+      <div className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8 pt-4 sm:pt-5 space-y-5 sm:space-y-6">
         {/* Top Header & Patient Bar */}
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -772,7 +772,7 @@ export function MediaManagementClient() {
                   </div>
 
                   {/* Selected for report count & Print Button */}
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 border border-emerald-200">
                       <span className="h-2 w-2 rounded-full bg-emerald-500" />
                       Selected for report: {selectedCount}
@@ -797,7 +797,7 @@ export function MediaManagementClient() {
 
                 {/* Search & Category Pills */}
                 <div className="flex flex-wrap items-center gap-2 pt-2">
-                  <div className="relative min-w-[180px]">
+                  <div className="relative min-w-[180px] w-full sm:w-auto">
                     <input
                       type="text"
                       placeholder="Search pictures..."
@@ -811,12 +811,12 @@ export function MediaManagementClient() {
                     </svg>
                   </div>
 
-                  {/* Category Pills */}
-                  <div className="flex flex-wrap items-center gap-1.5 flex-1">
+                  {/* Category Pills - Touch scrollable on phone */}
+                  <div className="flex items-center gap-1.5 flex-1 overflow-x-auto touch-scroll no-scrollbar pb-1 flex-nowrap sm:flex-wrap">
                     <button
                       type="button"
                       onClick={() => setFilterCategory(0)}
-                      className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                      className={`shrink-0 whitespace-nowrap rounded-lg px-2.5 py-1 text-xs font-bold transition ${
                         filterCategory === 0
                           ? 'bg-[#181d38] text-white shadow-xs'
                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -832,7 +832,7 @@ export function MediaManagementClient() {
                           key={cat.id}
                           type="button"
                           onClick={() => setFilterCategory(cat.id)}
-                          className={`rounded-lg px-2.5 py-1 text-xs font-bold transition flex items-center gap-1 ${
+                          className={`shrink-0 whitespace-nowrap rounded-lg px-2.5 py-1 text-xs font-bold transition flex items-center gap-1 ${
                             filterCategory === cat.id
                               ? 'bg-purple-600 text-white shadow-xs'
                               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'

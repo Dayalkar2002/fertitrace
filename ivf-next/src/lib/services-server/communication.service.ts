@@ -1,6 +1,9 @@
 import { executeDRL } from '@/lib/db/spExecutor';
 import { isDbConfigured } from '@/lib/db/pool';
 import { dispatchNukeliteWhatsApp } from '@/lib/services-server/nukelite-whatsapp';
+import nodemailer, { type Transporter } from 'nodemailer';
+import dns from 'node:dns';
+import path from 'node:path';
 
 export type CommunicationChannel = 'WhatsApp' | 'SMS' | 'Email';
 
@@ -220,9 +223,93 @@ async function dispatchLegacySmartSms(payload: SendMessagePayload, baseUrl: stri
   return { pending: true };
 }
 
+let emailTransporter: Transporter | null = null;
+
+async function ensureDnsResolved(hostname: string): Promise<void> {
+  try {
+    const address = await new Promise<string>((resolve, reject) => {
+      dns.lookup(hostname, (err, addr) => (err ? reject(err) : resolve(addr)));
+    });
+    const sharedPath = path.resolve(process.cwd(), 'node_modules/nodemailer/dist/cjs/shared/index.js');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const shared = require(sharedPath);
+    if (shared?.dnsCache) {
+      shared.dnsCache.set(hostname, {
+        value: { addresses: [address] },
+        expires: Date.now() + 24 * 3600 * 1000,
+      });
+    }
+  } catch {
+    // If not resolvable or cached, continue with normal flow
+  }
+}
+
+function getEmailTransporter(): Transporter | null {
+  const host = process.env.SMTP_HOST?.trim() || 'smtp.gmail.com';
+  const user = process.env.SMTP_USER?.trim() || 'ivfcraaftindia@gmail.com';
+  const pass = process.env.SMTP_PASS?.trim() || 'bfyiqzfzjlnzlxxc';
+  const port = parseInt(process.env.SMTP_PORT || '465', 10);
+  const secure = process.env.SMTP_SECURE === 'true' || port === 465;
+
+  if (!host || !user) return null;
+
+  if (!emailTransporter) {
+    emailTransporter = nodemailer.createTransport({
+      host,
+      port,
+      secure,
+      auth: {
+        user,
+        pass,
+      },
+      tls: {
+        rejectUnauthorized: false,
+      },
+    });
+  }
+  return emailTransporter;
+}
+
 async function dispatchEmail(payload: SendMessagePayload): Promise<void> {
+  const host = process.env.SMTP_HOST?.trim() || 'smtp.gmail.com';
+  await ensureDnsResolved(host);
+  const transporter = getEmailTransporter();
+  if (transporter) {
+    const fromAddress = process.env.SMTP_FROM || `"IVF CRAAFT" <${process.env.SMTP_USER || 'ivfcraaftindia@gmail.com'}>`;
+    const subject = payload.messageType ? `${payload.messageType} - IVF CRAAFT` : 'Patient Communication - IVF CRAAFT';
+    const escapedText = payload.messageText.replace(/\n/g, '<br/>');
+    const html = `
+      <div style="font-family: Arial, sans-serif; font-size: 14px; color: #333; line-height: 1.6; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+        <div style="border-bottom: 2px solid #0284c7; padding-bottom: 12px; margin-bottom: 16px;">
+          <h2 style="margin: 0; color: #0284c7; font-size: 20px;">IVF CRAAFT India</h2>
+          <p style="margin: 4px 0 0 0; color: #64748b; font-size: 12px;">Patient Care &amp; Clinical Communication</p>
+        </div>
+        <p style="margin: 0 0 16px 0;"><strong>Dear ${payload.patientName || 'Patient'},</strong></p>
+        <div style="background-color: #f8fafc; padding: 16px; border-radius: 6px; border-left: 4px solid #0284c7; margin-bottom: 20px;">
+          ${escapedText}
+        </div>
+        <div style="font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 12px; margin-top: 24px;">
+          <p style="margin: 0 0 4px 0;">This is an automated clinical notification from IVF CRAAFT India Pvt. Ltd.</p>
+          <p style="margin: 0;">Please do not reply directly to this email.</p>
+        </div>
+      </div>
+    `;
+
+    await transporter.sendMail({
+      from: fromAddress,
+      to: payload.recipient,
+      subject,
+      text: payload.messageText,
+      html,
+    });
+    return;
+  }
+
   const emailUrl = process.env.EMAIL_GATEWAY_URL?.trim();
-  if (!emailUrl) return;
+  if (!emailUrl) {
+    throw new Error('Email gateway / SMTP is not configured.');
+  }
+
   const res = await fetch(emailUrl, {
     method: 'POST',
     headers: {
@@ -240,6 +327,7 @@ async function dispatchEmail(payload: SendMessagePayload): Promise<void> {
     throw new Error('Email gateway dispatch failed.');
   }
 }
+
 
 export async function sendMessage(payload: SendMessagePayload): Promise<CommunicationLogItem> {
   const provider = (process.env.SMS_PROVIDER || 'stpl').toLowerCase();

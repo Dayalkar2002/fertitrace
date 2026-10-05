@@ -953,7 +953,7 @@ export function WitnessSystemClient() {
             </button>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto touch-scroll">
             <table className="w-full text-left text-xs text-slate-700">
               <thead className="border-b border-slate-100 bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 <tr>

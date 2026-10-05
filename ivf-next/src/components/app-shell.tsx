@@ -15,11 +15,12 @@ import { SIDE_NAV_SECTIONS } from '@/lib/nav-config';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import {
   toggleSidebar,
+  setSidebarOpen,
   setShowPatientModal,
   setShowLogoutModal,
 } from '@/store/slices/uiSlice';
 
-import { LeftMenuItem, DEFAULT_LEFT_MENUS } from '@/lib/nav-config';
+import { LeftMenuItem, DEFAULT_LEFT_MENUS, TOP_NAV_MENUS } from '@/lib/nav-config';
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -38,10 +39,26 @@ export function AppShell({ children }: { children: ReactNode }) {
   });
   const [isNavigating, setIsNavigating] = useState(false);
 
-  // Turn off skeleton when route finishes loading
+  // Close mobile sidebar on route change or when navigation finishes
   useEffect(() => {
     setIsNavigating(false);
-  }, [pathname, searchParams]);
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      dispatch(setSidebarOpen(false));
+    }
+  }, [pathname, searchParams, dispatch]);
+
+  // Default sidebar to closed on mobile on initial mount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      dispatch(setSidebarOpen(false));
+    }
+  }, [dispatch]);
+
+  const closeMobileSidebar = () => {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      dispatch(setSidebarOpen(false));
+    }
+  };
 
   // Turn on skeleton when clicking any navigation route link
   useEffect(() => {
@@ -56,11 +73,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         target.pathname !== window.location.pathname
       ) {
         setIsNavigating(true);
+        if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+          dispatch(setSidebarOpen(false));
+        }
       }
     };
     document.addEventListener('click', handleLinkClick);
     return () => document.removeEventListener('click', handleLinkClick);
-  }, []);
+  }, [dispatch]);
 
   useEffect(() => {
     async function loadMenus() {
@@ -142,156 +162,262 @@ export function AppShell({ children }: { children: ReactNode }) {
     return false;
   }
 
+  const renderSidebarContent = (isMobile: boolean) => (
+    <div className={`flex h-full ${isMobile ? 'w-[280px] max-w-[85vw]' : 'w-[250px]'} flex-col bg-[#181d38] text-white overflow-hidden`}>
+      {/* Sidebar Brand Header */}
+      <div className="border-b border-white/10 px-5 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <SmartLogo className="h-9 w-9" />
+          <div>
+            <div className="font-black text-lg tracking-tight text-white leading-none">
+              FERTITRACE
+            </div>
+            <div className="text-[10px] font-medium text-slate-400 mt-1">
+              IVF Lab System
+            </div>
+          </div>
+        </div>
+
+        {/* Mobile Close Button */}
+        {isMobile && (
+          <button
+            type="button"
+            onClick={closeMobileSidebar}
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white lg:hidden transition"
+            aria-label="Close sidebar"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        )}
+      </div>
+
+      {/* Sidebar Header Title */}
+      <div className="px-5 pt-3.5 pb-1">
+        <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+          MAIN MENU
+        </span>
+      </div>
+
+      {/* Sidebar Navigation Items */}
+      <nav className="sidebar-scroll flex-1 overflow-y-auto px-3 py-2 space-y-1">
+        {leftMenus.map((item) => {
+          if (item.nodeName === 'logout') {
+            return (
+              <button
+                key={item.nodeName}
+                data-node={item.nodeName}
+                type="button"
+                onClick={() => {
+                  if (isMobile) closeMobileSidebar();
+                  dispatch(setShowLogoutModal(true));
+                }}
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 hover:bg-white/10 hover:text-white transition-all"
+              >
+                <NavIcon name={item.icon || 'logout'} className="h-4 w-4 shrink-0 opacity-90" />
+                <span className="truncate">{item.label}</span>
+              </button>
+            );
+          }
+
+          const hasSubs = Boolean(item.subModules && item.subModules.length > 0);
+          const isItemActive = hasSubs ? isParentActive(item) : isRouteActive(item.route);
+          const isExpanded = expandedNodes[item.nodeName] ?? false;
+
+          return (
+            <div key={item.nodeName} className="space-y-0.5">
+              <div
+                data-node={item.nodeName}
+                className={`flex items-center justify-between rounded-lg transition-all ${
+                  isItemActive && !hasSubs
+                    ? 'bg-[#6b46c1] text-white shadow-md font-semibold'
+                    : isItemActive && hasSubs
+                    ? 'bg-white/10 text-white font-semibold'
+                    : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                <Link
+                  href={item.route}
+                  onClick={() => {
+                    if (isMobile) closeMobileSidebar();
+                  }}
+                  className="flex flex-1 items-center gap-3 px-3 py-2.5 text-sm font-medium"
+                >
+                  <NavIcon name={item.icon || 'dashboard'} className="h-4 w-4 shrink-0 opacity-90" />
+                  <span className="truncate">{item.label}</span>
+                  {item.badgeText && (
+                    <span className="ml-auto rounded-full bg-indigo-500/30 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-300">
+                      {item.badgeText}
+                    </span>
+                  )}
+                </Link>
+                {hasSubs && (
+                  <button
+                    type="button"
+                    onClick={() => toggleExpand(item.nodeName)}
+                    className="px-2 py-2.5 text-slate-400 hover:text-white transition"
+                    title="Toggle sub-modules"
+                  >
+                    <svg
+                      className={`h-3.5 w-3.5 transition-transform duration-200 ${
+                        isExpanded ? 'rotate-180' : ''
+                      }`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              {/* Sub-modules */}
+              {hasSubs && isExpanded && (
+                <div className="ml-4 pl-3 border-l border-white/15 space-y-0.5 pt-0.5 pb-1">
+                  {item.subModules!.map((sub) => {
+                    const subActive = isSubItemActive(sub.route);
+                    return (
+                      <Link
+                        key={sub.nodeName}
+                        data-node={sub.nodeName}
+                        href={sub.route}
+                        onClick={() => {
+                          if (isMobile) closeMobileSidebar();
+                        }}
+                        className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-all ${
+                          subActive
+                            ? 'bg-[#6b46c1] text-white font-semibold shadow-xs'
+                            : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                        }`}
+                      >
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full ${
+                            subActive ? 'bg-white' : 'bg-slate-400 opacity-60'
+                          }`}
+                        />
+                        <span className="truncate">{sub.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Mobile-only Quick Access to Top Nav Menus */}
+        {isMobile && (
+          <div className="pt-3 pb-1 border-t border-white/10 lg:hidden">
+            <div className="px-2 pb-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                TOP MENUS &amp; QUICK ACCESS
+              </span>
+            </div>
+            <div className="space-y-0.5">
+              <Link
+                href="/masters"
+                onClick={closeMobileSidebar}
+                className="flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/10 hover:text-white rounded-lg transition"
+              >
+                <NavIcon name="masters" className="h-4 w-4 shrink-0 opacity-90" />
+                <span className="truncate">Master Directory (30+)</span>
+              </Link>
+              <Link
+                href="/label-printing"
+                onClick={closeMobileSidebar}
+                className="flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/10 hover:text-white rounded-lg transition"
+              >
+                <NavIcon name="label" className="h-4 w-4 shrink-0 opacity-90" />
+                <span className="truncate">Barcode Label Printing</span>
+              </Link>
+              <Link
+                href="/cryonavigation"
+                onClick={closeMobileSidebar}
+                className="flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/10 hover:text-white rounded-lg transition"
+              >
+                <NavIcon name="cryo" className="h-4 w-4 shrink-0 opacity-90" />
+                <span className="truncate">Cryonavigation</span>
+              </Link>
+              <Link
+                href="/reports/art-cycle"
+                onClick={closeMobileSidebar}
+                className="flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/10 hover:text-white rounded-lg transition"
+              >
+                <NavIcon name="reports" className="h-4 w-4 shrink-0 opacity-90" />
+                <span className="truncate">ART Cycle Report</span>
+              </Link>
+              <Link
+                href="/reports/andrology/iui"
+                onClick={closeMobileSidebar}
+                className="flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/10 hover:text-white rounded-lg transition"
+              >
+                <NavIcon name="reports" className="h-4 w-4 shrink-0 opacity-90" />
+                <span className="truncate">IUI / HSA Report</span>
+              </Link>
+            </div>
+          </div>
+        )}
+      </nav>
+
+      {/* Sidebar Footer */}
+      <div className="border-t border-white/10 p-3.5 text-center">
+        <div className="font-bold tracking-wider text-white text-xs">FERTITRACE</div>
+        <div className="text-[10px] text-slate-400 mt-0.5">Version 2.0.0 · Mobile Friendly</div>
+      </div>
+    </div>
+  );
+
   return (
     <>
       <div className="flex h-screen overflow-hidden bg-[#f4f6fa] text-slate-800">
-        {/* Left Dark Navy Sidebar */}
+        {/* Desktop In-Flow Sidebar: Toggles width in-flow beside main content, NEVER overlays in normal desktop window */}
         <aside
-          className={`${
+          className={`hidden lg:block ${
             sidebarOpen ? 'w-[250px]' : 'w-0'
           } sticky top-0 h-screen shrink-0 overflow-hidden transition-all duration-200 z-30 print:hidden`}
         >
-          <div className="flex h-full w-[250px] flex-col bg-[#181d38] text-white">
-            {/* Sidebar Brand Header */}
-            <div className="border-b border-white/10 px-5 py-4">
-              <div className="flex items-center gap-3">
-                <SmartLogo className="h-9 w-9" />
-                <div>
-                  <div className="font-black text-lg tracking-tight text-white leading-none">
-                    FERTITRACE
-                  </div>
-                  <div className="text-[10px] font-medium text-slate-400 mt-1">
-                    IVF Lab System
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Sidebar Header Title */}
-            <div className="px-5 pt-4 pb-1">
-              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                MAIN MENU
-              </span>
-            </div>
-
-            {/* Sidebar Navigation Items */}
-            <nav className="sidebar-scroll flex-1 overflow-y-auto px-3 py-2 space-y-1">
-              {leftMenus.map((item) => {
-                if (item.nodeName === 'logout') {
-                  return (
-                    <button
-                      key={item.nodeName}
-                      data-node={item.nodeName}
-                      type="button"
-                      onClick={() => dispatch(setShowLogoutModal(true))}
-                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 hover:bg-white/10 hover:text-white transition-all"
-                    >
-                      <NavIcon name={item.icon || 'logout'} className="h-4 w-4 shrink-0 opacity-90" />
-                      <span className="truncate">{item.label}</span>
-                    </button>
-                  );
-                }
-
-                const hasSubs = Boolean(item.subModules && item.subModules.length > 0);
-                const isItemActive = hasSubs ? isParentActive(item) : isRouteActive(item.route);
-                const isExpanded = expandedNodes[item.nodeName] ?? false;
-
-                return (
-                  <div key={item.nodeName} className="space-y-0.5">
-                    <div
-                      data-node={item.nodeName}
-                      className={`flex items-center justify-between rounded-lg transition-all ${
-                        isItemActive && !hasSubs
-                          ? 'bg-[#6b46c1] text-white shadow-md font-semibold'
-                          : isItemActive && hasSubs
-                          ? 'bg-white/10 text-white font-semibold'
-                          : 'text-slate-300 hover:bg-white/10 hover:text-white'
-                      }`}
-                    >
-                      <Link
-                        href={item.route}
-                        className="flex flex-1 items-center gap-3 px-3 py-2.5 text-sm font-medium"
-                      >
-                        <NavIcon name={item.icon || 'dashboard'} className="h-4 w-4 shrink-0 opacity-90" />
-                        <span className="truncate">{item.label}</span>
-                        {item.badgeText && (
-                          <span className="ml-auto rounded-full bg-indigo-500/30 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-300">
-                            {item.badgeText}
-                          </span>
-                        )}
-                      </Link>
-                      {hasSubs && (
-                        <button
-                          type="button"
-                          onClick={() => toggleExpand(item.nodeName)}
-                          className="px-2 py-2.5 text-slate-400 hover:text-white transition"
-                          title="Toggle sub-modules"
-                        >
-                          <svg
-                            className={`h-3.5 w-3.5 transition-transform duration-200 ${
-                              isExpanded ? 'rotate-180' : ''
-                            }`}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Sub-modules */}
-                    {hasSubs && isExpanded && (
-                      <div className="ml-4 pl-3 border-l border-white/15 space-y-0.5 pt-0.5 pb-1">
-                        {item.subModules!.map((sub) => {
-                          const subActive = isSubItemActive(sub.route);
-                          return (
-                            <Link
-                              key={sub.nodeName}
-                              data-node={sub.nodeName}
-                              href={sub.route}
-                              className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-all ${
-                                subActive
-                                  ? 'bg-[#6b46c1] text-white font-semibold shadow-xs'
-                                  : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
-                              }`}
-                            >
-                              <span
-                                className={`h-1.5 w-1.5 rounded-full ${
-                                  subActive ? 'bg-white' : 'bg-slate-400 opacity-60'
-                                }`}
-                              />
-                              <span className="truncate">{sub.label}</span>
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </nav>
-
-            {/* Sidebar Footer */}
-            <div className="border-t border-white/10 p-4 text-center">
-              <div className="font-bold tracking-wider text-white text-sm">FERTITRACE</div>
-              <div className="text-[10px] text-slate-400 mt-0.5">Version 2.0.0</div>
-            </div>
-          </div>
+          {renderSidebarContent(false)}
         </aside>
+
+        {/* Mobile Off-Canvas Drawer (Only active on screens below lg) */}
+        <div
+          className={`fixed inset-0 z-50 lg:hidden transition-all duration-300 ${
+            sidebarOpen ? 'visible pointer-events-auto' : 'invisible pointer-events-none'
+          }`}
+        >
+          {/* Mobile Backdrop Overlay */}
+          <div
+            className={`fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-300 ${
+              sidebarOpen ? 'opacity-100' : 'opacity-0'
+            }`}
+            onClick={closeMobileSidebar}
+            aria-hidden="true"
+          />
+
+          {/* Slide-out Mobile Drawer */}
+          <aside
+            className={`fixed inset-y-0 left-0 z-50 flex h-full w-[280px] max-w-[85vw] flex-col bg-[#181d38] text-white shadow-2xl transition-transform duration-300 ease-in-out ${
+              sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+            }`}
+          >
+            {renderSidebarContent(true)}
+          </aside>
+        </div>
 
         {/* Main Content Workspace */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
           {/* Top Navbar */}
           <header className="sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm print:hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 md:px-5">
+            <div className="flex items-center justify-between px-3 py-2 sm:px-4 sm:py-2.5 md:px-5">
               {/* Left Side: Logo & Menu Toggle */}
-              <div className="flex min-w-0 flex-1 items-center gap-3 md:gap-4">
+              <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3 md:gap-4">
                 <button
                   type="button"
                   onClick={() => dispatch(toggleSidebar())}
-                  className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 transition"
+                  className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 transition active:scale-95"
                   aria-label="Toggle sidebar"
                 >
                   <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -302,34 +428,41 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </button>
 
                 {/* Logo Brand */}
-                <Link href="/dashboard" className="flex items-center gap-2.5">
-                  <SmartLogo className="h-9 w-9" />
-                  <div className="hidden sm:block">
+                <Link href="/dashboard" className="flex items-center gap-2">
+                  <SmartLogo className="h-8 w-8 sm:h-9 sm:w-9 shrink-0" />
+                  <div>
                     <div className="flex items-center gap-1">
-                      <span className="text-lg font-black tracking-tight text-[#1d4ed8]">
+                      <span className="text-base sm:text-lg font-black tracking-tight text-[#1d4ed8]">
                         FERTITRACE
                       </span>
                     </div>
-                    <div className="text-[10px] font-medium text-slate-500 leading-none">
+                    <div className="hidden sm:block text-[10px] font-medium text-slate-500 leading-none">
                       IVF Laboratory Management System
                     </div>
                   </div>
                 </Link>
 
-                {/* Top Navigation Bar */}
+                {/* Top Navigation Bar (desktop) */}
                 <div className="ml-2 hidden min-w-0 flex-1 lg:flex">
                   <TopNav />
                 </div>
               </div>
 
               {/* Right Side Tools & User Profile */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 sm:gap-3">
                 <button
                   type="button"
                   onClick={() => dispatch(setShowPatientModal(true))}
-                  className="hidden rounded-xl border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-semibold text-[#6b46c1] hover:bg-purple-100 sm:inline-flex"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-purple-200 bg-purple-50 px-2.5 py-1.5 text-xs font-semibold text-[#6b46c1] hover:bg-purple-100 transition shrink-0"
+                  title={selectedPatient ? `Active Patient: ${selectedPatient.name}` : 'Select Patient'}
                 >
-                  {selectedPatient ? 'Change Patient' : 'Select Patient'}
+                  <span className="text-xs">👤</span>
+                  <span className="hidden sm:inline">
+                    {selectedPatient ? selectedPatient.name : 'Select Patient'}
+                  </span>
+                  <span className="sm:hidden text-[10px] font-bold max-w-[80px] truncate">
+                    {selectedPatient ? selectedPatient.name.split(' ')[0] : 'Patient'}
+                  </span>
                 </button>
 
                 {/* User Dropdown */}
@@ -337,9 +470,9 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <button
                     type="button"
                     onClick={() => setUserDropdownOpen((v) => !v)}
-                    className="flex items-center gap-2 rounded-lg p-1 hover:bg-slate-100 transition"
+                    className="flex items-center gap-1.5 sm:gap-2 rounded-lg p-1 hover:bg-slate-100 transition"
                   >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-purple-100 text-[#6b46c1] font-bold text-xs">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-purple-100 text-[#6b46c1] font-bold text-xs shrink-0">
                       Dr
                     </div>
                     <div className="text-left hidden sm:block">
@@ -390,7 +523,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           {/* Patient Context Bar if active */}
           {selectedPatient && (
-            <div className="border-b border-slate-200/80 bg-white px-5 py-2 print:hidden">
+            <div className="border-b border-slate-200/80 bg-white px-3 sm:px-5 py-2 print:hidden">
               <PatientContextBar
                 patient={selectedPatient}
                 onSelectPatient={() => dispatch(setShowPatientModal(true))}
@@ -399,7 +532,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           )}
 
           {/* Main Workspace with Instant Skeleton Loading & Top Progress Line */}
-          <main className="relative flex-1 p-5 md:p-6 bg-[#f4f6fa] print:bg-white print:p-0">
+          <main className="relative flex-1 p-3 sm:p-4 md:p-6 bg-[#f4f6fa] print:bg-white print:p-0">
             {isNavigating && (
               <div className="fixed top-0 left-0 right-0 z-[9999] h-1 bg-gradient-to-r from-[#6345A6] via-[#7c3aed] to-emerald-400 animate-pulse shadow-xs" />
             )}

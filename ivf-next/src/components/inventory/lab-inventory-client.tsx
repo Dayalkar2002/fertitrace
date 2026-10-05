@@ -579,7 +579,7 @@ export function LabInventoryClient() {
             />
           </div>
 
-          <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-xs">
+          <div className="overflow-x-auto touch-scroll rounded-2xl border border-slate-200 bg-white shadow-xs">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-600">
@@ -671,7 +671,7 @@ export function LabInventoryClient() {
 
       {/* 6. Tab 2: Cycle Traceability Ledger */}
       {activeTab === 'transactions' && (
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-xs p-4 space-y-3">
+        <div className="overflow-x-auto touch-scroll rounded-2xl border border-slate-200 bg-white shadow-xs p-4 space-y-3">
           <div>
             <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
               Cycle-to-Batch Traceability Ledger

@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { SmartCardClient } from '@/components/smartcard/smart-card-client';
 
 export const metadata = {
@@ -6,5 +7,10 @@ export const metadata = {
 };
 
 export default function SmartCardPage() {
-  return <SmartCardClient />;
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-xs text-slate-500 font-medium">Loading Smart Card Studio...</div>}>
+      <SmartCardClient />
+    </Suspense>
+  );
 }
+
