@@ -4,7 +4,14 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TopNavMenu, MasterMenuItem } from '@/lib/nav-config';
-import { TOP_NAV_MENUS, getMasterColumns, FERTITRACE_IN_USE_COUNT, STANDARD_MASTER_COUNT, QR_CODE_MASTER_COUNT } from '@/lib/nav-config';
+import {
+  TOP_NAV_MENUS,
+  getMasterColumns,
+  FERTITRACE_IN_USE_COUNT,
+  STANDARD_MASTER_COUNT,
+  QR_CODE_MASTER_COUNT,
+  QR_CODE_13_TABLES,
+} from '@/lib/nav-config';
 
 export function TopNav() {
   const pathname = usePathname();
@@ -57,14 +64,26 @@ export function TopNav() {
   // All columns of masters (columns 1 to 4)
   const masterColumns = useMemo(() => getMasterColumns(), []);
 
+  // Filtered QR Code 13 Tables based on search
+  const filteredQrTables = useMemo(() => {
+    const q = masterSearch.trim().toLowerCase();
+    if (!q) return QR_CODE_13_TABLES;
+    return QR_CODE_13_TABLES.filter(
+      (t) =>
+        t.name.toLowerCase().includes(q) ||
+        t.badge.toLowerCase().includes(q) ||
+        t.desc.toLowerCase().includes(q) ||
+        `#${t.variableNo}`.includes(q)
+    );
+  }, [masterSearch]);
+
   // Filtered master columns based on search and active filter tab
   const filteredColumns = useMemo(() => {
     const q = masterSearch.trim().toLowerCase();
     return masterColumns.map((col) =>
       col.filter((item) => {
-        const matchesQuery = !q || item.label.toLowerCase().includes(q) || (item.qrRole && item.qrRole.toLowerCase().includes(q));
+        const matchesQuery = !q || item.label.toLowerCase().includes(q);
         if (!matchesQuery) return false;
-        if (masterFilter === 'qrcode') return !!item.isQrCode;
         if (masterFilter === 'fertitrace') return !!item.isFertiTrace;
         if (masterFilter === 'standard') return !item.isFertiTrace;
         return true;
@@ -73,8 +92,9 @@ export function TopNav() {
   }, [masterColumns, masterSearch, masterFilter]);
 
   const totalVisibleMasters = useMemo(() => {
+    if (masterFilter === 'qrcode') return filteredQrTables.length;
     return filteredColumns.reduce((acc, col) => acc + col.length, 0);
-  }, [filteredColumns]);
+  }, [filteredColumns, masterFilter, filteredQrTables]);
 
   return (
     <nav ref={navRef} className="flex min-w-0 flex-1 items-center gap-1">
@@ -136,12 +156,13 @@ export function TopNav() {
                                 <span className="text-xs font-black text-slate-900">
                                   Master Directory
                                 </span>
-                                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
-                                  All 4 Columns
-                                </span>
-                                {masterFilter === 'qrcode' && (
+                                {masterFilter === 'qrcode' ? (
                                   <span className="rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-[10px] font-bold">
-                                    ⚡ QR Generation Tables Active
+                                    ⚡ 13 QR Master Registries
+                                  </span>
+                                ) : (
+                                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                                    All 4 Columns
                                   </span>
                                 )}
                               </div>
@@ -174,22 +195,26 @@ export function TopNav() {
 
                         {/* Tri-Color Legend & Filter Tabs */}
                         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-slate-50/80 px-3 py-2 border border-slate-100">
-                          {/* Legend showing distinct colors including QR Code Tables */}
+                          {/* Legend: In All view show FertiTrace In-Use & Standard only; in QR view show QR Code Tables */}
                           <div className="flex flex-wrap items-center gap-2.5 text-[11px]">
-                            <span className="flex items-center gap-1.5 font-bold text-purple-900">
-                              <span className="h-2.5 w-2.5 rounded-full bg-[#6345A6] shadow-2xs ring-2 ring-purple-200" />
-                              <span>FertiTrace In-Use ({FERTITRACE_IN_USE_COUNT})</span>
-                            </span>
-                            <span className="text-slate-300">•</span>
-                            <span className="flex items-center gap-1.5 font-bold text-emerald-800">
-                              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-2xs ring-2 ring-emerald-200" />
-                              <span>QR Code Tables ({QR_CODE_MASTER_COUNT})</span>
-                            </span>
-                            <span className="text-slate-300">•</span>
-                            <span className="flex items-center gap-1.5 font-semibold text-slate-600">
-                              <span className="h-2.5 w-2.5 rounded-full bg-slate-300 ring-2 ring-slate-100" />
-                              <span>Standard ({STANDARD_MASTER_COUNT})</span>
-                            </span>
+                            {masterFilter === 'qrcode' ? (
+                              <span className="flex items-center gap-1.5 font-bold text-emerald-800">
+                                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-2xs ring-2 ring-emerald-200" />
+                                <span>QR Code Generation Tables ({QR_CODE_MASTER_COUNT})</span>
+                              </span>
+                            ) : (
+                              <>
+                                <span className="flex items-center gap-1.5 font-bold text-purple-900">
+                                  <span className="h-2.5 w-2.5 rounded-full bg-[#6345A6] shadow-2xs ring-2 ring-purple-200" />
+                                  <span>FertiTrace In-Use ({FERTITRACE_IN_USE_COUNT})</span>
+                                </span>
+                                <span className="text-slate-300">•</span>
+                                <span className="flex items-center gap-1.5 font-semibold text-slate-600">
+                                  <span className="h-2.5 w-2.5 rounded-full bg-slate-300 ring-2 ring-slate-100" />
+                                  <span>Standard ({STANDARD_MASTER_COUNT})</span>
+                                </span>
+                              </>
+                            )}
                           </div>
 
                           {/* Filter Tabs with separate QR Code option */}
@@ -242,53 +267,118 @@ export function TopNav() {
                         </div>
                       </div>
 
-                      {/* 4 Columns of Masters with QR Highlighting */}
-                      <div className="mt-3.5 grid grid-cols-4 gap-3">
-                        {filteredColumns.map((column, ci) => (
-                          <div key={ci} className="space-y-1.5">
-                            <div className="px-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 pb-1 mb-1">
-                              Column {ci + 1}
+                      {/* When QR Code filter is active: Show prominent banner to view tables & details */}
+                      {masterFilter === 'qrcode' && (
+                        <Link
+                          href="/masters/qr-code"
+                          onClick={() => setOpenMenu(null)}
+                          className="mt-3 group flex items-center justify-between rounded-2xl border border-emerald-300 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100/70 p-3 shadow-xs transition hover:border-emerald-400 hover:shadow-md"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white font-black text-base shadow-xs group-hover:scale-105 transition-transform">
+                              ⚡
                             </div>
-                            {column.length === 0 ? (
-                              <div className="px-2 py-3 text-center text-[10px] italic text-slate-400">
-                                No matching masters
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-black text-emerald-950">
+                                  Click here to view QR code tables and details
+                                </span>
+                                <span className="rounded-md bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                                  13 Tables Active
+                                </span>
                               </div>
-                            ) : (
-                              column.map((item) => {
-                                const isUsed = !!item.isFertiTrace;
-                                const isQr = !!item.isQrCode;
-                                return (
-                                  <Link
-                                    key={item.route + item.label}
-                                    href={item.route}
-                                    onClick={() => setOpenMenu(null)}
-                                    title={item.qrRole || item.label}
-                                    className={`group flex items-center justify-between rounded-xl p-2 transition-all border ${
-                                      masterFilter === 'qrcode'
-                                        ? 'bg-emerald-50/80 hover:bg-emerald-100/90 border-emerald-300 hover:border-emerald-400 shadow-2xs'
-                                        : isQr && isUsed
-                                        ? 'bg-purple-50/80 hover:bg-purple-100/90 border-purple-200/90 hover:border-purple-300 shadow-2xs ring-1 ring-emerald-500/20'
-                                        : isUsed
-                                        ? 'bg-purple-50/80 hover:bg-purple-100/90 border-purple-200/90 hover:border-purple-300 shadow-2xs'
-                                        : 'bg-slate-50/60 hover:bg-slate-100/90 border-slate-200/70 hover:border-slate-300 text-slate-700'
-                                    }`}
-                                  >
-                                    <div className="flex flex-col min-w-0 pr-1">
-                                      <div className="flex items-center gap-2">
+                              <p className="text-[11px] text-emerald-800">
+                                Open full QR Code Master screen with specimen lifecycle, payload dictionary & barcode validation
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs transition group-hover:bg-emerald-700">
+                            <span>Open Details</span>
+                            <span>→</span>
+                          </div>
+                        </Link>
+                      )}
+
+                      {/* When QR Code filter is active: Show the 13 Real QR Master Tables */}
+                      {masterFilter === 'qrcode' ? (
+                        <div className="mt-3.5 space-y-2.5">
+                          <div className="flex items-center justify-between px-1 text-[11px] font-bold text-slate-500">
+                            <span>13 QR Witnessing Master Tables (Select to manage data):</span>
+                            <span className="text-[10px] text-emerald-700 font-semibold">Variables #1 - #13</span>
+                          </div>
+
+                          {filteredQrTables.length === 0 ? (
+                            <div className="px-3 py-8 text-center text-xs text-slate-400 italic">
+                              No matching QR master tables found for "{masterSearch}".
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
+                              {filteredQrTables.map((table) => (
+                                <Link
+                                  key={table.key}
+                                  href={table.route}
+                                  onClick={() => setOpenMenu(null)}
+                                  className="group flex flex-col justify-between rounded-xl border border-emerald-200/90 bg-emerald-50/50 p-2.5 transition hover:border-emerald-400 hover:bg-emerald-100/70 hover:shadow-2xs"
+                                >
+                                  <div className="flex items-start justify-between gap-1.5">
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-emerald-600 text-[10px] font-black text-white">
+                                        #{table.variableNo}
+                                      </span>
+                                      <span className="text-xs font-bold text-slate-900 group-hover:text-emerald-950 truncate">
+                                        {table.name}
+                                      </span>
+                                    </div>
+                                    <span className="rounded px-1.5 py-0.5 text-[8.5px] font-extrabold bg-emerald-200/80 text-emerald-900 shrink-0">
+                                      {table.badge}
+                                    </span>
+                                  </div>
+                                  <p className="mt-1.5 text-[10px] text-slate-600 line-clamp-1 group-hover:text-emerald-900">
+                                    {table.desc}
+                                  </p>
+                                </Link>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        /* 4 Columns of Standard SMART Masters */
+                        <div className="mt-3.5 grid grid-cols-4 gap-3">
+                          {filteredColumns.map((column, ci) => (
+                            <div key={ci} className="space-y-1.5">
+                              <div className="px-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 pb-1 mb-1">
+                                Column {ci + 1}
+                              </div>
+                              {column.length === 0 ? (
+                                <div className="px-2 py-3 text-center text-[10px] italic text-slate-400">
+                                  No matching masters
+                                </div>
+                              ) : (
+                                column.map((item) => {
+                                  const isUsed = !!item.isFertiTrace;
+                                  return (
+                                    <Link
+                                      key={item.route + item.label}
+                                      href={item.route}
+                                      onClick={() => setOpenMenu(null)}
+                                      title={item.label}
+                                      className={`group flex items-center justify-between rounded-xl p-2 transition-all border ${
+                                        isUsed
+                                          ? 'bg-purple-50/80 hover:bg-purple-100/90 border-purple-200/90 hover:border-purple-300 shadow-2xs'
+                                          : 'bg-slate-50/60 hover:bg-slate-100/90 border-slate-200/70 hover:border-slate-300 text-slate-700'
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-2 min-w-0 pr-1">
                                         <span
                                           className={`h-2 w-2 rounded-full shrink-0 transition-transform group-hover:scale-125 ${
-                                            isQr
-                                              ? 'bg-emerald-500 ring-2 ring-emerald-200'
-                                              : isUsed
+                                            isUsed
                                               ? 'bg-[#6345A6] ring-2 ring-purple-200'
                                               : 'bg-slate-400'
                                           }`}
                                         />
                                         <span
                                           className={`text-xs truncate transition-colors ${
-                                            isQr
-                                              ? 'font-bold text-slate-900 group-hover:text-emerald-700'
-                                              : isUsed
+                                            isUsed
                                               ? 'font-bold text-purple-950 group-hover:text-[#6345A6]'
                                               : 'font-medium text-slate-700 group-hover:text-slate-900'
                                           }`}
@@ -296,18 +386,6 @@ export function TopNav() {
                                           {item.label}
                                         </span>
                                       </div>
-                                      {masterFilter === 'qrcode' && item.qrRole && (
-                                        <span className="mt-0.5 text-[9px] font-medium text-emerald-700 truncate pl-4">
-                                          {item.qrRole}
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-1 shrink-0">
-                                      {isQr && (
-                                        <span className="rounded-md px-1 py-0.5 text-[8px] font-black leading-none bg-emerald-600 text-white shadow-2xs" title={item.qrRole}>
-                                          ⚡ QR
-                                        </span>
-                                      )}
                                       <span
                                         className={`rounded-md px-1.5 py-0.5 text-[8.5px] font-bold leading-none ${
                                           isUsed
@@ -317,14 +395,14 @@ export function TopNav() {
                                       >
                                         {isUsed ? 'In Use' : 'Standard'}
                                       </span>
-                                    </div>
-                                  </Link>
-                                );
-                              })
-                            )}
-                          </div>
-                        ))}
-                      </div>
+                                    </Link>
+                                  );
+                                })
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
 
                       {/* Dropdown Footer */}
                       <div className="mt-4 flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-xs text-slate-500">
@@ -333,18 +411,35 @@ export function TopNav() {
                             Showing {totalVisibleMasters} registries
                           </span>
                           <span className="text-slate-300">•</span>
-                          <span className="text-[11px] text-emerald-800 font-bold">
-                            {QR_CODE_MASTER_COUNT} active in QR code generation
-                          </span>
+                          {masterFilter === 'qrcode' ? (
+                            <span className="text-[11px] text-emerald-800 font-bold">
+                              13 tables active in QR code witnessing
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-purple-900 font-medium">
+                              {FERTITRACE_IN_USE_COUNT} in-use for FertiTrace
+                            </span>
+                          )}
                         </div>
-                        <Link
-                          href="/masters/qr-code"
-                          onClick={() => setOpenMenu(null)}
-                          className="font-bold text-emerald-700 hover:text-emerald-800 hover:underline flex items-center gap-1 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200"
-                        >
-                          <span>Open QR Code Master & Data Dictionary</span>
-                          <span>→</span>
-                        </Link>
+                        {masterFilter === 'qrcode' ? (
+                          <Link
+                            href="/masters/qr-code"
+                            onClick={() => setOpenMenu(null)}
+                            className="font-bold text-emerald-800 hover:text-emerald-950 hover:underline flex items-center gap-1 bg-white px-2.5 py-1 rounded-lg border border-emerald-300 shadow-2xs transition"
+                          >
+                            <span>Open QR Code Master & Data Dictionary</span>
+                            <span>→</span>
+                          </Link>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setMasterFilter('qrcode')}
+                            className="font-bold text-emerald-700 hover:text-emerald-800 hover:underline flex items-center gap-1 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 transition"
+                          >
+                            <span>⚡ View QR Code Tables ({QR_CODE_MASTER_COUNT})</span>
+                            <span>→</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   ) : (

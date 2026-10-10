@@ -20,6 +20,20 @@ import {
 import { fetchCryoStockSummary, listPatientCycles, previewCycleId, saveCycleCreation } from '@/lib/services/cycles';
 import { listDoctors, type DoctorMasterRow } from '@/lib/services/masters';
 import type { CryoStockSummary, PatientCycleRow } from '@/lib/types/cycle';
+import dynamic from 'next/dynamic';
+
+const CycleHistoryTab = dynamic(() => import('@/components/cycle-tabs').then((m) => m.CycleHistoryTab), {
+  loading: () => <div className="p-4 text-xs text-slate-500">Loading History…</div>,
+  ssr: false,
+});
+const CycleSurvivalTab = dynamic(() => import('@/components/cycle-tabs').then((m) => m.CycleSurvivalTab), {
+  loading: () => <div className="p-4 text-xs text-slate-500">Loading Survival Report…</div>,
+  ssr: false,
+});
+const CycleOutcomeTab = dynamic(() => import('@/components/cycle-tabs').then((m) => m.CycleOutcomeTab), {
+  loading: () => <div className="p-4 text-xs text-slate-500">Loading Outcome…</div>,
+  ssr: false,
+});
 
 const CYCLE_TYPE_CARDS: Record<string, { code: string; title: string; hint: string; tone: string }> = {
   Fresh: { code: 'FR', title: 'Fresh Cycle', hint: 'IVF / ICSI with OPU', tone: 'bg-[#6345A6]' },
@@ -83,6 +97,7 @@ export function CycleCreationForm() {
   const [error, setError] = useState('');
   const [copiedId, setCopiedId] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [activeSmartTab, setActiveSmartTab] = useState<'none' | 'history' | 'survival' | 'outcome'>('none');
 
   // Check if cycle type involves egg retrieval (OPU)
   const isOpuCycle = cycleType === 'Fresh' || cycleType === 'FrozenOocytes' || cycleType === 'OD';
@@ -657,6 +672,139 @@ export function CycleCreationForm() {
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* SMART Application Cycle Entry Module Tabs */}
+            <div className="pt-3 pb-2">
+              <div className="rounded-2xl border border-purple-100 bg-gradient-to-r from-purple-50/90 via-slate-50 to-amber-50/40 p-2 sm:p-2.5 shadow-xs flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#6345A6] text-white text-xs shadow-2xs font-bold">
+                    ⚙️
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold uppercase tracking-wider text-purple-900 block leading-tight">
+                      Cycle Entry Module
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      Access history, survival analysis, charts and clinical outcomes
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5 bg-white/90 backdrop-blur-xs p-1 rounded-xl border border-purple-100/80 shadow-2xs text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setActiveSmartTab(activeSmartTab === 'history' ? 'none' : 'history')}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-150 cursor-pointer ${
+                      activeSmartTab === 'history'
+                        ? 'bg-[#6345A6] text-white shadow-xs font-bold ring-2 ring-purple-300/60'
+                        : 'text-slate-600 hover:text-purple-700 hover:bg-purple-50/70'
+                    }`}
+                  >
+                    <span>📋</span>
+                    <span>History</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveSmartTab(activeSmartTab === 'survival' ? 'none' : 'survival')}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-150 cursor-pointer ${
+                      activeSmartTab === 'survival'
+                        ? 'bg-[#6345A6] text-white shadow-xs font-bold ring-2 ring-purple-300/60'
+                        : 'text-slate-600 hover:text-purple-700 hover:bg-purple-50/70'
+                    }`}
+                  >
+                    <span>🧬</span>
+                    <span>Survival Report</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      document.getElementById('cycle-monitoring-section')?.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-600 hover:text-purple-700 hover:bg-purple-50/70 transition cursor-pointer"
+                  >
+                    <span>📊</span>
+                    <span>Monitoring Chart</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const targetId = cycleId || (savedCycles[0]?.cycleId ?? '');
+                      if (targetId) {
+                        router.push(`/cycle/entry?cycleId=${encodeURIComponent(targetId)}`);
+                      } else {
+                        router.push('/cycle/entry');
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 transition cursor-pointer font-bold"
+                    title="Open Cycle Retrieval"
+                  >
+                    <span>🧪</span>
+                    <span>Retrieval →</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveSmartTab(activeSmartTab === 'outcome' ? 'none' : 'outcome')}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-150 cursor-pointer ${
+                      activeSmartTab === 'outcome'
+                        ? 'bg-[#6345A6] text-white shadow-xs font-bold ring-2 ring-purple-300/60'
+                        : 'text-slate-600 hover:text-purple-700 hover:bg-purple-50/70'
+                    }`}
+                  >
+                    <span>🎯</span>
+                    <span>Outcome</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-1.5 bg-purple-100/70 text-purple-900 border border-purple-200/80 px-2.5 py-1 rounded-lg text-xs font-mono font-bold">
+                  <span className="text-[10px] uppercase tracking-wider text-purple-600 font-sans font-semibold">CycID:</span>
+                  <span>{cycleId || '—'}</span>
+                </div>
+              </div>
+
+              {/* Inline Smart Tab Content Panel */}
+              {activeSmartTab !== 'none' && (
+                <div className="mt-3 rounded-2xl border border-purple-200/90 bg-white p-4 sm:p-6 shadow-sm transition-all animate-fadeIn">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-5">
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-100 text-[#6345A6] text-sm font-bold">
+                        {activeSmartTab === 'survival' ? '🧬' : activeSmartTab === 'history' ? '📋' : '🎯'}
+                      </span>
+                      <div>
+                        <h3 className="font-bold text-slate-900 text-sm capitalize leading-tight">
+                          {activeSmartTab === 'survival' ? 'Survival Report & Semen Analysis' : activeSmartTab === 'history' ? 'Patient History & Previous Attempts' : 'Cycle Clinical Outcome'}
+                        </h3>
+                        <p className="text-[11px] text-slate-500 font-mono">
+                          Active Cycle ID: <strong className="text-purple-700">{cycleId || '—'}</strong>
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveSmartTab('none')}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-rose-600 rounded-lg px-2.5 py-1 hover:bg-rose-50 transition border border-transparent hover:border-rose-100 cursor-pointer"
+                    >
+                      <span>✕</span>
+                      <span>Close</span>
+                    </button>
+                  </div>
+                  {cycleId ? (
+                    <>
+                      {activeSmartTab === 'history' && <CycleHistoryTab cycleId={cycleId} />}
+                      {activeSmartTab === 'survival' && <CycleSurvivalTab cycleId={cycleId} />}
+                      {activeSmartTab === 'outcome' && <CycleOutcomeTab cycleId={cycleId} />}
+                    </>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-amber-200 bg-amber-50/50 p-6 text-center text-xs text-amber-800">
+                      Please select an existing cycle from the list above or save this draft first to enter {activeSmartTab}.
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Protocol */}

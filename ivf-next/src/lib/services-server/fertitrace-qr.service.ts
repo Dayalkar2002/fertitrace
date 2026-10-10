@@ -104,6 +104,7 @@ export async function createAndRegisterQR(params: {
   storageLocation?: string;
   createdBy?: string;
   notes?: string;
+  copies?: number;
 }): Promise<FertiTraceQRRecord> {
   const clinicId = params.clinicId || 'CL001';
   const specimenId = generateSpecimenId();
@@ -112,6 +113,7 @@ export async function createAndRegisterQR(params: {
   const containerUnitNo = params.containerUnitNo || '01';
   const labelSize = params.labelSize || 'A';
   const createdBy = params.createdBy || 'Dr. Embryologist';
+  const copiesCount = Math.max(1, params.copies || 1);
 
   const qrString = encodeFertiTraceQR({
     clinicId,
@@ -167,14 +169,30 @@ export async function createAndRegisterQR(params: {
   const itemCode = params.containerType.padStart(2, '0');
   const inv = MEMORY_INVENTORY.get(itemCode);
   if (inv) {
-    inv.stockOnHand = Math.max(0, inv.stockOnHand - 1);
-    inv.allocatedCount += 1;
+    inv.stockOnHand = Math.max(0, inv.stockOnHand - copiesCount);
+    inv.allocatedCount += copiesCount;
   }
 
   // Persist to database if configured
   if (isDbConfigured()) {
     try {
       const pool = await getPool();
+      const containerDef = FERTITRACE_CONSUMABLES.find((c) => c.code === itemCode);
+      const containerName = containerDef ? containerDef.name : params.containerType;
+
+      // 1. Deduct Stock in Real-time from DB
+      await pool.request()
+        .input('Code', itemCode)
+        .input('Copies', copiesCount)
+        .query(`
+          UPDATE FertiTrace_Consumable_Stock
+          SET StockOnHand = CASE WHEN StockOnHand >= @Copies THEN StockOnHand - @Copies ELSE 0 END,
+              AllocatedCount = AllocatedCount + @Copies,
+              UpdatedAt = GETDATE()
+          WHERE Code = @Code
+        `);
+
+      // 2. Insert Record into FertiTrace_QR_Records in DB
       await pool.request()
         .input('QrId', record.qrId)
         .input('QrString', record.qrString)
@@ -182,11 +200,14 @@ export async function createAndRegisterQR(params: {
         .input('QrVersion', record.qrVersion)
         .input('ClinicId', record.clinicId)
         .input('PatientId', record.patientId ?? null)
+        .input('PatientName', record.patientName ?? null)
+        .input('PatientUhid', record.patientUhid ?? null)
         .input('CaseId', record.caseId)
         .input('CycleId', record.cycleId)
         .input('SpecimenId', record.specimenId)
         .input('SpecimenType', record.specimenType)
         .input('ContainerType', record.containerType)
+        .input('ContainerName', containerName)
         .input('ContainerUnitNo', record.containerUnitNo)
         .input('ProcedureName', record.procedureName ?? null)
         .input('CompactCode', record.compactCode)
@@ -194,21 +215,24 @@ export async function createAndRegisterQR(params: {
         .input('StorageLocation', record.storageLocation ?? null)
         .input('Checksum', record.checksum)
         .input('Status', record.status)
+        .input('Copies', copiesCount)
         .input('CreatedBy', record.createdBy)
         .input('Notes', record.notes ?? null)
         .query(`
-          INSERT INTO FT_QR_Master (
-            QrId, QrString, SystemCode, QrVersion, ClinicId, PatientId, CaseId, CycleId,
-            SpecimenId, SpecimenType, ContainerType, ContainerUnitNo, ProcedureName,
-            CompactCode, LabelSize, StorageLocation, Checksum, Status, CreatedBy, Notes
+          INSERT INTO FertiTrace_QR_Records (
+            QrId, QrString, SystemCode, QrVersion, ClinicId, PatientId, PatientName, PatientUhid,
+            CaseId, CycleId, SpecimenId, SpecimenType, ContainerType, ContainerName, ContainerUnitNo,
+            ProcedureName, CompactCode, LabelSize, StorageLocation, Checksum, Status, IsPreassigned,
+            Copies, CreatedBy, Notes, CreatedAt, UpdatedAt
           ) VALUES (
-            @QrId, @QrString, @SystemCode, @QrVersion, @ClinicId, @PatientId, @CaseId, @CycleId,
-            @SpecimenId, @SpecimenType, @ContainerType, @ContainerUnitNo, @ProcedureName,
-            @CompactCode, @LabelSize, @StorageLocation, @Checksum, @Status, @CreatedBy, @Notes
+            @QrId, @QrString, @SystemCode, @QrVersion, @ClinicId, @PatientId, @PatientName, @PatientUhid,
+            @CaseId, @CycleId, @SpecimenId, @SpecimenType, @ContainerType, @ContainerName, @ContainerUnitNo,
+            @ProcedureName, @CompactCode, @LabelSize, @StorageLocation, @Checksum, @Status, 0,
+            @Copies, @CreatedBy, @Notes, GETDATE(), GETDATE()
           )
         `);
     } catch (err) {
-      console.warn('DB Insert failed for FT_QR_Master, falling back to memory store:', err);
+      console.warn('DB Insert failed for FertiTrace_QR_Records, falling back to memory store:', err);
     }
   }
 
@@ -284,7 +308,7 @@ export async function validateScannedQR(params: {
       const pool = await getPool();
       const res = await pool.request()
         .input('SpecimenId', specimenId)
-        .query('SELECT TOP 1 * FROM FT_QR_Master WHERE SpecimenId = @SpecimenId');
+        .query('SELECT TOP 1 * FROM FertiTrace_QR_Records WHERE SpecimenId = @SpecimenId OR CompactCode = @SpecimenId OR PreassignedVendorCode = @SpecimenId');
       if (res.recordset && res.recordset.length > 0) {
         const row = res.recordset[0];
         record = {
@@ -475,6 +499,75 @@ export async function allotPreassignedLabel(params: {
 
   MEMORY_QR_STORE.set(specimenId, record);
 
+  // Update in-memory consumable inventory
+  const itemCode = params.containerType.padStart(2, '0');
+  const inv = MEMORY_INVENTORY.get(itemCode);
+  if (inv) {
+    inv.stockOnHand = Math.max(0, inv.stockOnHand - 1);
+    inv.allocatedCount += 1;
+  }
+
+  // Persist to database if configured
+  if (isDbConfigured()) {
+    try {
+      const pool = await getPool();
+      const containerDef = FERTITRACE_CONSUMABLES.find((c) => c.code === itemCode);
+      const containerName = containerDef ? containerDef.name : params.containerType;
+
+      // 1. Deduct Stock in DB
+      await pool.request()
+        .input('Code', itemCode)
+        .input('Copies', 1)
+        .query(`
+          UPDATE FertiTrace_Consumable_Stock
+          SET StockOnHand = CASE WHEN StockOnHand >= @Copies THEN StockOnHand - @Copies ELSE 0 END,
+              AllocatedCount = AllocatedCount + @Copies,
+              UpdatedAt = GETDATE()
+          WHERE Code = @Code
+        `);
+
+      // 2. Insert into FertiTrace_QR_Records
+      await pool.request()
+        .input('QrId', record.qrId)
+        .input('QrString', record.qrString)
+        .input('SystemCode', record.systemCode)
+        .input('QrVersion', record.qrVersion)
+        .input('ClinicId', record.clinicId)
+        .input('PatientId', record.patientId ?? null)
+        .input('PatientName', record.patientName ?? null)
+        .input('PatientUhid', record.patientUhid ?? null)
+        .input('CaseId', record.caseId)
+        .input('CycleId', record.cycleId)
+        .input('SpecimenId', record.specimenId)
+        .input('SpecimenType', record.specimenType)
+        .input('ContainerType', record.containerType)
+        .input('ContainerName', containerName)
+        .input('ContainerUnitNo', record.containerUnitNo)
+        .input('ProcedureName', record.procedureName ?? null)
+        .input('CompactCode', record.compactCode)
+        .input('LabelSize', record.labelSize)
+        .input('Checksum', record.checksum)
+        .input('Status', record.status)
+        .input('PreassignedVendorCode', barcode)
+        .input('CreatedBy', record.createdBy)
+        .query(`
+          INSERT INTO FertiTrace_QR_Records (
+            QrId, QrString, SystemCode, QrVersion, ClinicId, PatientId, PatientName, PatientUhid,
+            CaseId, CycleId, SpecimenId, SpecimenType, ContainerType, ContainerName, ContainerUnitNo,
+            ProcedureName, CompactCode, LabelSize, Checksum, Status, IsPreassigned, PreassignedVendorCode,
+            Copies, CreatedBy, CreatedAt, UpdatedAt
+          ) VALUES (
+            @QrId, @QrString, @SystemCode, @QrVersion, @ClinicId, @PatientId, @PatientName, @PatientUhid,
+            @CaseId, @CycleId, @SpecimenId, @SpecimenType, @ContainerType, @ContainerName, @ContainerUnitNo,
+            @ProcedureName, @CompactCode, @LabelSize, @Checksum, @Status, 1, @PreassignedVendorCode,
+            1, @CreatedBy, GETDATE(), GETDATE()
+          )
+        `);
+    } catch (err) {
+      console.warn('DB Insert failed for preassigned FertiTrace_QR_Records:', err);
+    }
+  }
+
   const audit: FertiTraceAuditLogEntry = {
     logId: Date.now(),
     specimenId,
@@ -511,7 +604,8 @@ export async function transitionLifecycleStatus(params: {
     record.storageLocation = params.storageLocation;
   }
 
-  if (['TRANSFERRED', 'DISPOSED', 'CANCELLED'].includes(params.newStatus)) {
+  const isClosed = ['TRANSFERRED', 'DISPOSED', 'CANCELLED'].includes(params.newStatus);
+  if (isClosed) {
     record.closedAt = new Date().toISOString();
     record.closeReason = params.closeReason || `Closed as ${params.newStatus}`;
 
@@ -521,6 +615,39 @@ export async function transitionLifecycleStatus(params: {
     if (inv) {
       inv.allocatedCount = Math.max(0, inv.allocatedCount - 1);
       inv.consumedCount += 1;
+    }
+  }
+
+  // Update in database if configured
+  if (isDbConfigured()) {
+    try {
+      const pool = await getPool();
+      await pool.request()
+        .input('SpecimenId', params.specimenId)
+        .input('Status', params.newStatus)
+        .input('StorageLocation', params.storageLocation ?? null)
+        .query(`
+          UPDATE FertiTrace_QR_Records 
+          SET Status = @Status,
+              StorageLocation = COALESCE(@StorageLocation, StorageLocation),
+              UpdatedAt = GETDATE()
+          WHERE SpecimenId = @SpecimenId
+        `);
+
+      if (isClosed) {
+        const itemCode = record.containerType.padStart(2, '0');
+        await pool.request()
+          .input('Code', itemCode)
+          .query(`
+            UPDATE FertiTrace_Consumable_Stock
+            SET AllocatedCount = CASE WHEN AllocatedCount >= 1 THEN AllocatedCount - 1 ELSE 0 END,
+                ConsumedCount = ConsumedCount + 1,
+                UpdatedAt = GETDATE()
+            WHERE Code = @Code
+          `);
+      }
+    } catch (err) {
+      console.warn('DB Update failed in transitionLifecycleStatus:', err);
     }
   }
 
@@ -542,9 +669,41 @@ export async function transitionLifecycleStatus(params: {
 }
 
 /**
- * 5. Consumable Inventory Listing
+ * 5. Consumable Inventory Listing (from Database table FertiTrace_Consumable_Stock)
  */
 export async function listConsumableInventory(): Promise<FertiTraceConsumableItem[]> {
+  if (isDbConfigured()) {
+    try {
+      const pool = await getPool();
+      const res = await pool.request().query(`
+        SELECT 
+          Code as code,
+          Name as name,
+          Category as category,
+          StockOnHand as stockOnHand,
+          AllocatedCount as allocatedCount,
+          ConsumedCount as consumedCount,
+          UnitOfMeasure as unitOfMeasure,
+          ReorderLevel as reorderLevel
+        FROM FertiTrace_Consumable_Stock
+        ORDER BY TRY_CAST(Code as INT) ASC, Code ASC
+      `);
+      if (res.recordset && res.recordset.length > 0) {
+        return res.recordset.map((r: Record<string, unknown>) => ({
+          code: String(r.code),
+          name: String(r.name),
+          category: String(r.category),
+          stockOnHand: Number(r.stockOnHand),
+          allocatedCount: Number(r.allocatedCount),
+          consumedCount: Number(r.consumedCount),
+          unitOfMeasure: String(r.unitOfMeasure),
+          reorderLevel: Number(r.reorderLevel),
+        }));
+      }
+    } catch (err) {
+      console.warn('DB query failed for FertiTrace_Consumable_Stock, fallback to memory:', err);
+    }
+  }
   return Array.from(MEMORY_INVENTORY.values());
 }
 
@@ -559,8 +718,76 @@ export async function listTraceabilityAuditLogs(specimenId?: string): Promise<Fe
 }
 
 /**
- * 7. History of generated QR records
+ * 7. History of generated QR records (from Database table FertiTrace_QR_Records)
  */
-export async function listQRHistory(limit: number = 25): Promise<FertiTraceQRRecord[]> {
+export async function listQRHistory(limit: number = 50): Promise<FertiTraceQRRecord[]> {
+  if (isDbConfigured()) {
+    try {
+      const pool = await getPool();
+      const res = await pool.request()
+        .input('Limit', limit)
+        .query(`
+          SELECT TOP (@Limit)
+            QrId as qrId,
+            QrString as qrString,
+            SystemCode as systemCode,
+            QrVersion as qrVersion,
+            ClinicId as clinicId,
+            PatientId as patientId,
+            PatientName as patientName,
+            PatientUhid as patientUhid,
+            CaseId as caseId,
+            CycleId as cycleId,
+            SpecimenId as specimenId,
+            SpecimenType as specimenType,
+            ContainerType as containerType,
+            ContainerUnitNo as containerUnitNo,
+            ProcedureName as procedureName,
+            CompactCode as compactCode,
+            LabelSize as labelSize,
+            StorageLocation as storageLocation,
+            Checksum as checksum,
+            Status as status,
+            IsPreassigned as isPreassigned,
+            PreassignedVendorCode as preassignedVendorCode,
+            CreatedBy as createdBy,
+            CreatedAt as createdAt,
+            Notes as notes
+          FROM FertiTrace_QR_Records
+          ORDER BY CreatedAt DESC
+        `);
+      if (res.recordset && res.recordset.length > 0) {
+        return res.recordset.map((r: Record<string, unknown>) => ({
+          qrId: String(r.qrId),
+          qrString: String(r.qrString),
+          systemCode: String(r.systemCode),
+          qrVersion: String(r.qrVersion),
+          clinicId: String(r.clinicId),
+          patientId: r.patientId ? Number(r.patientId) : undefined,
+          patientName: r.patientName ? String(r.patientName) : undefined,
+          patientUhid: r.patientUhid ? String(r.patientUhid) : undefined,
+          caseId: String(r.caseId),
+          cycleId: String(r.cycleId),
+          specimenId: String(r.specimenId),
+          specimenType: String(r.specimenType) as FertiTraceSpecimenType,
+          containerType: String(r.containerType),
+          containerUnitNo: String(r.containerUnitNo),
+          procedureName: r.procedureName ? String(r.procedureName) : undefined,
+          compactCode: String(r.compactCode),
+          labelSize: String(r.labelSize),
+          storageLocation: r.storageLocation ? String(r.storageLocation) : undefined,
+          checksum: String(r.checksum),
+          status: String(r.status) as FertiTraceLifecycleStatus,
+          isPreassigned: Boolean(r.isPreassigned),
+          preassignedVendorCode: r.preassignedVendorCode ? String(r.preassignedVendorCode) : undefined,
+          createdBy: String(r.createdBy),
+          createdAt: r.createdAt ? new Date(String(r.createdAt)).toISOString() : new Date().toISOString(),
+          notes: r.notes ? String(r.notes) : undefined,
+        }));
+      }
+    } catch (err) {
+      console.warn('DB query failed for FertiTrace_QR_Records, fallback to memory:', err);
+    }
+  }
   return Array.from(MEMORY_QR_STORE.values()).reverse().slice(0, limit);
 }

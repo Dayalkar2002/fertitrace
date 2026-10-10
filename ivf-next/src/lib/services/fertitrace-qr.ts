@@ -22,6 +22,7 @@ export async function apiGenerateQR(payload: {
   storageLocation?: string;
   createdBy?: string;
   notes?: string;
+  copies?: number;
 }): Promise<FertiTraceQRRecord> {
   const res = await fetch('/api/qr/generate', {
     method: 'POST',

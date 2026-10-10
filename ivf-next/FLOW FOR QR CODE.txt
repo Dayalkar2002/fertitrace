@@ -1,0 +1,7 @@
+Q R CODE WORK
+Only QR Code                                                                               QR Plus RFID Code
+Code generation            Pre assigned labels                             Code generation           Pre assigned labels
+by system                                                                                         by system
+QR code scanner and printer                                                  QR code +RFID    scanner and printer
+Location          LF-1                                                                                                             LF-1
+Cryocan                                                                                                        Cryocan

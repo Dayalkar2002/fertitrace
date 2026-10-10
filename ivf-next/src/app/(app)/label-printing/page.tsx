@@ -17,6 +17,7 @@ import {
   encodeFertiTraceQR,
   generateCompactAlphanumeric,
   formatCompactCryoLocation,
+  formatCompactTimestamp,
 } from '@/lib/fertitrace-qr';
 import {
   apiGenerateQR,
@@ -25,10 +26,29 @@ import {
   apiListQRHistory,
 } from '@/lib/services/fertitrace-qr';
 import { FertiTraceQRCode } from '@/components/common/fertitrace-qr-code';
+import type { PatientCycleRow } from '@/lib/types/cycle';
+import Link from 'next/link';
+
+function formatDocxDate(d: Date): string {
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yy = String(d.getFullYear()).slice(-2);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  return `${dd} ${mm} ${yy} ${hh}:${min}:${ss}`;
+}
 
 export default function LabelPrintingPage() {
   const { token, user } = useAuth();
   const { selectedPatient, selectPatient } = usePatient();
+
+  // Live Clock (Real-time ticking date and time for QR Code generation)
+  const [liveClock, setLiveClock] = useState<Date>(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setLiveClock(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Mode: System Generated QR vs Pre-assigned Market Barcode
   const [generationMode, setGenerationMode] = useState<'system' | 'preassigned'>('system');
@@ -38,12 +58,16 @@ export default function LabelPrintingPage() {
   const [selectedPatId, setSelectedPatId] = useState<number>(selectedPatient?.id ?? 0);
   const [loadingPatients, setLoadingPatients] = useState(false);
 
+  // Existing cycles for patient
+  const [patientCycles, setPatientCycles] = useState<PatientCycleRow[]>([]);
+  const [loadingCycles, setLoadingCycles] = useState(false);
+
   // Form Fields - Master-aligned
   const [specimenType, setSpecimenType] = useState<FertiTraceSpecimenType>('EMBRYO');
   const [consumableCode, setConsumableCode] = useState<string>('07'); // Default 07: Petri Dish
   const [unitNo, setUnitNo] = useState<string>('01');
   const [procedureName, setProcedureName] = useState<string>('IVF CYCLE');
-  const [cycleId, setCycleId] = useState<string>('CY2600456');
+  const [cycleId, setCycleId] = useState<string>('');
   const [labelSizeKey, setLabelSizeKey] = useState<'A' | 'B' | 'C' | 'D' | 'E' | 'F'>('B');
   const [copies, setCopies] = useState<number>(2);
   const [cryoLocation, setCryoLocation] = useState<string>('CC-BA52/C-9/GO-BLUE/VE-RED/VI-BLACK/ST-BROWN');
@@ -63,9 +87,32 @@ export default function LabelPrintingPage() {
   const [inventory, setInventory] = useState<FertiTraceConsumableItem[]>([]);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeTableTab, setActiveTableTab] = useState<'both' | 'records' | 'stock'>('both');
+  const [recordSearch, setRecordSearch] = useState<string>('');
+  const [stockSearch, setStockSearch] = useState<string>('');
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   // Print ref
   const printableAreaRef = useRef<HTMLDivElement>(null);
+
+  // Refresh DB Tables
+  const refreshDbTables = async () => {
+    setIsRefreshing(true);
+    try {
+      const [items, records] = await Promise.all([
+        apiListConsumableInventory(),
+        apiListQRHistory(),
+      ]);
+      setInventory(items);
+      setBatchQueue(records);
+      setStatusMessage({ text: 'Data refreshed dynamically from SQL Server DemoART22.', type: 'info' });
+      setTimeout(() => setStatusMessage(null), 3000);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // Load patients
   useEffect(() => {
@@ -148,18 +195,39 @@ export default function LabelPrintingPage() {
     return FERTITRACE_CONSUMABLES.find((c) => c.code === consumableCode) || FERTITRACE_CONSUMABLES[6];
   }, [consumableCode]);
 
+  // Fetch existing cycles for the selected patient (do not create new IDs in QR sections)
+  useEffect(() => {
+    const pid = activePat.id || selectedPatId;
+    if (!pid) return;
+    setLoadingCycles(true);
+    fetch(`/api/cycles/list?patId=${pid}&satId=0`)
+      .then((res) => res.json())
+      .then((data) => {
+        const rows: PatientCycleRow[] = data.data || [];
+        setPatientCycles(rows);
+        if (rows.length > 0) {
+          setCycleId(rows[0].cycleId);
+        } else {
+          setCycleId('');
+        }
+      })
+      .catch((err) => console.warn('Failed to load cycles for patient:', err))
+      .finally(() => setLoadingCycles(false));
+  }, [activePat.id, selectedPatId]);
+
   // Live preview QR string
   const livePreviewQRString = useMemo(() => {
     return encodeFertiTraceQR({
       clinicId: 'CL001',
       caseId: activePat.refNo,
-      cycleId,
+      cycleId: cycleId || 'NO_CYCLE',
       specimenId: currentRecord?.specimenId || 'SP000789',
       specimenType,
       containerType: currentConsumableObj.name,
       unitNo,
+      createdAt: formatCompactTimestamp(liveClock),
     });
-  }, [activePat, cycleId, specimenType, currentConsumableObj, unitNo, currentRecord]);
+  }, [activePat, cycleId, specimenType, currentConsumableObj, unitNo, currentRecord, liveClock]);
 
   // Live preview Alphanumeric code
   const livePreviewCompactCode = useMemo(() => {
@@ -192,17 +260,24 @@ export default function LabelPrintingPage() {
         storageLocation: isCryo ? cryoLocation : undefined,
         createdBy: user?.userName || 'Dr. Embryologist',
         notes,
+        copies,
       });
 
       setCurrentRecord(record);
-      setBatchQueue((prev) => [record, ...prev]);
       setStatusMessage({
-        text: `V1 QR generated successfully! Specimen ID: ${record.specimenId}. Stock allocated.`,
+        text: `V1 QR generated successfully! Specimen ID: ${record.specimenId}. ${copies} unit(s) deducted from stock.`,
         type: 'success',
       });
 
-      // Refresh inventory
-      apiListConsumableInventory().then((items) => setInventory(items)).catch(() => {});
+      // Refresh inventory & history dynamically from database
+      const [updatedInventory, updatedHistory] = await Promise.all([
+        apiListConsumableInventory(),
+        apiListQRHistory(),
+      ]);
+      setInventory(updatedInventory);
+      if (updatedHistory.length > 0) {
+        setBatchQueue(updatedHistory);
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to generate QR';
       setStatusMessage({ text: msg, type: 'error' });
@@ -237,12 +312,21 @@ export default function LabelPrintingPage() {
       });
 
       setCurrentRecord(record);
-      setBatchQueue((prev) => [record, ...prev]);
       setPreassignedBarcode('');
       setStatusMessage({
-        text: `Pre-assigned barcode successfully bound to Specimen ${record.specimenId}!`,
+        text: `Pre-assigned barcode successfully bound to Specimen ${record.specimenId}! Stock deducted.`,
         type: 'success',
       });
+
+      // Refresh inventory & history dynamically from database
+      const [updatedInventory, updatedHistory] = await Promise.all([
+        apiListConsumableInventory(),
+        apiListQRHistory(),
+      ]);
+      setInventory(updatedInventory);
+      if (updatedHistory.length > 0) {
+        setBatchQueue(updatedHistory);
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Allotment failed';
       setPreassignedError(msg);
@@ -262,7 +346,34 @@ export default function LabelPrintingPage() {
       text: `Sent ${copies} copies of Specimen ${target.specimenId} to thermal printer.`,
       type: 'info',
     });
+
+    // Refresh inventory in background
+    apiListConsumableInventory().then((items) => setInventory(items)).catch(() => {});
   };
+
+  const filteredRecords = useMemo(() => {
+    if (!recordSearch.trim()) return batchQueue;
+    const q = recordSearch.toLowerCase();
+    return batchQueue.filter(
+      (r) =>
+        r.specimenId.toLowerCase().includes(q) ||
+        (r.patientName && r.patientName.toLowerCase().includes(q)) ||
+        r.caseId.toLowerCase().includes(q) ||
+        r.cycleId.toLowerCase().includes(q) ||
+        r.compactCode.toLowerCase().includes(q)
+    );
+  }, [batchQueue, recordSearch]);
+
+  const filteredStock = useMemo(() => {
+    if (!stockSearch.trim()) return inventory;
+    const q = stockSearch.toLowerCase();
+    return inventory.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        s.code.toLowerCase().includes(q) ||
+        s.category.toLowerCase().includes(q)
+    );
+  }, [inventory, stockSearch]);
 
   return (
     <div className="space-y-6 font-sans text-slate-800">
@@ -422,16 +533,68 @@ export default function LabelPrintingPage() {
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-slate-600 mb-1 block">Treatment Cycle ID</label>
-                <input
-                  type="text"
-                  value={cycleId}
-                  onChange={(e) => setCycleId(e.target.value)}
-                  placeholder="e.g. CY2600456"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-mono font-bold text-slate-800 focus:border-[#6345A6] focus:outline-hidden"
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-bold text-slate-600 block">Existing Treatment Cycle ID</label>
+                  {loadingCycles && (
+                    <span className="text-[10px] font-bold text-[#6345A6] animate-pulse">Loading cycles...</span>
+                  )}
+                </div>
+                {patientCycles.length > 0 ? (
+                  <select
+                    value={cycleId}
+                    onChange={(e) => setCycleId(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-mono font-bold text-slate-800 focus:border-[#6345A6] focus:outline-hidden"
+                  >
+                    {patientCycles.map((cyc) => (
+                      <option key={cyc.cycleId} value={cyc.cycleId}>
+                        {cyc.cycleId} — {cyc.typeLabel || 'Cycle'} ({cyc.cycleDate || 'Active'})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800 flex items-center justify-between gap-1">
+                    <span>No cycles found for this patient</span>
+                    <Link
+                      href="/cycle/creation"
+                      className="font-bold underline text-amber-900 shrink-0"
+                    >
+                      + Create Cycle
+                    </Link>
+                  </div>
+                )}
               </div>
             </div>
+          </div>
+
+          {/* Live Process Date / Time Card (Field 8 in BAR CODE GENERATION VARIABLES.docx) */}
+          <div className="rounded-2xl border border-emerald-200/80 bg-gradient-to-r from-emerald-50/80 via-teal-50/50 to-white p-4 shadow-2xs">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+              <div className="flex items-center gap-2.5">
+                <div className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+                    Live Process Date / Time (Field 8)
+                  </div>
+                  <div className="font-mono text-base font-black text-slate-900">
+                    {formatDocxDate(liveClock)}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="rounded-lg bg-white border border-emerald-200 px-2.5 py-1 font-mono text-[11px] font-bold text-emerald-800 shadow-2xs">
+                  ISO: {formatCompactTimestamp(liveClock)}
+                </span>
+                <span className="rounded-lg bg-emerald-600 px-2 py-1 text-[10px] font-black text-white uppercase tracking-wider">
+                  Live Sync
+                </span>
+              </div>
+            </div>
+            <p className="mt-2 text-[10px] text-slate-500">
+              Only last two digits of year (e.g. 2026 &rarr; 26) with live ticking 24-hr time as specified in <span className="font-semibold text-slate-700">BAR CODE GENERATION VARIABLES.docx</span>. Real-time encoded into QR payload.
+            </p>
           </div>
 
           {/* Master Variables Card */}
@@ -744,88 +907,324 @@ export default function LabelPrintingPage() {
 
       </div>
 
-      {/* Batch History & Queue Table (print:hidden) */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4 print:hidden">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-          <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-            <span>📋 Batch Queue & Generated QR Records</span>
-          </h2>
-          <span className="text-xs text-slate-400 font-medium">
-            {batchQueue.length} records in active session
-          </span>
+      {/* Dynamic Database Tables Section (print:hidden) */}
+      <div className="space-y-6 print:hidden">
+
+        {/* Tab Navigation & Database Sync Controls */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3">
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setActiveTableTab('both')}
+              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition flex items-center gap-1.5 ${
+                activeTableTab === 'both'
+                  ? 'bg-white text-purple-950 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>📑</span>
+              <span>Both Tables</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTableTab('records')}
+              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition flex items-center gap-1.5 ${
+                activeTableTab === 'records'
+                  ? 'bg-white text-purple-950 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>📋</span>
+              <span>Generated QR Records</span>
+              <span className="rounded-full bg-purple-100 px-1.5 py-0.2 text-[10px] text-purple-800 font-bold">
+                {batchQueue.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTableTab('stock')}
+              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition flex items-center gap-1.5 ${
+                activeTableTab === 'stock'
+                  ? 'bg-white text-purple-950 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>📦</span>
+              <span>Consumable Stock Deductions</span>
+              <span className="rounded-full bg-emerald-100 px-1.5 py-0.2 text-[10px] text-emerald-800 font-bold">
+                {inventory.length}
+              </span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-mono text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200 flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>Live DB Synced (DemoART22)</span>
+            </span>
+            <button
+              type="button"
+              onClick={refreshDbTables}
+              disabled={isRefreshing}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-2xs transition flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <span className={isRefreshing ? 'animate-spin' : ''}>🔄</span>
+              <span>{isRefreshing ? 'Refreshing...' : 'Refresh DB'}</span>
+            </button>
+          </div>
         </div>
 
-        {batchQueue.length === 0 ? (
-          <div className="py-8 text-center text-xs text-slate-400">
-            No labels generated in this session yet.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700">
-              <thead className="border-b border-slate-100 bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                <tr>
-                  <th className="px-3 py-2">Specimen ID</th>
-                  <th className="px-3 py-2">Patient / Case</th>
-                  <th className="px-3 py-2">Material / Container</th>
-                  <th className="px-3 py-2">Compact Code</th>
-                  <th className="px-3 py-2">Roll</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {batchQueue.map((item) => (
-                  <tr key={item.specimenId} className="hover:bg-slate-50/80 transition">
-                    <td className="px-3 py-2.5 font-mono font-bold text-[#6345A6]">
-                      {item.specimenId}
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <div className="font-bold text-slate-900">{item.patientName || item.caseId}</div>
-                      <div className="text-[10px] text-slate-400 font-mono">Cycle: {item.cycleId}</div>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <span className="font-semibold text-slate-800">{item.specimenType}</span>
-                      <span className="text-slate-400"> • {item.containerType} #{item.containerUnitNo}</span>
-                    </td>
-                    <td className="px-3 py-2.5 font-mono text-[11px] font-bold text-slate-700">
-                      {item.compactCode}
-                    </td>
-                    <td className="px-3 py-2.5 font-bold">{item.labelSize}</td>
-                    <td className="px-3 py-2.5">
-                      <span
-                        className={`rounded-md px-2 py-0.5 text-[10px] font-bold border ${
-                          item.status === 'ACTIVE'
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            : item.status === 'IN_PROCESS'
-                            ? 'bg-blue-50 text-blue-700 border-blue-200'
-                            : 'bg-slate-100 text-slate-700 border-slate-200'
-                        }`}
-                      >
-                        {item.status}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 text-right space-x-1">
-                      <button
-                        type="button"
-                        onClick={() => setCurrentRecord(item)}
-                        className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-50 shadow-2xs"
-                      >
-                        Preview
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handlePrint(item)}
-                        className="rounded-lg bg-purple-50 px-2 py-1 text-[11px] font-bold text-[#6345A6] border border-purple-200 hover:bg-purple-100 shadow-2xs"
-                      >
-                        Print
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {/* 1. Generated QR Records Table */}
+        {(activeTableTab === 'both' || activeTableTab === 'records') && (
+          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <span>📋 Generated QR Records & Batch Queue</span>
+                  <span className="text-xs text-slate-400 font-normal">
+                    (Table: <code className="text-purple-700 font-mono">FertiTrace_QR_Records</code>)
+                  </span>
+                </h2>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Live specimen QR labels registered dynamically in database. Click Preview to view thermal label or Print to reprint.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Search QR records..."
+                  value={recordSearch}
+                  onChange={(e) => setRecordSearch(e.target.value)}
+                  className="rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:border-[#6345A6] focus:outline-hidden w-48 sm:w-60"
+                />
+                <span className="text-xs text-slate-400 font-medium whitespace-nowrap">
+                  {filteredRecords.length} / {batchQueue.length} records
+                </span>
+              </div>
+            </div>
+
+            {filteredRecords.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400">
+                {batchQueue.length === 0
+                  ? 'No QR records in database yet. Generate a label above to create your first record.'
+                  : 'No records match your search filter.'}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-slate-700">
+                  <thead className="border-b border-slate-100 bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    <tr>
+                      <th className="px-3 py-2.5">Specimen ID</th>
+                      <th className="px-3 py-2.5">Patient / Case</th>
+                      <th className="px-3 py-2.5">Material / Container</th>
+                      <th className="px-3 py-2.5">Compact Code</th>
+                      <th className="px-3 py-2.5">Roll</th>
+                      <th className="px-3 py-2.5">Status</th>
+                      <th className="px-3 py-2.5">Created At</th>
+                      <th className="px-3 py-2.5 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredRecords.map((item) => {
+                      const isCurrent = currentRecord?.specimenId === item.specimenId;
+                      return (
+                        <tr
+                          key={item.specimenId}
+                          className={`transition ${
+                            isCurrent ? 'bg-purple-50/60 font-semibold' : 'hover:bg-slate-50/80'
+                          }`}
+                        >
+                          <td className="px-3 py-2.5 font-mono font-bold text-[#6345A6]">
+                            {item.specimenId}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <div className="font-bold text-slate-900">{item.patientName || item.caseId}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">
+                              Cycle: {item.cycleId || '—'} {item.patientUhid ? `• UHID: ${item.patientUhid}` : ''}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <span className="font-semibold text-slate-800">{item.specimenType}</span>
+                            <span className="text-slate-400">
+                              {' '}• {item.containerType} #{item.containerUnitNo}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 font-mono text-[11px] font-bold text-slate-700">
+                            {item.compactCode}
+                          </td>
+                          <td className="px-3 py-2.5 font-bold">{item.labelSize}</td>
+                          <td className="px-3 py-2.5">
+                            <span
+                              className={`rounded-md px-2 py-0.5 text-[10px] font-bold border ${
+                                item.status === 'ACTIVE'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : item.status === 'IN_PROCESS'
+                                  ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                  : 'bg-slate-100 text-slate-700 border-slate-200'
+                              }`}
+                            >
+                              {item.status}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-[11px] text-slate-500 font-mono">
+                            {item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                          </td>
+                          <td className="px-3 py-2.5 text-right space-x-1 whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => setCurrentRecord(item)}
+                              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-50 shadow-2xs"
+                            >
+                              {isCurrent ? 'Viewing' : 'Preview'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handlePrint(item)}
+                              className="rounded-lg bg-purple-50 px-2.5 py-1 text-[11px] font-bold text-[#6345A6] border border-purple-200 hover:bg-purple-100 shadow-2xs"
+                            >
+                              Print
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
+
+        {/* 2. Real-time Consumable Stock Deductions Table */}
+        {(activeTableTab === 'both' || activeTableTab === 'stock') && (
+          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <span>📦 Real-time Consumable Stock Deductions Table</span>
+                  <span className="text-xs text-slate-400 font-normal">
+                    (Table: <code className="text-emerald-700 font-mono">FertiTrace_Consumable_Stock</code>)
+                  </span>
+                </h2>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Stock is automatically deducted in real time from SQL Server when QR labels are printed or specimens are allocated.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Search consumables..."
+                  value={stockSearch}
+                  onChange={(e) => setStockSearch(e.target.value)}
+                  className="rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:border-[#6345A6] focus:outline-hidden w-48 sm:w-60"
+                />
+                <span className="text-xs text-slate-400 font-medium whitespace-nowrap">
+                  {filteredStock.length} / {inventory.length} items
+                </span>
+              </div>
+            </div>
+
+            {filteredStock.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400">
+                No consumable items match your search.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-slate-700">
+                  <thead className="border-b border-slate-100 bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    <tr>
+                      <th className="px-3 py-2.5">Code</th>
+                      <th className="px-3 py-2.5">Consumable Name</th>
+                      <th className="px-3 py-2.5">Category</th>
+                      <th className="px-3 py-2.5">Stock On Hand</th>
+                      <th className="px-3 py-2.5">In Use (Allocated)</th>
+                      <th className="px-3 py-2.5">Total Consumed</th>
+                      <th className="px-3 py-2.5">Unit</th>
+                      <th className="px-3 py-2.5">Reorder Level</th>
+                      <th className="px-3 py-2.5 text-right">Stock Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredStock.map((item) => {
+                      const isLow = item.stockOnHand <= item.reorderLevel;
+                      const isSelected = item.code === consumableCode;
+                      return (
+                        <tr
+                          key={item.code}
+                          className={`transition ${
+                            isSelected ? 'bg-amber-50/60 font-semibold' : 'hover:bg-slate-50/80'
+                          }`}
+                        >
+                          <td className="px-3 py-2.5 font-mono font-bold text-slate-900">
+                            {item.code}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                              <span>{item.name}</span>
+                              {isSelected && (
+                                <span className="rounded-full bg-purple-100 text-[#6345A6] px-1.5 py-0.2 text-[9px] font-bold">
+                                  Selected
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2.5 text-slate-600 font-medium">
+                            {item.category}
+                          </td>
+                          <td className="px-3 py-2.5 font-mono text-sm font-black">
+                            <span
+                              className={
+                                item.stockOnHand === 0
+                                  ? 'text-red-600'
+                                  : isLow
+                                  ? 'text-amber-600'
+                                  : 'text-emerald-700'
+                              }
+                            >
+                              {item.stockOnHand}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 font-mono font-bold text-purple-700">
+                            {item.allocatedCount} in use
+                          </td>
+                          <td className="px-3 py-2.5 font-mono text-slate-600">
+                            {item.consumedCount}
+                          </td>
+                          <td className="px-3 py-2.5 font-medium text-slate-500">
+                            {item.unitOfMeasure}
+                          </td>
+                          <td className="px-3 py-2.5 font-mono text-slate-500">
+                            {item.reorderLevel}
+                          </td>
+                          <td className="px-3 py-2.5 text-right">
+                            <span
+                              className={`rounded-md px-2 py-0.5 text-[10px] font-bold border ${
+                                item.stockOnHand === 0
+                                  ? 'bg-red-50 text-red-700 border-red-200'
+                                  : isLow
+                                  ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              }`}
+                            >
+                              {item.stockOnHand === 0
+                                ? 'Out of Stock'
+                                : isLow
+                                ? 'Low Stock'
+                                : 'Optimal'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
 
       {/* Hidden Printable Area for @media print Thermal Output */}

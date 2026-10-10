@@ -37,7 +37,6 @@ const INITIAL_OOCYTES: OocyteItem[] = [
     collectionDateTime: '18-Aug-2026 09:20',
     maturity: 'MII',
     morphologyGrade: 'A',
-    linkedSpermId: 'SEM-26-00018472',
     status: 'Fertilized',
     fertilizationResult: '2PN',
     embryoId: 'EMB-26-01',
@@ -51,7 +50,6 @@ const INITIAL_OOCYTES: OocyteItem[] = [
     collectionDateTime: '18-Aug-2026 09:21',
     maturity: 'MII',
     morphologyGrade: 'A',
-    linkedSpermId: 'SEM-26-00018472',
     status: 'Fertilized',
     fertilizationResult: '2PN',
     embryoId: 'EMB-26-02',
@@ -65,7 +63,6 @@ const INITIAL_OOCYTES: OocyteItem[] = [
     collectionDateTime: '18-Aug-2026 09:22',
     maturity: 'MII',
     morphologyGrade: 'B',
-    linkedSpermId: 'SEM-26-00018472',
     status: 'Fertilized',
     fertilizationResult: '2PN',
     embryoId: 'EMB-26-03',
@@ -80,7 +77,6 @@ const INITIAL_OOCYTES: OocyteItem[] = [
     collectionDateTime: '18-Aug-2026 09:22',
     maturity: 'MI',
     morphologyGrade: '-',
-    linkedSpermId: '-',
     status: 'Immature',
     fertilizationResult: '0PN',
     transferStatus: 'Culturing',
@@ -91,7 +87,6 @@ const INITIAL_OOCYTES: OocyteItem[] = [
     collectionDateTime: '18-Aug-2026 09:23',
     maturity: 'GV',
     morphologyGrade: '-',
-    linkedSpermId: '-',
     status: 'Immature',
     fertilizationResult: '0PN',
     transferStatus: 'Culturing',
@@ -102,7 +97,6 @@ const INITIAL_OOCYTES: OocyteItem[] = [
     collectionDateTime: '18-Aug-2026 09:24',
     maturity: 'MII',
     morphologyGrade: 'A',
-    linkedSpermId: 'SEM-26-00018472',
     status: 'Fertilized',
     fertilizationResult: '2PN',
     embryoId: 'EMB-26-04',
@@ -117,7 +111,6 @@ const INITIAL_OOCYTES: OocyteItem[] = [
     collectionDateTime: '18-Aug-2026 09:25',
     maturity: 'MII',
     morphologyGrade: 'B',
-    linkedSpermId: 'SEM-26-00018472',
     status: 'Fertilized',
     fertilizationResult: '2PN',
     embryoId: 'EMB-26-05',
@@ -132,7 +125,6 @@ const INITIAL_OOCYTES: OocyteItem[] = [
     collectionDateTime: '18-Aug-2026 09:26',
     maturity: 'MII',
     morphologyGrade: 'A',
-    linkedSpermId: 'SEM-26-00018472',
     status: 'Fertilized',
     fertilizationResult: '2PN',
     embryoId: 'EMB-26-06',
@@ -146,7 +138,6 @@ const INITIAL_OOCYTES: OocyteItem[] = [
     collectionDateTime: '18-Aug-2026 09:27',
     maturity: 'MII',
     morphologyGrade: 'B',
-    linkedSpermId: 'SEM-26-00018472',
     status: 'Fertilized',
     fertilizationResult: '2PN',
     embryoId: 'EMB-26-07',
@@ -160,7 +151,6 @@ const INITIAL_OOCYTES: OocyteItem[] = [
     collectionDateTime: '18-Aug-2026 09:28',
     maturity: 'MII',
     morphologyGrade: 'A',
-    linkedSpermId: 'SEM-26-00018472',
     status: 'Fertilized',
     fertilizationResult: '2PN',
     embryoId: 'EMB-26-08',
@@ -174,7 +164,6 @@ const INITIAL_OOCYTES: OocyteItem[] = [
     collectionDateTime: '18-Aug-2026 09:29',
     maturity: 'MII',
     morphologyGrade: 'B',
-    linkedSpermId: 'SEM-26-00018472',
     status: 'Retrieved',
     transferStatus: 'Culturing',
   },
@@ -184,7 +173,6 @@ const INITIAL_OOCYTES: OocyteItem[] = [
     collectionDateTime: '18-Aug-2026 09:30',
     maturity: 'MII',
     morphologyGrade: 'B',
-    linkedSpermId: 'SEM-26-00018472',
     status: 'Retrieved',
     transferStatus: 'Culturing',
   },
@@ -264,7 +252,6 @@ function generateOocytesFromSummary(
       collectionDateTime: `${cDate} 09:${String(20 + (i % 40)).padStart(2, '0')}`,
       maturity: 'MII',
       morphologyGrade: i % 3 === 0 ? 'A' : 'B',
-      linkedSpermId: 'SEM-26-00018472',
       status: isFertilized ? 'Fertilized' : 'Retrieved',
       fertilizationResult: isFertilized ? '2PN' : '0PN',
       embryoId: embryoMatch ? embryoMatch.id : isFertilized ? `EMB-${yearSuffix}-${cleanCycle}-${idStr}` : undefined,
@@ -285,7 +272,6 @@ function generateOocytesFromSummary(
       collectionDateTime: `${cDate} 09:${String(20 + ((m2Count + i) % 40)).padStart(2, '0')}`,
       maturity: 'MI',
       morphologyGrade: '-',
-      linkedSpermId: '-',
       status: 'Immature',
       fertilizationResult: '0PN',
       transferStatus: 'Culturing',
@@ -302,7 +288,6 @@ function generateOocytesFromSummary(
       collectionDateTime: `${cDate} 09:${String(20 + ((m2Count + m1Count + i) % 40)).padStart(2, '0')}`,
       maturity: 'GV',
       morphologyGrade: '-',
-      linkedSpermId: '-',
       status: 'Immature',
       fertilizationResult: '0PN',
       transferStatus: 'Culturing',
@@ -319,7 +304,6 @@ function generateOocytesFromSummary(
       collectionDateTime: `${cDate} 09:${String(20 + ((m2Count + m1Count + gvCount + i) % 40)).padStart(2, '0')}`,
       maturity: 'Degenerated',
       morphologyGrade: '-',
-      linkedSpermId: '-',
       status: 'Degenerated',
       transferStatus: 'Discarded',
     });
@@ -362,8 +346,7 @@ export function OocyteEmbryoClient() {
   const [showTransferModal, setShowTransferModal] = useState(false);
 
   // New Oocyte Form State
-  const [newMaturity, setNewMaturity] = useState<'MII' | 'MI' | 'GV'>('MII');
-  const [newMorphology, setNewMorphology] = useState<'A' | 'B' | 'C'>('A');
+  const [newMaturity, setNewMaturity] = useState<'MII' | 'MI' | 'GV' | 'Degenerated'>('MII');
 
   // Toast alert
   const [toast, setToast] = useState<string | null>(null);
@@ -612,12 +595,38 @@ export function OocyteEmbryoClient() {
   }, [labView, sourceTab, ivfSummary, icsiSummary, selectedCycleId, sourceEmbryos, embryos]);
 
   const frozenEmbryosList = useMemo(() => {
+    function formatBlastocystShortGrade(celler?: string, grade?: string, teGrade?: string): { short: string; full: string } {
+      const cellerStr = (celler || '').trim();
+      const expMatch = cellerStr.match(/^([1-6])/);
+      const exp = expMatch ? expMatch[1] : (cellerStr ? cellerStr.slice(0, 1) : '');
+
+      const gradeStr = (grade || '').trim();
+      let icm = '';
+      if (/Grade\s*A/i.test(gradeStr) || /^A\b/i.test(gradeStr)) icm = 'A';
+      else if (/Grade\s*B/i.test(gradeStr) || /^B\b/i.test(gradeStr)) icm = 'B';
+      else if (/Grade\s*C/i.test(gradeStr) || /^C\b/i.test(gradeStr)) icm = 'C';
+      else icm = gradeStr;
+
+      const teStr = (teGrade || '').trim();
+      let te = '';
+      if (/Grade\s*A/i.test(teStr) || /^A\b/i.test(teStr)) te = 'A';
+      else if (/Grade\s*B/i.test(teStr) || /^B\b/i.test(teStr)) te = 'B';
+      else if (/Grade\s*C/i.test(teStr) || /^C\b/i.test(teStr)) te = 'C';
+      else te = teStr;
+
+      const full = [cellerStr, gradeStr, teStr].filter(Boolean).join(' · ');
+      const short = exp && icm && te ? `${exp}${icm}${te}` : [exp, icm, te].filter(Boolean).join('') || '—';
+
+      return { short, full };
+    }
+
     const list: Array<{
       id: string;
       module: 'et' | 'bt';
       stageLabel: string;
       source: string;
       gradeLabel: string;
+      gradeFull: string;
       location: string;
       remark: string;
     }> = [];
@@ -629,7 +638,8 @@ export function OocyteEmbryoClient() {
           module: 'et',
           stageLabel: e.celler ? `Day 3 (${e.celler})` : 'Day 3 Cleavage',
           source: e.source,
-          gradeLabel: e.grade || '—',
+          gradeLabel: e.grade || 'Grade I',
+          gradeFull: e.grade ? `${e.celler || 'Cleavage'} ${e.grade}` : 'Day 3 Cleavage',
           location: e.location || '',
           remark: e.remark || 'Vitrified Cleavage Embryo',
         });
@@ -638,12 +648,14 @@ export function OocyteEmbryoClient() {
 
     blastocysts.forEach((b) => {
       if (b.action === 2 || (b.location && b.location.trim().length > 0)) {
+        const { short, full } = formatBlastocystShortGrade(b.celler, b.grade, b.teGrade);
         list.push({
           id: b.id,
           module: 'bt',
           stageLabel: 'Day 5 Blastocyst',
           source: b.source,
-          gradeLabel: [b.celler, b.grade, b.teGrade].filter(Boolean).join(' ') || '—',
+          gradeLabel: short,
+          gradeFull: full,
           location: b.location || '',
           remark: b.remark || 'Vitrified Blastocyst',
         });
@@ -673,8 +685,6 @@ export function OocyteEmbryoClient() {
       oocyteId: newId,
       collectionDateTime: '18-Aug-2026 09:35',
       maturity: newMaturity,
-      morphologyGrade: newMorphology,
-      linkedSpermId: 'SEM-26-00018472',
       status: 'Retrieved',
       transferStatus: 'Culturing',
     };
@@ -685,9 +695,10 @@ export function OocyteEmbryoClient() {
 
   // Filtered oocytes table list
   const filteredOocytes = oocytes.filter((item) => {
+    const q = searchQuery.toLowerCase();
     const matchesSearch =
-      item.oocyteId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.linkedSpermId.toLowerCase().includes(searchQuery.toLowerCase());
+      item.oocyteId.toLowerCase().includes(q) ||
+      item.maturity.toLowerCase().includes(q);
     const matchesStatus = statusFilter === 'All' || item.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -930,79 +941,83 @@ export function OocyteEmbryoClient() {
         </div>
       </div>
 
-      {/* SUMMARY STAT METRICS CARDS */}
-      {summaryError && (
-        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{summaryError}</p>
+      {/* SUMMARY STAT METRICS CARDS (Hidden on Cryopreservation tab as requested) */}
+      {activeTab !== 'cryopreservation' && (
+        <>
+          {summaryError && (
+            <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{summaryError}</p>
+          )}
+          <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-2">
+            {/* OOCYTE SUMMARY */}
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Oocyte Summary · {cycleType}
+                </h3>
+                <span className="text-[11px] font-semibold text-purple-600">
+                  {summary.cycleDate ? `Cycle ${summary.cycleDate}` : 'From IVF / ICSI screen'}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 text-center">
+                <div className="rounded-xl bg-purple-50/60 border border-purple-100 p-2.5">
+                  <span className="block text-[10px] font-bold text-purple-600 uppercase">Retrieved</span>
+                  <PairCount both={bothLabs} ivf={ivfSummary.retrieved} icsi={icsiSummary.retrieved} single={retrievedCount} />
+                </div>
+                <div className="rounded-xl bg-emerald-50/60 border border-emerald-100 p-2.5">
+                  <span className="block text-[10px] font-bold text-emerald-600 uppercase">Mature (MII)</span>
+                  <PairCount both={bothLabs} ivf={ivfSummary.matureMII} icsi={icsiSummary.matureMII} single={matureCount} />
+                </div>
+                <div className="rounded-xl bg-amber-50/60 border border-amber-100 p-2.5">
+                  <span className="block text-[10px] font-bold text-amber-600 uppercase">Immature (GV/MI)</span>
+                  <PairCount both={bothLabs} ivf={ivfSummary.immature} icsi={icsiSummary.immature} single={immatureCount} />
+                </div>
+                <div className="rounded-xl bg-slate-50 border border-slate-200/70 p-2.5">
+                  <span className="block text-[10px] font-bold text-slate-500 uppercase">Degenerated</span>
+                  <PairCount both={bothLabs} ivf={ivfSummary.degenerated} icsi={icsiSummary.degenerated} single={degeneratedCount} />
+                </div>
+              </div>
+            </div>
+
+            {/* EMBRYO SUMMARY */}
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Embryo Summary · {cycleType}
+                </h3>
+                <span className="text-[11px] font-semibold text-emerald-600">
+                  2PN / cleaved from {sourceTab}; blastocyst &amp; freeze from ET Action
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 text-center">
+                <div className="rounded-xl bg-emerald-50/60 border border-emerald-100 p-2.5">
+                  <span className="block text-[10px] font-bold text-emerald-600 uppercase">Fertilized (2PN)</span>
+                  <PairCount both={bothLabs} ivf={ivfSummary.fertilized2PN} icsi={icsiSummary.fertilized2PN} single={fertilized2PN} />
+                </div>
+                <div className="rounded-xl bg-blue-50/60 border border-blue-100 p-2.5">
+                  <span className="block text-[10px] font-bold text-blue-600 uppercase">Cleavage</span>
+                  <PairCount both={bothLabs} ivf={ivfSummary.cleavage} icsi={icsiSummary.cleavage} single={cleavageCount} />
+                </div>
+                <div className="rounded-xl bg-purple-50/60 border border-purple-100 p-2.5">
+                  <span className="block text-[10px] font-bold text-purple-600 uppercase">Blastocyst</span>
+                  <PairCount both={bothLabs} ivf={ivfSummary.blastocyst} icsi={icsiSummary.blastocyst} single={blastocystCount} />
+                </div>
+                <div className="rounded-xl bg-teal-50/60 border border-teal-100 p-2.5">
+                  <span className="block text-[10px] font-bold text-teal-600 uppercase">Cryopreserved</span>
+                  <PairCount both={bothLabs} ivf={ivfSummary.cryopreserved} icsi={icsiSummary.cryopreserved} single={cryopreservedCount} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <Main2PagesGrid view={labView} tab={activeTab} ivf={ivfSummary} icsi={icsiSummary} />
+        </>
       )}
-      <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-2">
-        {/* OOCYTE SUMMARY */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              Oocyte Summary · {cycleType}
-            </h3>
-            <span className="text-[11px] font-semibold text-purple-600">
-              {summary.cycleDate ? `Cycle ${summary.cycleDate}` : 'From IVF / ICSI screen'}
-            </span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 text-center">
-            <div className="rounded-xl bg-purple-50/60 border border-purple-100 p-2.5">
-              <span className="block text-[10px] font-bold text-purple-600 uppercase">Retrieved</span>
-              <PairCount both={bothLabs} ivf={ivfSummary.retrieved} icsi={icsiSummary.retrieved} single={retrievedCount} />
-            </div>
-            <div className="rounded-xl bg-emerald-50/60 border border-emerald-100 p-2.5">
-              <span className="block text-[10px] font-bold text-emerald-600 uppercase">Mature (MII)</span>
-              <PairCount both={bothLabs} ivf={ivfSummary.matureMII} icsi={icsiSummary.matureMII} single={matureCount} />
-            </div>
-            <div className="rounded-xl bg-amber-50/60 border border-amber-100 p-2.5">
-              <span className="block text-[10px] font-bold text-amber-600 uppercase">Immature (GV/MI)</span>
-              <PairCount both={bothLabs} ivf={ivfSummary.immature} icsi={icsiSummary.immature} single={immatureCount} />
-            </div>
-            <div className="rounded-xl bg-slate-50 border border-slate-200/70 p-2.5">
-              <span className="block text-[10px] font-bold text-slate-500 uppercase">Degenerated</span>
-              <PairCount both={bothLabs} ivf={ivfSummary.degenerated} icsi={icsiSummary.degenerated} single={degeneratedCount} />
-            </div>
-          </div>
-        </div>
-
-        {/* EMBRYO SUMMARY */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              Embryo Summary · {cycleType}
-            </h3>
-            <span className="text-[11px] font-semibold text-emerald-600">
-              2PN / cleaved from {sourceTab}; blastocyst &amp; freeze from ET Action
-            </span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 text-center">
-            <div className="rounded-xl bg-emerald-50/60 border border-emerald-100 p-2.5">
-              <span className="block text-[10px] font-bold text-emerald-600 uppercase">Fertilized (2PN)</span>
-              <PairCount both={bothLabs} ivf={ivfSummary.fertilized2PN} icsi={icsiSummary.fertilized2PN} single={fertilized2PN} />
-            </div>
-            <div className="rounded-xl bg-blue-50/60 border border-blue-100 p-2.5">
-              <span className="block text-[10px] font-bold text-blue-600 uppercase">Cleavage</span>
-              <PairCount both={bothLabs} ivf={ivfSummary.cleavage} icsi={icsiSummary.cleavage} single={cleavageCount} />
-            </div>
-            <div className="rounded-xl bg-purple-50/60 border border-purple-100 p-2.5">
-              <span className="block text-[10px] font-bold text-purple-600 uppercase">Blastocyst</span>
-              <PairCount both={bothLabs} ivf={ivfSummary.blastocyst} icsi={icsiSummary.blastocyst} single={blastocystCount} />
-            </div>
-            <div className="rounded-xl bg-teal-50/60 border border-teal-100 p-2.5">
-              <span className="block text-[10px] font-bold text-teal-600 uppercase">Cryopreserved</span>
-              <PairCount both={bothLabs} ivf={ivfSummary.cryopreserved} icsi={icsiSummary.cryopreserved} single={cryopreservedCount} />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <Main2PagesGrid view={labView} tab={activeTab} ivf={ivfSummary} icsi={icsiSummary} />
 
       {/* MAIN CONTENT AREA: TAB CONTENTS + QUICK ACTIONS SIDEBAR */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
         
-        {/* TAB CONTENTS (COL 9) */}
-        <div className="lg:col-span-9 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
+        {/* TAB CONTENTS (COL 12 on non-ET tabs, COL 9 on ET tabs with sidebar) */}
+        <div className={`${activeTab === 'embryo-transfer' || activeTab === 'blastocyst-transfer' ? 'lg:col-span-9' : 'lg:col-span-12'} rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4`}>
           
           {/* TAB 1: OOCYTES LIST TABLE */}
           {activeTab === 'oocytes' && (
@@ -1017,7 +1032,7 @@ export function OocyteEmbryoClient() {
                 <div className="flex items-center gap-3 text-xs">
                   <input
                     type="text"
-                    placeholder="Search Oocyte ID..."
+                    placeholder="Search Oocytes..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="h-8 rounded-xl border border-slate-200 px-3 text-xs outline-none focus:border-purple-500 w-44"
@@ -1041,9 +1056,7 @@ export function OocyteEmbryoClient() {
                     <tr>
                       <th className="px-3.5 py-2.5 text-left font-bold uppercase">Oocyte ID</th>
                       <th className="px-3.5 py-2.5 text-left font-bold uppercase">Collection Date / Time</th>
-                      <th className="px-3.5 py-2.5 text-left font-bold uppercase">Maturity</th>
-                      <th className="px-3.5 py-2.5 text-left font-bold uppercase">Grade</th>
-                      <th className="px-3.5 py-2.5 text-left font-bold uppercase">Linked Sperm ID</th>
+                      <th className="px-3.5 py-2.5 text-left font-bold uppercase">Clinical Maturity</th>
                       <th className="px-3.5 py-2.5 text-left font-bold uppercase">Status</th>
                       <th className="px-3.5 py-2.5 text-right font-bold uppercase">Actions</th>
                     </tr>
@@ -1060,15 +1073,15 @@ export function OocyteEmbryoClient() {
                             className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
                               item.maturity === 'MII'
                                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                : item.maturity === 'MI'
+                                ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                : item.maturity === 'GV'
+                                ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                : 'bg-rose-50 text-rose-700 border border-rose-200'
                             }`}
                           >
                             {item.maturity}
                           </span>
-                        </td>
-                        <td className="px-3.5 py-2.5 font-semibold text-slate-700">{item.morphologyGrade}</td>
-                        <td className="px-3.5 py-2.5 font-mono text-[11px] text-slate-600">
-                          {item.linkedSpermId}
                         </td>
                         <td className="px-3.5 py-2.5">
                           <span
@@ -1734,7 +1747,11 @@ export function OocyteEmbryoClient() {
                               </td>
                               <td className="px-3 py-2 font-bold text-slate-800">{emb.stageLabel}</td>
                               <td className="px-3 py-2 font-bold text-purple-700">{emb.source}</td>
-                              <td className="px-3 py-2 text-slate-700 font-medium">{emb.gradeLabel}</td>
+                              <td className="px-3 py-2 font-bold" title={emb.gradeFull || emb.gradeLabel}>
+                                <span className="rounded-md bg-purple-50 border border-purple-200 px-2 py-0.5 text-xs text-purple-900 font-extrabold font-mono">
+                                  {emb.gradeLabel}
+                                </span>
+                              </td>
                               <td className="px-3 py-2">
                                 <span className="inline-flex items-center gap-1 rounded-full bg-teal-100 px-2.5 py-0.5 text-[10px] font-bold text-teal-800">
                                   <span>❄️</span>
@@ -1789,41 +1806,43 @@ export function OocyteEmbryoClient() {
 
         </div>
 
-        {/* QUICK ACTIONS SIDEBAR (COL 3) */}
-        <div className="lg:col-span-3 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 border-b border-slate-100 pb-2.5">
-            SMART ET Actions
-          </h3>
-          <p className="text-[11px] text-slate-500">Same Action list as SMART ET Entry. Counts are for {sourceTab}.</p>
+        {/* QUICK ACTIONS SIDEBAR (COL 3) - Only shown on Embryo Transfer tabs */}
+        {(activeTab === 'embryo-transfer' || activeTab === 'blastocyst-transfer') && (
+          <div className="lg:col-span-3 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 border-b border-slate-100 pb-2.5">
+              SMART ET Actions
+            </h3>
+            <p className="text-[11px] text-slate-500">Same Action list as SMART ET Entry. Counts are for {sourceTab}.</p>
 
-          <div className="space-y-2">
-            {SMART_ACTIONS.map((action) => {
-              const count =
-                action.id === 1
-                  ? summary.transferred
-                  : action.id === 2
-                    ? summary.cryopreserved
-                    : action.id === 3
-                      ? summary.stuck
-                      : action.id === 4
-                        ? summary.blastocyst
-                        : action.id === 5
-                          ? summary.discard
-                          : action.id === 6
-                            ? summary.donated
-                            : summary.donatedForResearch;
-              return (
-                <div
-                  key={action.id}
-                  className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-bold text-slate-800"
-                >
-                  <span>{action.name}</span>
-                  <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{count}</span>
-                </div>
-              );
-            })}
+            <div className="space-y-2">
+              {SMART_ACTIONS.map((action) => {
+                const count =
+                  action.id === 1
+                    ? summary.transferred
+                    : action.id === 2
+                      ? summary.cryopreserved
+                      : action.id === 3
+                        ? summary.stuck
+                        : action.id === 4
+                          ? summary.blastocyst
+                          : action.id === 5
+                            ? summary.discard
+                            : action.id === 6
+                              ? summary.donated
+                              : summary.donatedForResearch;
+                return (
+                  <div
+                    key={action.id}
+                    className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-bold text-slate-800"
+                  >
+                    <span>{action.name}</span>
+                    <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{count}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
       </div>
 
@@ -1844,28 +1863,16 @@ export function OocyteEmbryoClient() {
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="block font-medium text-slate-600 mb-1">Maturity Status</label>
+                <label className="block font-medium text-slate-600 mb-1">Clinical Maturity Classification</label>
                 <select
                   value={newMaturity}
-                  onChange={(e) => setNewMaturity(e.target.value as 'MII' | 'MI' | 'GV')}
+                  onChange={(e) => setNewMaturity(e.target.value as 'MII' | 'MI' | 'GV' | 'Degenerated')}
                   className="h-9 w-full rounded-xl border border-slate-200 px-3 outline-none"
                 >
-                  <option value="MII">MII (Mature with 1st Polar Body)</option>
-                  <option value="MI">MI (Intermediate, No Polar Body)</option>
-                  <option value="GV">GV (Germinal Vesicle, Immature)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-600 mb-1">Morphology Grade</label>
-                <select
-                  value={newMorphology}
-                  onChange={(e) => setNewMorphology(e.target.value as 'A' | 'B' | 'C')}
-                  className="h-9 w-full rounded-xl border border-slate-200 px-3 outline-none"
-                >
-                  <option value="A">Grade A (Optimal Ooplasm, Clear Zona)</option>
-                  <option value="B">Grade B (Mild Inclusions / Granularity)</option>
-                  <option value="C">Grade C (Moderate Inclusions / Dark Zona)</option>
+                  <option value="MII">MII (Mature - Metaphase II with 1st Polar Body)</option>
+                  <option value="MI">MI (Metaphase I - Intermediate, No Polar Body)</option>
+                  <option value="GV">GV (Germinal Vesicle - Immature)</option>
+                  <option value="Degenerated">Degenerated (Atretic / Fractured Ooplasm)</option>
                 </select>
               </div>
             </div>
@@ -1905,7 +1912,7 @@ export function OocyteEmbryoClient() {
               </button>
             </div>
             <p className="text-xs text-slate-600">
-              Confirm 2PN check across all 10 mature (MII) oocytes injected with sperm SEM-26-00018472.
+              Confirm 2PN check across mature (MII) oocytes.
             </p>
             <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs text-emerald-800">
               ✓ 8 of 10 confirmed 2PN with 2 clear polar bodies.<br />
@@ -2040,20 +2047,16 @@ export function OocyteEmbryoClient() {
 
             <div className="space-y-2 text-xs text-slate-600">
               <div className="flex justify-between border-b border-slate-100 pb-1">
+                <span>Oocyte ID:</span>
+                <strong className="font-mono text-purple-700">{selectedOocyte.oocyteId}</strong>
+              </div>
+              <div className="flex justify-between border-b border-slate-100 pb-1">
                 <span>Retrieval Time:</span>
                 <strong className="text-slate-800">{selectedOocyte.collectionDateTime}</strong>
               </div>
               <div className="flex justify-between border-b border-slate-100 pb-1">
-                <span>Maturity:</span>
+                <span>Clinical Maturity:</span>
                 <strong className="text-purple-700">{selectedOocyte.maturity}</strong>
-              </div>
-              <div className="flex justify-between border-b border-slate-100 pb-1">
-                <span>Morphology Grade:</span>
-                <strong className="text-slate-800">{selectedOocyte.morphologyGrade}</strong>
-              </div>
-              <div className="flex justify-between border-b border-slate-100 pb-1">
-                <span>Linked Sperm ID:</span>
-                <strong className="font-mono text-slate-800">{selectedOocyte.linkedSpermId}</strong>
               </div>
               <div className="flex justify-between border-b border-slate-100 pb-1">
                 <span>Fertilization Result:</span>

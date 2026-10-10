@@ -1,0 +1,49 @@
+FERTITRACE – QR Code Lifecycle & Database Retention
+Recommendation: Do NOT delete the QR record after the IVF procedure is completed. Retain the QR identity and complete traceability history in the FERTITRACE database, while changing the lifecycle status as the specimen/container progresses or reaches closure.
+QR Code Lifecycle Table
+Stage
+QR Record
+Recommended Status
+What FERTITRACE Should Do
+QR generated
+Retain
+ACTIVE
+Create QR identity and link it to the case/cycle/specimen/container.
+OPU completed
+Retain
+IN_PROCESS
+Record collection/witnessing event and maintain the same traceability identity.
+Fertilisation
+Retain
+IN_PROCESS
+Add fertilisation event linked to the existing traceability chain.
+Embryo development
+Retain
+IN_PROCESS
+Add embryology events and related specimen/embryo identifiers.
+Cryopreservation
+Retain
+CRYOPRESERVED
+Record cryo status, storage location and container/unit details.
+Thaw
+Retain
+THAWED
+Record thaw event, date/time, user and relevant witnessing details.
+Embryo transfer
+Retain
+TRANSFERRED / CLOSED
+Record transfer details and close the lifecycle when appropriate.
+Specimen disposed
+Retain
+DISPOSED / CLOSED
+Record disposal event, date/time, authorisation and reason.
+Procedure cancelled
+Retain
+CANCELLED
+Keep QR record and record cancellation reason; never delete the history.
+Recommended Database Principle
+QR Master – stores the permanent QR identity and its lifecycle status.
+Specimen/Container Master – stores the biological material and physical container details.
+Traceability Event / Audit Log – stores every important scan, witnessing, movement, status change and user action.
+Key Rule
+Never delete traceability history. When the specimen lifecycle ends, mark the QR as CLOSED, DISPOSED, TRANSFERRED or CANCELLED as applicable. The physical QR may become inactive, but its database record and audit history should remain available according to the applicable record-retention policy.
