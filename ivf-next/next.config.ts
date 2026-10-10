@@ -2,13 +2,15 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  serverExternalPackages: ['mssql', 'tedious'],
+  serverExternalPackages: ['mssql', 'tedious', 'nodemailer'],
+
   webpack: (config, { dev }) => {
     if (dev) {
       config.cache = false;
     }
     return config;
   },
+
   async rewrites() {
     return [
       { source: '/ivf', destination: '/insemination?module=ivf' },

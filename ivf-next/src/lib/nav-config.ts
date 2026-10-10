@@ -78,13 +78,13 @@ function routeFor(item: Omit<MasterMenuItem, 'route'>): string {
 
 const RAW_REGISTRY: Omit<MasterMenuItem, 'route'>[] = [
   // Column 1
-  { label: 'QR Code Master', type: 'qr-code', column: 1, isFertiTrace: true, isQrCode: true, qrRole: 'Central QR identity, checksum & specimen lifecycle registry' },
+  { label: 'QR Code Master', type: 'qr-code', column: 1, isFertiTrace: true },
   { label: 'Allergies Master', type: 'common', catId: 12, column: 1, isFertiTrace: true },
-  { label: 'Catheter Master', type: 'common', catId: 9, column: 1, isFertiTrace: true, isQrCode: true, qrRole: 'QR Field 8: IUI & ET Catheter Consumables (Codes 05, 11)' },
+  { label: 'Catheter Master', type: 'common', catId: 9, column: 1, isFertiTrace: true },
   { label: 'Contamination', type: 'common', catId: 27, column: 1, isFertiTrace: true },
   { label: 'Donor Lab', type: 'donor-lab', column: 1, isFertiTrace: true },
   { label: 'FSH Drug Master', type: 'common', catId: 14, column: 1, isFertiTrace: true },
-  { label: 'Indication Master', type: 'common', catId: 23, column: 1, isFertiTrace: true, isQrCode: true, qrRole: 'Clinical procedure indication & witnessing protocol' },
+  { label: 'Indication Master', type: 'common', catId: 23, column: 1, isFertiTrace: true },
   { label: 'Media Brand', type: 'common', catId: 28, column: 1, isFertiTrace: true },
   { label: 'Out Come Drug Master', type: 'outcome-drug', column: 1, isFertiTrace: false },
   { label: 'Referring Doctor', type: 'common', catId: 21, column: 1, isFertiTrace: true },
@@ -96,34 +96,59 @@ const RAW_REGISTRY: Omit<MasterMenuItem, 'route'>[] = [
   { label: 'Diagnosis Master', type: 'common', catId: 20, column: 2, isFertiTrace: true },
   { label: 'Findings', type: 'common', catId: 26, column: 2, isFertiTrace: false },
   { label: 'Gas', type: 'common', catId: 31, column: 2, isFertiTrace: true },
-  { label: 'Lab Oper. Master', type: 'common', catId: 2, column: 2, isFertiTrace: true, isQrCode: true, qrRole: 'QR Field 8: Consumables & Labware (Dish, Tube, Straw, Vial - Codes 01-13)' },
+  { label: 'Lab Oper. Master', type: 'common', catId: 2, column: 2, isFertiTrace: true },
   { label: 'Media Series', type: 'common', catId: 29, column: 2, isFertiTrace: true },
-  { label: 'Patient Management', type: 'patient', column: 2, isFertiTrace: true, isQrCode: true, qrRole: 'QR Field 4: Patient / Case ID, UHID & FertiTrace ID' },
-  { label: 'Satellite Master', type: 'satellite', column: 2, isFertiTrace: true, isQrCode: true, qrRole: 'QR Field 3: Clinic / Site Identifier (CL001)' },
-  { label: 'User Master', type: 'user', column: 2, isFertiTrace: true, isQrCode: true, qrRole: 'QR Field 11: Operator signature, witness & checksum' },
+  { label: 'Patient Management', type: 'patient', column: 2, isFertiTrace: true },
+  { label: 'Satellite Master', type: 'satellite', column: 2, isFertiTrace: true },
+  { label: 'User Master', type: 'user', column: 2, isFertiTrace: true },
 
   // Column 3
   { label: 'Appearance Master', type: 'common', catId: 4, column: 3, isFertiTrace: true },
   { label: 'Collection Problem', type: 'common', catId: 24, column: 3, isFertiTrace: true },
-  { label: 'Doctor Master', type: 'doctor', column: 3, isFertiTrace: true, isQrCode: true, qrRole: 'Consultant in-charge for cycle traceability' },
-  { label: 'Personnel Master', type: 'common', catId: 16, column: 3, isFertiTrace: false, isQrCode: true, qrRole: 'Authorized embryologist & witness personnel' },
+  { label: 'Doctor Master', type: 'doctor', column: 3, isFertiTrace: true },
+  { label: 'Personnel Master', type: 'common', catId: 16, column: 3, isFertiTrace: false },
   { label: 'HMG Drug Master', type: 'common', catId: 15, column: 3, isFertiTrace: true },
   { label: 'Linearity', type: 'common', catId: 25, column: 3, isFertiTrace: true },
-  { label: 'Method Master', type: 'common', catId: 3, column: 3, isFertiTrace: true, isQrCode: true, qrRole: 'QR Field 10: Procedure Name (IVF, ICSI, Cryo, Thaw, IUI)' },
+  { label: 'Method Master', type: 'common', catId: 3, column: 3, isFertiTrace: true },
   { label: 'Patient Selection', type: 'patient-selection', column: 3, isFertiTrace: true },
-  { label: 'Sperm Id Master', type: 'common', catId: 22, column: 3, isFertiTrace: true, isQrCode: true, qrRole: 'QR Field 6 & 7: Specimen ID & Specimen Type (OOCYTE/EMBRYO/SEMEN)' },
+  { label: 'Sperm Id Master', type: 'common', catId: 22, column: 3, isFertiTrace: true },
   { label: 'Viscosity Master', type: 'common', catId: 6, column: 3, isFertiTrace: true },
 
   // Column 4
   { label: 'Appointment Scheduler', type: 'appointments', column: 4, isFertiTrace: true },
-  { label: 'Colour Master', type: 'common', catId: 5, column: 4, isFertiTrace: true, isQrCode: true, qrRole: 'Cryo QR: Straw, Goblet, Cane & Visotube Color Coding' },
+  { label: 'Colour Master', type: 'common', catId: 5, column: 4, isFertiTrace: true },
   { label: 'Done By Master', type: 'common', catId: 10, column: 4, isFertiTrace: false },
   { label: 'Fructose Master', type: 'common', catId: 8, column: 4, isFertiTrace: true },
-  { label: 'Incubator Used', type: 'common', catId: 30, column: 4, isFertiTrace: true, isQrCode: true, qrRole: 'Dish witnessing & culture incubator tracking' },
+  { label: 'Incubator Used', type: 'common', catId: 30, column: 4, isFertiTrace: true },
   { label: 'Liquefaction Master', type: 'common', catId: 7, column: 4, isFertiTrace: true },
   { label: 'Other Drug Master', type: 'common', catId: 19, column: 4, isFertiTrace: true },
   { label: 'Other Drug Master 2', type: 'common', catId: 32, column: 4, isFertiTrace: false },
   { label: 'Ovulation Induction', type: 'common', catId: 13, column: 4, isFertiTrace: true },
+];
+
+export interface QRTableDef {
+  key: string;
+  variableNo: number;
+  name: string;
+  badge: string;
+  desc: string;
+  route: string;
+}
+
+export const QR_CODE_13_TABLES: QRTableDef[] = [
+  { key: 'system-code', variableNo: 1, name: 'System Code', badge: 'Core Identity', desc: 'FT, SMART, RFID system identity tag', route: '/masters/qr-code?table=system-code' },
+  { key: 'qr-version', variableNo: 2, name: 'QR Version Code', badge: 'Format Structure', desc: 'V1 pipe-delimited, V2 compact schema', route: '/masters/qr-code?table=qr-version' },
+  { key: 'clinic-id', variableNo: 3, name: 'Clinic ID', badge: 'Multi-Site / Branch', desc: 'Main hospital & satellite clinic identifiers', route: '/masters/qr-code?table=clinic-id' },
+  { key: 'smart-id', variableNo: 4, name: 'SMART ID / FertiTrace ID', badge: 'Patient Identifier', desc: 'Pseudonymized barcode identifier schema', route: '/masters/qr-code?table=smart-id' },
+  { key: 'cycle-id', variableNo: 5, name: 'Cycle ID', badge: 'Treatment Registry', desc: 'Active treatment cycle protocol identifiers', route: '/masters/qr-code?table=cycle-id' },
+  { key: 'specimen-id', variableNo: 6, name: 'Specimen ID', badge: 'Cell Traceability', desc: 'Oocyte dishes, embryos & semen straw IDs', route: '/masters/qr-code?table=specimen-id' },
+  { key: 'specimen-type', variableNo: 7, name: 'Specimen Type', badge: 'Biological Material', desc: 'EMBRYO, SEMEN, OOCYTES', route: '/masters/qr-code?table=specimen-type' },
+  { key: 'process-datetime', variableNo: 8, name: 'Start Process Date / Time', badge: 'Timestamp Format', desc: 'Machine timestamp (DD MM YY HH mm)', route: '/masters/qr-code?table=process-datetime' },
+  { key: 'consumable-type', variableNo: 9, name: 'Consumable Type', badge: 'Labware Catalog', desc: '13 Labware types (Dishes, Tubes, Straws, Vials)', route: '/masters/qr-code?table=consumable-type' },
+  { key: 'procedure', variableNo: 10, name: 'Procedure', badge: 'Clinical Procedures', desc: '17 ART procedures (IVF, ICSI, Cryo, Thaw...)', route: '/masters/qr-code?table=procedure' },
+  { key: 'consumable-unit', variableNo: 11, name: 'Consumable / Unit No.', badge: 'Unit Counters', desc: 'Unit numbering (01, 02, 03...) in cohort sequence', route: '/masters/qr-code?table=consumable-unit' },
+  { key: 'label-size', variableNo: 12, name: 'Labels Size', badge: 'Thermal Roll Specs', desc: 'Roll sizes A to F for lab containers & tags', route: '/masters/qr-code?table=label-size' },
+  { key: 'signature-checksum', variableNo: 13, name: 'Signature / Checksum', badge: 'Tamper Verification', desc: 'Cryptographic hash & supervisor electronic signature', route: '/masters/qr-code?table=signature-checksum' },
 ];
 
 export const MASTER_REGISTRY: MasterMenuItem[] = RAW_REGISTRY.map((item) => ({
@@ -133,7 +158,7 @@ export const MASTER_REGISTRY: MasterMenuItem[] = RAW_REGISTRY.map((item) => ({
 
 export const FERTITRACE_IN_USE_COUNT = MASTER_REGISTRY.filter((item) => item.isFertiTrace).length;
 export const STANDARD_MASTER_COUNT = MASTER_REGISTRY.filter((item) => !item.isFertiTrace).length;
-export const QR_CODE_MASTER_COUNT = MASTER_REGISTRY.filter((item) => item.isQrCode).length;
+export const QR_CODE_MASTER_COUNT = QR_CODE_13_TABLES.length;
 
 export function getMasterColumns(): MasterMenuItem[][] {
   return [1, 2, 3, 4].map((col) => MASTER_REGISTRY.filter((item) => item.column === col));
@@ -198,6 +223,8 @@ export const TOP_NAV_MENUS: TopNavMenu[] = [
     label: 'Cryo',
     icon: 'cryo',
     items: [
+      { label: 'Semen Self', route: '/sperm?mode=semen-self' },
+      { label: 'Semen Donor', route: '/sperm?mode=semen-donor' },
       { label: 'Oocytes Cryopreservation', route: '/oocyte-embryo?tab=cryopreservation&type=oocyte' },
       { label: 'Embryos Cryopreservation', route: '/oocyte-embryo?tab=cryopreservation&type=embryo' },
       { label: 'Cryonavigation (Scan & Validate)', route: '/cryonavigation' },

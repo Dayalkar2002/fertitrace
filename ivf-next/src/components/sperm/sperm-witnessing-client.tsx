@@ -60,8 +60,8 @@ export function SpermWitnessingClient() {
   const { user, token } = useAuth();
   const satId = selectedPatient?.satelliteId || selectedSatellite?.id || 0;
 
-  // Workflow View State: 'registration' (Default initial view) | 'workflow' (Downstream view after Accept & Continue)
-  const [currentView, setCurrentView] = useState<'registration' | 'workflow'>('registration');
+  // Workflow View State: 'registration' | 'workflow' | 'semen-donor' | 'semen-self'
+  const [currentView, setCurrentView] = useState<'registration' | 'workflow' | 'semen-donor' | 'semen-self'>('registration');
 
   // 1. Top Bar Demographics — never invent a patient when none is selected
   const hasPatient = Boolean(selectedPatient);
@@ -133,12 +133,20 @@ export function SpermWitnessingClient() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
-    setFlowSel(defaultSelectionFromMode(params.get('mode')));
+    const m = (params.get('mode') || '').trim();
+    if (m === 'semen-donor' || m === 'Semen Donor') {
+      setCurrentView('semen-donor');
+    } else if (m === 'semen-self' || m === 'Semen Self') {
+      setCurrentView('semen-self');
+    }
+    setFlowSel(defaultSelectionFromMode(m));
   }, []);
 
   useEffect(() => {
-    if (!hasPatient) setCurrentView('registration');
-  }, [hasPatient]);
+    if (!hasPatient && currentView === 'workflow') {
+      setCurrentView('registration');
+    }
+  }, [hasPatient, currentView]);
 
   useEffect(() => {
     if (!selectedPatient) {
@@ -533,8 +541,90 @@ export function SpermWitnessingClient() {
         </div>
       </div>
 
-      {/* INITIAL VIEW: SPERM SAMPLE REGISTRATION & VALIDATION SUMMARY (ONLY BOX 1 & BOX 2) */}
-      {currentView === 'registration' ? (
+      {/* SPERM MANAGEMENT NAVIGATION TABS */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 pb-2">
+        <div className="inline-flex rounded-xl bg-slate-100 p-1 shadow-inner gap-1">
+          <button
+            type="button"
+            onClick={() => {
+              setCurrentView('registration');
+              if (typeof window !== 'undefined') {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('mode');
+                window.history.replaceState({}, '', url.toString());
+              }
+            }}
+            className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition cursor-pointer ${
+              currentView === 'registration' || currentView === 'workflow'
+                ? 'bg-white text-purple-700 shadow-xs ring-1 ring-slate-200/60'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+            }`}
+          >
+            <span>🧪</span>
+            <span>Sperm Sample Registration</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setCurrentView('semen-donor');
+              if (typeof window !== 'undefined') {
+                const url = new URL(window.location.href);
+                url.searchParams.set('mode', 'semen-donor');
+                window.history.replaceState({}, '', url.toString());
+              }
+            }}
+            className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition cursor-pointer ${
+              currentView === 'semen-donor'
+                ? 'bg-white text-purple-700 shadow-xs ring-1 ring-slate-200/60'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+            }`}
+          >
+            <span>🧬</span>
+            <span>Semen Donor</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setCurrentView('semen-self');
+              if (typeof window !== 'undefined') {
+                const url = new URL(window.location.href);
+                url.searchParams.set('mode', 'semen-self');
+                window.history.replaceState({}, '', url.toString());
+              }
+            }}
+            className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition cursor-pointer ${
+              currentView === 'semen-self'
+                ? 'bg-white text-purple-700 shadow-xs ring-1 ring-slate-200/60'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+            }`}
+          >
+            <span>❄️</span>
+            <span>Semen Self</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+          {currentView === 'semen-donor' && (
+            <span className="rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-[11px] font-bold text-blue-700">
+              Donor Semen Master Bank
+            </span>
+          )}
+          {currentView === 'semen-self' && (
+            <span className="rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
+              Husband / Self Cryopreservation
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* SPERM MANAGEMENT ROUTED VIEWS */}
+      {currentView === 'semen-donor' ? (
+        <SemenDonorForm onBack={() => setCurrentView('registration')} />
+      ) : currentView === 'semen-self' ? (
+        <SemenSelfForm cryoType={flowSel.cryoType} onBack={() => setCurrentView('registration')} />
+      ) : currentView === 'registration' ? (
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
             {/* 1. SPERM SAMPLE REGISTRATION (COL 8) */}
@@ -555,7 +645,17 @@ export function SpermWitnessingClient() {
                   <div className="md:col-span-9 space-y-3">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-700 mb-2">1. SPERM SOURCE</label>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-[11px] font-bold text-slate-700">1. SPERM SOURCE</label>
+                          <button
+                            type="button"
+                            onClick={() => setCurrentView('semen-donor')}
+                            className="text-[10px] font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                            title="Open Donor Semen Master Bank"
+                          >
+                            Donor List ➔
+                          </button>
+                        </div>
                         <div className="space-y-2">
                           {(['Husband / Partner', 'Donor'] as SpermSource[]).map((src) => {
                             const donorBlocked = intendedUse === 'Semen Analysis' && src === 'Donor';
@@ -660,6 +760,17 @@ export function SpermWitnessingClient() {
                               <option value="SQA|iui">SQA — Via IUI</option>
                               <option value="SQA|cycle">SQA — Via Cycle</option>
                             </select>
+                          </div>
+                        )}
+                        {intendedUse === 'Cryopreservation' && (
+                          <div className="mt-3">
+                            <button
+                              type="button"
+                              onClick={() => setCurrentView(spermSource === 'Donor' ? 'semen-donor' : 'semen-self')}
+                              className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100 py-1.5 text-[11px] font-bold text-purple-700 transition cursor-pointer"
+                            >
+                              <span>❄️ Open {spermSource === 'Donor' ? 'Semen Donor Master ➔' : 'Semen Self Cryo ➔'}</span>
+                            </button>
                           </div>
                         )}
                         {intendedUse === 'IUI' && (
@@ -774,9 +885,9 @@ export function SpermWitnessingClient() {
                   </div>
                 </div>
 
-                {/* Middle Section: Sample ID, QR Code, RFID Barcode & Status */}
+                {/* Middle Section: Sample ID, RFID Barcode & Status */}
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center border-b border-slate-200 pb-4">
-                  <div className="md:col-span-4">
+                  <div className="md:col-span-6">
                     <label className="block text-[11px] font-bold text-slate-700 mb-1">Original Sample ID</label>
                     <div className="flex items-center gap-1.5">
                       <input
@@ -795,19 +906,8 @@ export function SpermWitnessingClient() {
                     </div>
                   </div>
 
-                  {/* QR Code */}
-                  <div className="md:col-span-3 flex flex-col items-center justify-center text-center">
-                    <span className="text-[10px] font-bold text-slate-600 mb-1">QR Code</span>
-                    <div className="h-16 w-16 bg-slate-900 p-1.5 rounded flex items-center justify-center shadow-xs">
-                      <svg viewBox="0 0 24 24" className="h-full w-full fill-white">
-                        <path d="M2 2h8v8H2V2zm2 2v4h4V4H4zm-2 10h8v8H2v-8zm2 2v4h4v-4H4zm10-14h8v8h-8V2zm2 2v4h4V4h-4zm-1 9h2v2h-2v-2zm3 0h2v2h-2v-2zm-3 3h2v2h-2v-2zm3 3h2v2h-2v-2zm2-3h2v2h-2v-2zm-2-3h2v2h-2v-2zm3-3h2v2h-2v-2zm-6 9h2v2h-2v-2z" />
-                      </svg>
-                    </div>
-                    <span className="text-[9px] text-slate-500 mt-1 font-medium">Scan to Validate</span>
-                  </div>
-
                   {/* RFID / Barcode */}
-                  <div className="md:col-span-5">
+                  <div className="md:col-span-6">
                     <label className="block text-[11px] font-bold text-slate-700 mb-1">RFID / Barcode</label>
                     <div className="flex items-center gap-1.5">
                       <input

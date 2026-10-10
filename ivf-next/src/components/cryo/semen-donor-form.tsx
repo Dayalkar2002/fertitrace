@@ -878,8 +878,8 @@ export function SemenDonorForm({ onBack }: { onBack?: () => void }) {
             <tbody className="divide-y divide-slate-100 bg-white">
               {records.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-4 text-center text-amber-800">
-                    No Records Found...
+                  <td colSpan={6} className="px-3 py-6 text-center text-slate-500 font-medium">
+                    No saved data
                   </td>
                 </tr>
               )}

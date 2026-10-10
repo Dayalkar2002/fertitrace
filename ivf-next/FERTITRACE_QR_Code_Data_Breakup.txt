@@ -1,0 +1,79 @@
+FERTITRACE QR Code – Data Breakup Specification
+Example QR String: FT|V1|CL001|CASE26001234|CY2600456|SP000789|OOCYTE|DISH|01|20260908T0835|SIG12345
+QR Code Field Breakup
+Seq.
+QR Field
+Example Value
+Meaning
+Mandatory
+1
+System Code
+FT
+Identifies FERTITRACE
+Yes
+2
+QR Version
+V1
+Version of QR data structure
+Yes
+3
+Clinic/Site ID
+CL001
+IVF centre/site identifier
+Yes
+4
+Case/Patient ID
+CASE26001234
+Non-meaningful patient/case identifier
+Yes
+5
+Cycle ID
+CY2600456
+Specific IVF treatment cycle
+Yes
+6
+Specimen ID
+SP000789
+Unique identifier for the specimen
+Yes
+7
+Specimen Type
+OOCYTE
+Type of biological material
+Yes
+8
+Container Type
+DISH
+Physical container holding specimen
+Yes
+9
+Container/Unit No.
+01
+Specific dish/container number
+Yes
+10
+Creation Date/Time
+20260908T0835
+Date/time QR record was created
+Yes
+11
+Signature/Checksum
+SIG12345
+Validation/tamper-check value
+Yes
+How FERTITRACE Reads the QR
+FT → FERTITRACE
+V1 → QR format version
+CL001 → Clinic/Site
+CASE26001234 → Patient/Case record
+CY2600456 → IVF cycle
+SP000789 → Specimen
+OOCYTE → Biological material type
+DISH → Container type
+01 → Specific dish/container
+20260908T0835 → Creation date/time
+SIG12345 → QR validation/checksum
+Recommended FERTITRACE Design Principle
+Specimen ID (SP000789) should be treated as the primary traceability identifier rather than relying only on the Case/Patient ID. This allows FERTITRACE to maintain traceability as material moves through OPU → Oocyte → Fertilisation → Zygote → Embryo → Biopsy → Cryo → Thaw → Transfer.
+Security Note
+Avoid putting patient name, mobile number, address, Aadhaar/passport number, diagnosis, medical history, embryo grading, genetic results or other sensitive clinical information directly into the QR. The QR should identify the record; the FERTITRACE database should contain the detailed clinical and traceability information.

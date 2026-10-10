@@ -3,8 +3,8 @@ export interface OocyteItem {
   oocyteId: string;
   collectionDateTime: string;
   maturity: 'MII' | 'MI' | 'GV' | 'Degenerated';
-  morphologyGrade: 'A' | 'B' | 'C' | '-';
-  linkedSpermId: string;
+  morphologyGrade?: 'A' | 'B' | 'C' | '-';
+  linkedSpermId?: string;
   status: 'Retrieved' | 'Fertilized' | 'Immature' | 'Degenerated' | 'Discarded';
   fertilizationResult?: '2PN' | '1PN' | '3PN' | '0PN' | 'Degenerate';
   embryoId?: string;

@@ -312,6 +312,30 @@ const defaults: SpermFlowDerived = {
 
 export function defaultSelectionFromMode(mode?: string | null): SpermFlowSelection {
   const m = (mode || '').trim();
+  if (m === 'semen-self' || m === 'Semen Self') {
+    return {
+      module: 'CRYOPRESERVATION',
+      iuiIndication: 'HUSBAND SINGLE IUI',
+      cycleIndication: 'ICSI',
+      cycleSpermId: 'husband_fresh',
+      cryoType: 'Fresh',
+      cryoSource: 'Husband / Partner',
+      analysisType: 'HSA',
+      analysisEntryPath: 'iui',
+    };
+  }
+  if (m === 'semen-donor' || m === 'Semen Donor') {
+    return {
+      module: 'CRYOPRESERVATION',
+      iuiIndication: 'DONOR SINGLE IUI',
+      cycleIndication: 'ICSI',
+      cycleSpermId: 'donor_frozen',
+      cryoType: 'Frozen',
+      cryoSource: 'Donor',
+      analysisType: 'HSA',
+      analysisEntryPath: 'iui',
+    };
+  }
   if (m === 'Cryopreservation') {
     return {
       module: 'CRYOPRESERVATION',

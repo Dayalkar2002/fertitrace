@@ -1,15 +1,7 @@
 import type { Metadata } from 'next';
-import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
 import { ReduxProvider } from '@/store/provider';
 import { AuthProvider } from '@/contexts/auth-context';
 import './globals.css';
-
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
-const jakarta = Plus_Jakarta_Sans({
-  subsets: ['latin'],
-  variable: '--font-jakarta',
-  weight: ['500', '600', '700', '800'],
-});
 
 export const metadata: Metadata = {
   title: 'FERTITRACE - IVF Witnessing & Lab Management System',
@@ -32,7 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body className={`${inter.variable} ${jakarta.variable} font-sans antialiased`}>
+      <body className="font-sans antialiased">
         <ReduxProvider>
           <AuthProvider>{children}</AuthProvider>
         </ReduxProvider>

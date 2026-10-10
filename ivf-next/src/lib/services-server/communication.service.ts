@@ -1,5 +1,5 @@
 import { executeDRL } from '@/lib/db/spExecutor';
-import { isDbConfigured } from '@/lib/db/pool';
+import { getPool, isDbConfigured } from '@/lib/db/pool';
 import { dispatchNukeliteWhatsApp } from '@/lib/services-server/nukelite-whatsapp';
 import nodemailer, { type Transporter } from 'nodemailer';
 import dns from 'node:dns';
@@ -384,8 +384,32 @@ export async function sendMessage(payload: SendMessagePayload): Promise<Communic
     messageText: payload.messageText,
   };
 
-  // 3. Database Audit / Tracking if configured
+  // 3. Database Audit / Tracking in FertiTrace_Communication_Logs
   if (isDbConfigured()) {
+    try {
+      const pool = await getPool();
+      await pool
+        .request()
+        .input('LogId', record.id)
+        .input('PatientId', Number(payload.patientId) || null)
+        .input('PatientName', payload.patientName || null)
+        .input('Recipient', payload.recipient)
+        .input('Channel', payload.channel)
+        .input('MessageType', payload.messageType)
+        .input('MessageText', payload.messageText)
+        .input('SentBy', record.sentBy)
+        .input('Status', record.status)
+        .input('ErrorMessage', dispatchError || null)
+        .query(`
+          INSERT INTO FertiTrace_Communication_Logs 
+            (LogId, PatientId, PatientName, Recipient, Channel, MessageType, MessageText, SentBy, Status, ErrorMessage, SentAt, CreatedAt)
+          VALUES 
+            (@LogId, @PatientId, @PatientName, @Recipient, @Channel, @MessageType, @MessageText, @SentBy, @Status, @ErrorMessage, GETDATE(), GETDATE())
+        `);
+    } catch (dbErr) {
+      console.warn('DB Insert failed for FertiTrace_Communication_Logs:', dbErr);
+    }
+
     try {
       await executeDRL('spManualSMS', [
         { name: '@PatID', value: Number(payload.patientId) || 0 },
@@ -393,7 +417,7 @@ export async function sendMessage(payload: SendMessagePayload): Promise<Communic
         { name: '@QueryIndex', value: 1 },
       ]);
     } catch {
-      // Gracefully continue with in-memory tracking
+      // Gracefully continue
     }
   }
 
@@ -407,5 +431,37 @@ export async function sendMessage(payload: SendMessagePayload): Promise<Communic
 }
 
 export async function getCommunicationHistory(): Promise<CommunicationLogItem[]> {
+  if (isDbConfigured()) {
+    try {
+      const pool = await getPool();
+      const res = await pool.request().query(`
+        SELECT TOP 100
+          LogId as id,
+          FORMAT(SentAt, 'dd MMM yyyy  hh:mm tt') as dateTime,
+          MessageType as messageType,
+          Channel as channel,
+          Recipient as recipient,
+          SentBy as sentBy,
+          Status as status,
+          MessageText as messageText
+        FROM FertiTrace_Communication_Logs
+        ORDER BY CreatedAt DESC
+      `);
+      if (res.recordset && res.recordset.length > 0) {
+        return res.recordset.map((row: Record<string, unknown>) => ({
+          id: String(row.id),
+          dateTime: String(row.dateTime),
+          messageType: String(row.messageType),
+          channel: String(row.channel) as CommunicationChannel,
+          recipient: String(row.recipient),
+          sentBy: String(row.sentBy),
+          status: String(row.status) as 'Delivered' | 'Failed' | 'Pending',
+          messageText: String(row.messageText),
+        }));
+      }
+    } catch (err) {
+      console.warn('DB query failed for FertiTrace_Communication_Logs, using fallback:', err);
+    }
+  }
   return inMemoryHistory;
 }
