@@ -19,8 +19,26 @@ export interface IuiSummaryResult {
   sections: ReportSection[];
 }
 
-export const ART_CYCLE_TYPES = ['OP+ET', 'OR+ET', 'FET', 'ER', 'OF'] as const;
-export type ArtCycleTypeIndex = 0 | 1 | 2 | 3 | 4;
+export const ART_CYCLE_TYPES = [
+  'OP+ET',
+  'FET',
+  'OF',
+  'THO',
+  'ER',
+  'OD',
+  'OR',
+] as const;
+export type ArtCycleTypeIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+export const ART_CYCLE_LABELS: Record<string, string> = {
+  'OP+ET': 'OP+ET',
+  'FET': 'FET',
+  'OF': 'Oocyte Freezing',
+  'THO': 'THO+ET',
+  'ER': 'ER+ET',
+  'OD': 'OD',
+  'OR': 'OR+ET',
+};
 
 export interface ArtCycleOption {
   id: string;
@@ -32,5 +50,6 @@ export interface ArtCycleSummaryResult {
   type: ArtCycleTypeIndex;
   typeLabel: string;
   title: string;
+  underPreparation?: boolean;
   sections: ReportSection[];
 }

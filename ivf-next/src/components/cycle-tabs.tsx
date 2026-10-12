@@ -601,7 +601,186 @@ function cleanOutcomeText(val: string | undefined | null): string {
     .trim();
 }
 
+
+interface PrescriptionItem {
+  id: number;
+  drugForm: string;
+  tradeName: string;
+  stdDose: string;
+  stdDays: string;
+}
+
+const DEFAULT_PRESCRIPTIONS: PrescriptionItem[] = [
+  { id: 1, drugForm: 'Tab', tradeName: 'Duphaston', stdDose: '10mg', stdDays: '14' },
+  { id: 2, drugForm: 'Cap', tradeName: 'Susten', stdDose: '200mg', stdDays: '14' },
+  { id: 3, drugForm: 'Tab', tradeName: 'Progynova', stdDose: '2mg', stdDays: '14' },
+  { id: 4, drugForm: 'Inj', tradeName: 'Clexane', stdDose: '40mg', stdDays: '10' },
+  { id: 5, drugForm: 'Tab', tradeName: 'Folvite', stdDose: '5mg', stdDays: '30' },
+  { id: 6, drugForm: 'Tab', tradeName: 'Ecosprin', stdDose: '75mg', stdDays: '14' },
+  { id: 7, drugForm: 'Gel', tradeName: 'Crinone', stdDose: '8%', stdDays: '15' },
+  { id: 8, drugForm: 'Inj', tradeName: 'Proluton', stdDose: '500mg', stdDays: '7' },
+  { id: 9, drugForm: 'Cap', tradeName: 'Cyclogest', stdDose: '400mg', stdDays: '14' },
+];
+
+function AddPrescriptionModal({
+  isOpen,
+  onClose,
+  onSelect,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSelect: (prescription: string) => void;
+}) {
+  const [list, setList] = useState<PrescriptionItem[]>(DEFAULT_PRESCRIPTIONS);
+  const [customForm, setCustomForm] = useState('Tab');
+  const [customName, setCustomName] = useState('');
+  const [customDose, setCustomDose] = useState('');
+  const [customDays, setCustomDays] = useState('14');
+
+  if (!isOpen) return null;
+
+  function handleAddCustom() {
+    if (!customName.trim()) return;
+    const text = `${customForm} ${customDose ? customDose + ' ' : ''}${customName.trim()} ${customDays ? customDays + ' Days' : ''}`.trim();
+    onSelect(text);
+    setCustomName('');
+    setCustomDose('');
+  }
+
+  function handleSelectRow(item: PrescriptionItem) {
+    const text = `${item.drugForm} ${item.stdDose} ${item.tradeName} ${item.stdDays} Days`;
+    onSelect(text);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+      <div className="w-full max-w-2xl rounded-2xl bg-white p-5 shadow-2xl border border-slate-200">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-[#123E73] text-xs font-bold">
+              Rx
+            </span>
+            <h3 className="text-sm font-bold text-slate-900">Drug Master - Add Prescription</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="mt-3 max-h-72 overflow-y-auto border rounded-xl border-slate-200">
+          <table className="w-full text-left text-xs">
+            <thead className="sticky top-0 bg-[#f8fafc] text-slate-700 border-b border-slate-200">
+              <tr>
+                <th className="p-2 font-bold">Action</th>
+                <th className="p-2 font-bold">Drug Form</th>
+                <th className="p-2 font-bold">Trade Name</th>
+                <th className="p-2 font-bold">Std Dose</th>
+                <th className="p-2 font-bold">Std Days</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {list.map((item) => (
+                <tr key={item.id} className="hover:bg-blue-50/50 transition">
+                  <td className="p-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSelectRow(item)}
+                      className="rounded bg-[#123E73] px-2.5 py-1 text-[11px] font-bold text-white hover:bg-[#0d2e56]"
+                    >
+                      Select
+                    </button>
+                  </td>
+                  <td className="p-2 font-medium text-slate-800">{item.drugForm}</td>
+                  <td className="p-2 font-bold text-slate-900">{item.tradeName}</td>
+                  <td className="p-2 text-slate-700">{item.stdDose}</td>
+                  <td className="p-2 text-slate-700">{item.stdDays} Days</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-2">Add New / Custom Medication</div>
+          <div className="grid grid-cols-4 gap-2">
+            <div>
+              <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Form</label>
+              <select
+                value={customForm}
+                onChange={(e) => setCustomForm(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 bg-white p-1.5 text-xs text-slate-800"
+              >
+                <option value="Tab">Tab</option>
+                <option value="Cap">Cap</option>
+                <option value="Inj">Inj</option>
+                <option value="Gel">Gel</option>
+                <option value="Syp">Syp</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Trade Name</label>
+              <input
+                type="text"
+                placeholder="e.g. Duphaston"
+                value={customName}
+                onChange={(e) => setCustomName(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 bg-white p-1.5 text-xs text-slate-800"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Dose</label>
+              <input
+                type="text"
+                placeholder="e.g. 10mg"
+                value={customDose}
+                onChange={(e) => setCustomDose(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 bg-white p-1.5 text-xs text-slate-800"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Days</label>
+              <div className="flex gap-1">
+                <input
+                  type="text"
+                  placeholder="14"
+                  value={customDays}
+                  onChange={(e) => setCustomDays(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-white p-1.5 text-xs text-slate-800"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddCustom}
+                  className="rounded-lg bg-emerald-600 px-3 text-xs font-bold text-white hover:bg-emerald-700"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CycleOutcomeTab({ cycleId }: TabProps) {
+  const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
   const { token } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -790,13 +969,24 @@ export function CycleOutcomeTab({ cycleId }: TabProps) {
             onChange={(v) => setForm((f) => ({ ...f, advice: v }))}
           />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <TextArea
-              label="Post Treatment Management"
-              value={form.postTreatment}
-              rows={3}
-              placeholder="Post-transfer progesterone luteal support, estrogens, folates…"
-              onChange={(v) => setForm((f) => ({ ...f, postTreatment: v }))}
-            />
+            <div>
+              <TextArea
+                label="Post Treatment Management"
+                value={form.postTreatment}
+                rows={3}
+                placeholder="Post-transfer progesterone luteal support, estrogens, folates…"
+                onChange={(v) => setForm((f) => ({ ...f, postTreatment: v }))}
+              />
+              <div className="mt-1 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setShowPrescriptionModal(true)}
+                  className="text-xs font-bold text-[#123E73] hover:text-[#0d2e56] hover:underline cursor-pointer flex items-center gap-1"
+                >
+                  <span>+</span> Add Prescription
+                </button>
+              </div>
+            </div>
             <TextArea
               label="Prescribed Treatment / Therapy"
               value={form.treatment}
@@ -809,6 +999,16 @@ export function CycleOutcomeTab({ cycleId }: TabProps) {
       </section>
 
       <TabAlerts error={error} success={success} />
+      <AddPrescriptionModal
+        isOpen={showPrescriptionModal}
+        onClose={() => setShowPrescriptionModal(false)}
+        onSelect={(rx) => {
+          setForm((f) => ({
+            ...f,
+            postTreatment: f.postTreatment ? `${f.postTreatment}\n${rx}` : rx,
+          }));
+        }}
+      />
       <SaveButton saving={saving} label="Save Cycle Outcome" onSave={() => void save()} />
     </div>
   );

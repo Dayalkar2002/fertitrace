@@ -50,29 +50,40 @@ export function dash(text: string): string {
 
 export function TypePills({
   options,
+  labels,
   selectedIndex,
   onChange,
 }: {
   options: readonly string[];
+  labels?: Record<string, string>;
   selectedIndex: number;
   onChange?: (index: number) => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
-      {options.map((option, index) => (
-        <label key={option} className="flex items-center gap-1.5 cursor-pointer">
-          <input
-            type="radio"
-            name="artCycleTypeRadio"
-            checked={selectedIndex === index}
-            onChange={() => onChange?.(index)}
-            className="accent-[#123E73] cursor-pointer"
-          />
-          <span className={selectedIndex === index ? 'font-bold text-slate-900 underline decoration-[#123E73] decoration-2 underline-offset-2' : 'text-slate-600'}>
-            {option}
-          </span>
-        </label>
-      ))}
+    <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[12px]">
+      {options.map((option, index) => {
+        const displayText = labels?.[option] ?? option;
+        return (
+          <label key={option} className="flex items-center gap-1.5 cursor-pointer select-none">
+            <input
+              type="radio"
+              name="artCycleTypeRadio"
+              checked={selectedIndex === index}
+              onChange={() => onChange?.(index)}
+              className="accent-[#123E73] cursor-pointer"
+            />
+            <span
+              className={
+                selectedIndex === index
+                  ? 'font-bold text-slate-900 underline decoration-[#123E73] decoration-2 underline-offset-2'
+                  : 'text-slate-600 hover:text-slate-900'
+              }
+            >
+              {displayText}
+            </span>
+          </label>
+        );
+      })}
     </div>
   );
 }
