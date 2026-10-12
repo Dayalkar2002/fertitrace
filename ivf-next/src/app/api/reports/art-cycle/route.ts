@@ -6,9 +6,6 @@ import * as reportsService from '@/lib/services-server/reports.service';
 export async function GET(req: NextRequest) {
   const user = getAuthenticatedUser(req);
   if (!user) return authUnauthorizedResponse();
-  if (!isDbConfigured()) {
-    return NextResponse.json({ success: false, message: 'Database not configured.' }, { status: 503 });
-  }
 
   try {
     const { searchParams } = new URL(req.url);

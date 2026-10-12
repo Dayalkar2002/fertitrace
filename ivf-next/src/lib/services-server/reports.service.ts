@@ -1,5 +1,6 @@
 import { buildParams, executeDRL, executeText } from '@/lib/db/spExecutor';
 import { rowVal } from '@/lib/db/row';
+import { isDbConfigured } from '@/lib/db/pool';
 import {
   ART_CYCLE_TYPES,
   type ArtCycleOption,
@@ -64,14 +65,17 @@ function joinFlags(row: ReportRow, flags: Array<[string, string]>): string {
 }
 
 function artTitle(type: ArtCycleTypeIndex): string {
-  if (type === 3) return 'Embryos Report';
-  if (type === 2) return 'FET Report';
-  if (type === 4) return 'Oocytes Report';
+  if (type === 1) return 'FET Report';
+  if (type === 2) return 'Oocytes Report';
+  if (type === 3) return 'THO Report';
+  if (type === 4) return 'Embryos Report';
+  if (type === 5) return 'OD Report';
+  if (type === 6) return 'OR Report';
   return 'OP Report';
 }
 
 function clampArtType(value: number): ArtCycleTypeIndex {
-  if (value === 1 || value === 2 || value === 3 || value === 4) return value;
+  if (value >= 0 && value <= 6) return value as ArtCycleTypeIndex;
   return 0;
 }
 
@@ -186,21 +190,68 @@ export async function loadIuiSummary(patId: number, satId: number, iuiId: string
   };
 }
 
+export function getCycleCategoryDisplay(rawType: string): string {
+  const cleaned = (rawType || '').trim();
+  const lower = cleaned.toLowerCase();
+  if (lower === 'fresh' || lower.startsWith('fresh')) return 'Fresh Cycle';
+  if (lower === 'fet' || lower.includes('frozen thaw')) return 'Frozen Thaw Cycle';
+  if (lower === 'frozenoocytes' || lower.includes('oocyte freez')) return 'Oocyte Freezing';
+  if (lower === 'thawoocytes' || lower.includes('thaw oocyte')) return 'Thaw Oocyte';
+  if (lower === 'er' || lower.includes('embryo recipient')) return 'Embryo Recipient';
+  if (lower === 'od' || lower.includes('oocyte donor')) return 'Oocyte Donor';
+  if (lower === 'or' || lower.includes('oocyte recipient')) return 'Oocyte Recipient';
+  if (cleaned) {
+    const dashIdx = cleaned.lastIndexOf(' - ');
+    if (dashIdx > 0) return cleaned.slice(0, dashIdx).trim();
+    return cleaned;
+  }
+  return 'General';
+}
+
 export async function listArtCycles(patId: number, satId: number): Promise<ArtCycleOption[]> {
+  const cycleNum = (cycId: string) => {
+    const match = (cycId || '').match(/\d+/);
+    return match ? parseInt(match[0], 10) : Number.MAX_SAFE_INTEGER;
+  };
+
   const rows = await runSp('spPatientCycle', '@PatID,@SatID,@QueryIndex', [patId, satId, 1]);
-  return rows
+  if (!rows.length && !isDbConfigured()) {
+    return [
+      { id: 'C41--Farah Mohammed Khan', label: 'C41--Farah Mohammed Khan (Fresh Cycle)' },
+      { id: 'C410--Farah Mohammed Khan', label: 'C410--Farah Mohammed Khan (Fresh Cycle)' },
+      { id: 'C412--Farah Mohammed Khan', label: 'C412--Farah Mohammed Khan (Frozen Thaw Cycle)' },
+      { id: 'C413--Farah Mohammed Khan', label: 'C413--Farah Mohammed Khan (Embryo Recipient)' },
+      { id: 'C414--Farah Mohammed Khan', label: 'C414--Farah Mohammed Khan (Oocyte Recipient)' },
+      { id: 'C416--Farah Mohammed Khan', label: 'C416--Farah Mohammed Khan (Oocyte Freezing)' },
+    ];
+  }
+
+  const options = rows
     .map((row) => {
-      const id = rowVal(row, 'patid', 'PatID', 'PATID');
-      if (!id || id === '0') return null;
-      return { id, label: id };
+      const rawId = rowVal(row, 'patid', 'PatID', 'PATID');
+      if (!rawId || rawId === '0') return null;
+
+      const cycId = rowVal(row, 'CycID', 'cycid') || '';
+      const patName = rowVal(row, 'PatName', 'patname');
+      const rawType = rowVal(row, 'CycOType', 'cycotype');
+      const catDisplay = getCycleCategoryDisplay(rawType);
+
+      // In SMART: string.Format("{0}--{1} ({2})", cycId, patName, catDisplay)
+      const label = cycId
+        ? `${cycId}--${patName || 'Patient'} (${catDisplay})`
+        : (rawId.includes('(') ? rawId : `${rawId} (${catDisplay})`);
+
+      return { id: rawId, label, cycId };
     })
-    .filter((row): row is ArtCycleOption => row !== null);
+    .filter((row): row is (ArtCycleOption & { cycId: string }) => row !== null);
+
+  return options.sort((a, b) => cycleNum(a.cycId) - cycleNum(b.cycId) || a.cycId.localeCompare(b.cycId));
 }
 
 async function detectArtCycleType(cycleId: string, patName = ''): Promise<ArtCycleTypeIndex> {
   const cleanCycId = cycleId.includes('--') ? cycleId.split('--')[0].trim() : cycleId.trim();
 
-  // Try direct query matching spReportCycle logic without the CHARINDEX bug
+  // Try direct query matching spReportCycle logic
   try {
     const outcomeResult = await executeText<{ CycOType?: string }>(
       `SELECT CycOType FROM CycOutCome WHERE LTRIM(RTRIM(CycID)) = @cycId`,
@@ -209,22 +260,27 @@ async function detectArtCycleType(cycleId: string, patName = ''): Promise<ArtCyc
     const outcomeRows = outcomeResult.recordset || [];
     if (outcomeRows.length && outcomeRows[0]?.CycOType) {
       const cycOType = outcomeRows[0].CycOType.trim();
-      if (cycOType === 'Fresh') {
+      const lower = cycOType.toLowerCase();
+      if (lower === 'fresh' || lower.startsWith('fresh')) {
         const redResult = await executeText<{ cnt: number }>(
           `SELECT COUNT(*) as cnt FROM CycMonitoringChartRemDay WHERE LTRIM(RTRIM(CycID)) = @cycId AND cycMCRDColor = 'Red'`,
           [{ name: '@cycId', value: cleanCycId }]
         );
         const redRows = redResult.recordset || [];
         if (redRows[0]?.cnt && redRows[0].cnt > 0) return 0; // OP+ET
-        return 1; // OR+ET
-      } else if (cycOType === 'ER') {
-        return 3; // ER
-      } else if (cycOType === 'FET') {
-        return 2; // FET
-      } else if (cycOType === 'FrozenOocytes') {
-        return 4; // OF
-      } else {
-        return 1; // OR+ET
+        return 6; // OR+ET (Index 6)
+      } else if (lower === 'fet' || lower.includes('frozen thaw')) {
+        return 1; // FET (Index 1)
+      } else if (lower === 'frozenoocytes' || lower.includes('oocyte freez')) {
+        return 2; // OF (Index 2)
+      } else if (lower === 'thawoocytes' || lower.includes('thaw oocyte')) {
+        return 3; // THO+ET (Index 3)
+      } else if (lower === 'er' || lower.includes('embryo recipient')) {
+        return 4; // ER+ET (Index 4)
+      } else if (lower === 'od' || lower.includes('oocyte donor')) {
+        return 5; // OD (Index 5)
+      } else if (lower === 'or' || lower.includes('oocyte recipient')) {
+        return 6; // OR+ET (Index 6)
       }
     }
   } catch (err) {
@@ -235,9 +291,12 @@ async function detectArtCycleType(cycleId: string, patName = ''): Promise<ArtCyc
   const legacyParam = cycleId.includes('--') ? cycleId : `${cleanCycId}--${patName || 'Patient'}`;
   const rows = await trySp('spReportCycle', '@PatID', [legacyParam]);
   const first = rows[0];
-  if (!first) return 0;
-  const raw = Object.values(first)[0];
-  return clampArtType(Number(raw));
+  if (first) {
+    const raw = Object.values(first)[0];
+    const parsed = Number(raw);
+    if (!Number.isNaN(parsed)) return clampArtType(parsed);
+  }
+  return 0;
 }
 
 function section(name: string, rows: ReportRow[]): ReportSection[] {
@@ -284,16 +343,35 @@ export async function loadArtCycleSummary(
   const typeLabel = ART_CYCLE_TYPES[type];
   let sections: ReportSection[] = [];
 
-  if (type === 0 || type === 1) {
-    const flag = type === 0 ? 0 : 1;
+  if (type === 0) {
+    // 0: OP+ET (Fresh Cycle)
     sections = [
-      ...section('Patient Summary', await trySp('spRptPatSummary', '@PatID,@Flag', [legacyParam, flag])),
+      ...section('Patient Summary', await trySp('spRptPatSummary', '@PatID,@Flag', [legacyParam, 0])),
       ...section('ET Transfer', await trySp('spRptETCeller', '@PatID', [legacyParam])),
       ...section('BT Transfer', await trySp('spRptETCeller', '@PatID,@flag', [legacyParam, 'BioTransfer'])),
       ...section('ET Frozen', await trySp('spRptETCeller', '@PatID,@flag', [legacyParam, 'ETFrozen'])),
       ...section('BT Frozen', await trySp('spRptETCeller', '@PatID,@flag', [legacyParam, 'BTFrozen'])),
     ];
+  } else if (type === 1) {
+    // 1: FET (Frozen Thaw Cycle)
+    sections = [
+      ...section('FET Summary', await trySp('spRptPatSummary2', '@PatID,@Flag', [legacyParam, 1])),
+      ...section('Patient Transfer', await trySp('spRptPatCeller', '@PatID', [legacyParam])),
+      ...section('BT Transfer', await trySp('spRptPatCeller', '@PatID,@flag', [legacyParam, 'BTTransfer'])),
+    ];
+  } else if (type === 2) {
+    // 2: OF (Oocyte Freezing)
+    sections = [
+      ...section('Oocyte Summary', await trySp('spRptOcyteSummary2', '@PatID,@Flag', [legacyParam, 1])),
+      ...section('Oocyte Straw', await trySp('spRPTOcyteSTraw', '@PatID', [legacyParam])),
+    ];
   } else if (type === 3) {
+    // 3: THO (THO+ET, Thaw Oocyte)
+    sections = [
+      { name: 'Under Preparation', rows: [{ note: 'Summary report for Thaw Oocyte (THO+ET) is under preparation.' }] },
+    ];
+  } else if (type === 4) {
+    // 4: ER (ER+ET, Embryo Recipient)
     sections = [
       ...section('Embryo Summary', await trySp('spRptERSummary', '@PatID,@Flag', [legacyParam, 1])),
       ...section('ET Celler', await trySp('spETBTCeller', '@PatID', [legacyParam])),
@@ -301,16 +379,56 @@ export async function loadArtCycleSummary(
       ...section('ET Frozen', await trySp('spRptETCeller', '@PatID,@flag', [legacyParam, 'ETFrozen'])),
       ...section('BT Frozen', await trySp('spRptETCeller', '@PatID,@flag', [legacyParam, 'BTFrozen'])),
     ];
-  } else if (type === 4) {
+  } else if (type === 5) {
+    // 5: OD (OD, Oocyte Donor)
     sections = [
-      ...section('Oocyte Summary', await trySp('spRptOcyteSummary2', '@PatID,@Flag', [legacyParam, 1])),
-      ...section('Oocyte Straw', await trySp('spRPTOcyteSTraw', '@PatID', [legacyParam])),
+      ...section('Patient Summary', await trySp('spRptPatSummary', '@PatID,@Flag', [legacyParam, 0])),
+      ...section('ET Transfer', await trySp('spRptETCeller', '@PatID', [legacyParam])),
+      ...section('BT Transfer', await trySp('spRptETCeller', '@PatID,@flag', [legacyParam, 'BioTransfer'])),
+      ...section('ET Frozen', await trySp('spRptETCeller', '@PatID,@flag', [legacyParam, 'ETFrozen'])),
+      ...section('BT Frozen', await trySp('spRptETCeller', '@PatID,@flag', [legacyParam, 'BTFrozen'])),
     ];
-  } else {
+  } else if (type === 6) {
+    // 6: OR (OR+ET, Oocyte Recipient)
     sections = [
-      ...section('FET Summary', await trySp('spRptPatSummary2', '@PatID,@Flag', [legacyParam, 1])),
-      ...section('Patient Transfer', await trySp('spRptPatCeller', '@PatID', [legacyParam])),
-      ...section('BT Transfer', await trySp('spRptPatCeller', '@PatID,@flag', [legacyParam, 'BTTransfer'])),
+      ...section('Patient Summary', await trySp('spRptPatSummary', '@PatID,@Flag', [legacyParam, 1])),
+      ...section('ET Transfer', await trySp('spRptETCeller', '@PatID', [legacyParam])),
+      ...section('BT Transfer', await trySp('spRptETCeller', '@PatID,@flag', [legacyParam, 'BioTransfer'])),
+      ...section('ET Frozen', await trySp('spRptETCeller', '@PatID,@flag', [legacyParam, 'ETFrozen'])),
+      ...section('BT Frozen', await trySp('spRptETCeller', '@PatID,@flag', [legacyParam, 'BTFrozen'])),
+    ];
+  }
+
+  // Fallback demo summary if database is unconfigured or returned no rows
+  if (!sections.length && !isDbConfigured()) {
+    sections = [
+      {
+        name: type === 1 ? 'FET Summary' : type === 2 ? 'Oocyte Summary' : type === 4 ? 'Embryo Summary' : 'Patient Summary',
+        rows: [
+          {
+            PatName: resolvedPatName || 'Farah Mohammed Khan',
+            PatRefNo: 'PT-004',
+            PatAge: 37,
+            PatHusbName: 'Mohammed Shaikh',
+            PatHusbAge: 40,
+            CycID: cleanCycId,
+            CycODate: '08/09/2026',
+            DocName: 'Dr. Sachin Kadam',
+          },
+        ],
+      },
+      {
+        name: type === 2 ? 'Oocyte Straw' : type === 1 ? 'Patient Transfer' : 'ET Transfer',
+        rows: [
+          {
+            StrawNo: 'ST-01',
+            Location: 'Tank 1 / C-9',
+            Grade: 'Grade A',
+            Count: 4,
+            Stage: 'Blastocyst (Day 5)',
+          },
+        ],
+      },
     ];
   }
 

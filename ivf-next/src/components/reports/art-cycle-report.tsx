@@ -23,14 +23,30 @@ import {
 import { useAuth } from '@/contexts/auth-context';
 import { ApiError } from '@/lib/api';
 import { listArtCycles, loadArtCycleSummary, type ArtCycleOption, type ArtCycleSummaryResult } from '@/lib/services/reports';
-import { ART_CYCLE_TYPES } from '@/lib/types/reports';
+import { ART_CYCLE_TYPES, ART_CYCLE_LABELS } from '@/lib/types/reports';
 import type { ReportRow } from '@/lib/types/reports';
 
 function sectionRows(summary: ArtCycleSummaryResult | null, name: string): ReportRow[] {
   return summary?.sections.find((s) => s.name === name)?.rows || [];
 }
 
-function artHeading(title: string): string {
+function artHeading(typeIndex?: number, title?: string): string {
+  switch (typeIndex) {
+    case 0:
+      return 'ART CYCLE SUMMARY - OP+ET';
+    case 1:
+      return 'ART CYCLE SUMMARY - FET';
+    case 2:
+      return 'ART CYCLE SUMMARY - Oocyte Freezing';
+    case 3:
+      return 'ART CYCLE SUMMARY - THO+ET';
+    case 4:
+      return 'ART CYCLE SUMMARY - ER+ET';
+    case 5:
+      return 'ART CYCLE SUMMARY - OD';
+    case 6:
+      return 'ART CYCLE SUMMARY - OR+ET';
+  }
   if (title === 'FET Report') return 'Frozen Embryo Transfer (FET) Report';
   if (title === 'Embryos Report') return 'Embryo Recipient Report';
   if (title === 'Oocytes Report') return 'Oocyte Cryopreservation Report';
@@ -124,33 +140,47 @@ export function ArtCycleReport() {
     <PatientRequired>
       <div className="print:hidden mb-3 flex flex-wrap items-center gap-4">
         <ReportSelect
-          label="Select Cycle"
+          label="Name :"
           value={selectedId}
           onChange={handleCycleChange}
-          placeholder={loadingList ? 'Loading cycles…' : 'Select Cycle'}
+          placeholder={loadingList ? 'Loading cycles…' : 'Select Patient / Cycle'}
           options={cycles}
           disabled={loadingList}
         />
         <TypePills
           options={ART_CYCLE_TYPES}
-          selectedIndex={summary?.type ?? 0}
+          labels={ART_CYCLE_LABELS}
+          selectedIndex={overrideType !== undefined ? overrideType : (summary?.type ?? 0)}
           onChange={handleTypeChange}
         />
         <button
           type="button"
           onClick={() => window.print()}
-          className="ml-auto rounded-lg bg-[#123E73] px-3 py-1.5 text-xs font-bold text-white"
+          className="ml-auto rounded-lg bg-[#123E73] px-3 py-1.5 text-xs font-bold text-white shadow hover:bg-[#0d2e56] transition-colors"
         >
           Print
         </button>
       </div>
       <ModuleAlerts error={error} />
       {loadingSummary && <p className="print:hidden mb-3 text-sm text-slate-500">Loading ART Cycle summary…</p>}
-      {summary && !loadingSummary && (
+      {summary?.underPreparation && (
+        <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900 shadow-sm print:hidden">
+          <div className="flex items-center gap-2 font-bold text-amber-800">
+            <svg className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <span>Under Preparation</span>
+          </div>
+          <p className="mt-1 text-xs">
+            Summary report for <strong>{ART_CYCLE_LABELS[ART_CYCLE_TYPES[summary.type]] || summary.typeLabel}</strong> is currently under preparation.
+          </p>
+        </div>
+      )}
+      {summary && !loadingSummary && !summary.underPreparation && (
         <CraftPaper>
           <CraftPage>
           <CraftHeader
-            title={artHeading(summary.title)}
+            title={artHeading(summary.type, summary.title)}
             reportNo={`ART/${summary.cycleId}`}
             reportedOn={fieldDate(patient, 'CycODate', 'MaxDate') || new Date().toLocaleDateString('en-GB')}
           />
